@@ -1,0 +1,73 @@
+/* A real Chrome page drawn on a canvas, with the person's input forwarded to
+ * the Chrome behind it. The picture keeps its aspect ratio inside the window;
+ * the mouse and keys map back to the page's own coordinates. */
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #0f1418;
+}
+
+.stage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+}
+
+.screen {
+  display: block;
+  outline: 0;
+  cursor: default;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.screen:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.35);
+  outline-offset: -2px;
+}
+
+.status {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  margin: 0;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(16, 24, 32, 0.72);
+  color: #f2f6f9;
+  font: 13px/1.4 system-ui, -apple-system, sans-serif;
+  pointer-events: none;
+}
+
+.status[hidden] { display: none; }
+
+/* The back bar sits over the picture; the picture fills the window. */
+.back {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 2;
+  padding: 6px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+  background: rgba(16, 24, 32, 0.72);
+  color: #f2f6f9;
+  font: 13px/1.4 system-ui, -apple-system, sans-serif;
+  cursor: pointer;
+  opacity: 0.65;
+  transition: opacity 120ms ease, background-color 120ms ease;
+}
+
+.back:hover,
+.back:focus-visible {
+  opacity: 1;
+  background: rgba(16, 24, 32, 0.9);
+  outline: 0;
+}

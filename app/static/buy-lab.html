@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Buy lab</title>
+    <link rel="stylesheet" href="buy-lab.css" />
+    <script type="module" src="buy-lab.js"></script>
+  </head>
+  <body>
+    <header class="bar">
+      <div class="brand">
+        <img class="mark" src="vendor/o2-mark.png" alt="" width="22" height="22" />
+        <span class="brand-name" data-title>Buy lab</span>
+      </div>
+
+      <label class="supplier">
+        <span class="supplier-label" data-supplier-label>Supplier</span>
+        <select data-supplier></select>
+      </label>
+
+      <p class="status" data-status role="status"></p>
+
+      <div class="actions">
+        <button class="quiet" type="button" data-external data-external-label>Open in browser</button>
+        <button class="quiet" type="button" data-show-live data-live-label>Open supplier page</button>
+      </div>
+    </header>
+
+    <main class="page">
+      <section class="card">
+        <label class="label" for="list" data-paste-label>Paste the list</label>
+        <textarea id="list" data-list rows="6" spellcheck="false"></textarea>
+        <div class="row">
+          <button class="primary" type="button" data-start>Start purchase</button>
+          <button class="quiet" type="button" data-stop>Stop</button>
+          <span class="hint" data-hint></span>
+        </div>
+      </section>
+
+      <section class="card confirm" data-confirm-card hidden>
+        <div>
+          <h2 class="card-title" data-confirm-title>Confirm the order</h2>
+          <p class="card-body" data-confirm-text></p>
+        </div>
+        <button class="primary" type="button" data-confirm>Place the order</button>
+      </section>
+
+      <section class="card">
+        <h2 class="card-title" data-lines-title>Lines</h2>
+        <table class="lines">
+          <thead>
+            <tr>
+              <th class="n">#</th>
+              <th data-col-part>Part</th>
+              <th data-col-qty>Qty</th>
+              <th data-col-state>State</th>
+              <th data-col-note>Note</th>
+            </tr>
+          </thead>
+          <tbody data-lines></tbody>
+        </table>
+      </section>
+
+      <section class="grid">
+        <div class="card">
+          <h2 class="card-title" data-cart-title>Cart</h2>
+          <div class="list" data-cart></div>
+        </div>
+        <div class="card">
+          <h2 class="card-title" data-orders-title>Orders</h2>
+          <div class="list" data-orders></div>
+        </div>
+        <div class="card">
+          <h2 class="card-title" data-tracking-title>Tracking</h2>
+          <div class="list" data-tracking></div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

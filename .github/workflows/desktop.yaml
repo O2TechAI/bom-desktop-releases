@@ -1,0 +1,133 @@
+name: Desktop
+
+# Tests the desktop app on every change to it, and packages it for macOS and
+# Windows on pushes to main or by hand. Packages are unsigned unless the
+# signing secrets below exist. Run by hand on main with "publish" to release
+# the version in app/package.json: a v<version> release in this repository,
+# which is also where installed apps look for updates.
+
+on:
+  pull_request:
+    paths:
+      - "app/**"
+      - ".github/workflows/desktop.yaml"
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - ".github/workflows/desktop.yaml"
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Release the version in app/package.json (main only)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: "22"
+      - run: npm ci
+      - run: npm test
+
+  package:
+    needs: test
+    if: github.event_name != 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: app
+    env:
+      BOM_DESKTOP_UPDATE_URL: ${{ vars.BOM_DESKTOP_UPDATE_URL }}
+      CSC_LINK: ${{ secrets.BOM_DESKTOP_CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.BOM_DESKTOP_CSC_KEY_PASSWORD }}
+      APPLE_API_KEY_ID: ${{ secrets.BOM_DESKTOP_APPLE_API_KEY_ID }}
+      APPLE_API_ISSUER: ${{ secrets.BOM_DESKTOP_APPLE_API_ISSUER }}
+      AZURE_TENANT_ID: ${{ secrets.BOM_DESKTOP_AZURE_TENANT_ID }}
+      AZURE_CLIENT_ID: ${{ secrets.BOM_DESKTOP_AZURE_CLIENT_ID }}
+      AZURE_CLIENT_SECRET: ${{ secrets.BOM_DESKTOP_AZURE_CLIENT_SECRET }}
+      BOM_DESKTOP_AZURE_ENDPOINT: ${{ vars.BOM_DESKTOP_AZURE_ENDPOINT }}
+      BOM_DESKTOP_AZURE_ACCOUNT: ${{ vars.BOM_DESKTOP_AZURE_ACCOUNT }}
+      BOM_DESKTOP_AZURE_PROFILE: ${{ vars.BOM_DESKTOP_AZURE_PROFILE }}
+      # Without a certificate, build unsigned instead of failing.
+      CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.BOM_DESKTOP_CSC_LINK != '' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: "22"
+      - run: npm ci
+      - name: Write the App Store Connect API key
+        if: runner.os == 'macOS' && env.APPLE_API_KEY_ID != ''
+        shell: bash
+        run: |
+          echo "${{ secrets.BOM_DESKTOP_APPLE_API_KEY }}" > "$RUNNER_TEMP/apple-api-key.p8"
+          echo "APPLE_API_KEY=$RUNNER_TEMP/apple-api-key.p8" >> "$GITHUB_ENV"
+      - name: Package
+        shell: bash
+        run: |
+          # An unset secret still arrives as an empty variable, and
+          # electron-builder reads an empty CSC_LINK as a path. Drop them.
+          for name in CSC_LINK CSC_KEY_PASSWORD APPLE_API_KEY_ID APPLE_API_ISSUER \
+            AZURE_TENANT_ID AZURE_CLIENT_ID AZURE_CLIENT_SECRET BOM_DESKTOP_UPDATE_URL \
+            BOM_DESKTOP_AZURE_ENDPOINT BOM_DESKTOP_AZURE_ACCOUNT BOM_DESKTOP_AZURE_PROFILE; do
+            if [[ -z "${!name}" ]]; then unset "$name"; fi
+          done
+          npm run dist -- --publish never
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: o2-bom-${{ runner.os }}
+          path: |
+            app/release/*.dmg
+            app/release/*.zip
+            app/release/*.exe
+            app/release/*.blockmap
+            app/release/latest*.yml
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    needs: package
+    if: github.event_name == 'workflow_dispatch' && inputs.publish && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version=$(node -p 'require("./app/package.json").version')
+          shopt -s nullglob
+          files=(dist/*.dmg dist/*.zip dist/*.exe dist/*.blockmap dist/latest*.yml)
+          for wanted in "O2-BOM-$version-arm64.dmg" "O2-BOM-$version-x64.dmg" "O2-BOM-Setup-$version.exe" latest.yml latest-mac.yml; do
+            [[ -f "dist/$wanted" ]] || { echo "::error::Missing $wanted"; exit 1; }
+          done
+          notes="O2 BOM desktop $version. Mac: \`O2-BOM-$version-arm64.dmg\` (Apple silicon) or \`-x64.dmg\` (Intel). Windows: \`O2-BOM-Setup-$version.exe\`. Installed apps (0.0.2 or later) find this version by themselves."
+          gh release create "v$version" "${files[@]}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "O2 BOM Desktop $version" --notes "$notes"

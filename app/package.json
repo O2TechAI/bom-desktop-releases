@@ -1,0 +1,33 @@
+{
+  "name": "bom-desktop",
+  "productName": "O2 BOM",
+  "private": true,
+  "version": "0.0.6",
+  "description": "O2 BOM desktop app: a secure Electron shell around the hosted BOM web app.",
+  "author": "O2 Tech AI",
+  "type": "commonjs",
+  "main": "src/main.js",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "bomDesktop": {
+    "origin": "https://bom.o2tech.ai"
+  },
+  "scripts": {
+    "assets": "node scripts/copy-assets.mjs",
+    "start": "npm run assets && electron .",
+    "test": "node --test test/*.test.js",
+    "test:e2e": "node --test test/e2e/*.e2e.mjs",
+    "pack": "npm run assets && electron-builder --config electron-builder.config.cjs --dir",
+    "dist": "npm run assets && electron-builder --config electron-builder.config.cjs"
+  },
+  "dependencies": {
+    "electron-updater": "6.8.11",
+    "playwright": "npm:rebrowser-playwright@1.64.102"
+  },
+  "devDependencies": {
+    "@fontsource-variable/geist": "5.3.0",
+    "electron": "45.3.2",
+    "electron-builder": "26.18.0"
+  }
+}

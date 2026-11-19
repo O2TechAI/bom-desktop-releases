@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>O2 BOM</title>
+    <link rel="stylesheet" href="automation.css" />
+    <script type="module" src="automation.js"></script>
+  </head>
+  <body>
+    <main class="panel" aria-labelledby="supplier">
+      <header class="head">
+        <h1 id="supplier"></h1>
+        <span class="status" data-status hidden></span>
+        <p class="note" data-unverified hidden></p>
+      </header>
+
+      <section class="block" data-start>
+        <nav class="ops" data-ops data-copy-label="operations"></nav>
+        <form class="form" data-form novalidate aria-labelledby="task-title">
+          <h2 class="section-title" id="task-title" data-task-title></h2>
+          <div class="fields" data-fields></div>
+          <p class="form-error" role="alert" data-form-error hidden></p>
+          <div class="actions">
+            <button class="button button-primary" type="submit" data-submit></button>
+          </div>
+        </form>
+      </section>
+
+      <section class="block" data-handoff hidden aria-live="polite">
+        <h2 class="section-title" data-handoff-title></h2>
+        <p class="body" data-handoff-body></p>
+        <div class="actions">
+          <button class="button button-primary" type="button" data-command="continue" data-copy="continue"></button>
+        </div>
+      </section>
+
+      <section class="block" data-confirm hidden aria-live="assertive">
+        <h2 class="section-title" data-confirm-title></h2>
+        <p class="body" data-confirm-body></p>
+        <div class="actions">
+          <button class="button button-primary" type="button" data-command="confirm" data-copy="confirm_place_order_yes"></button>
+          <button class="button button-secondary" type="button" data-command="stop" data-copy="confirm_no"></button>
+        </div>
+      </section>
+
+      <section class="block" data-results hidden aria-live="polite"></section>
+
+      <section class="block block-steps" data-run hidden aria-labelledby="run-title">
+        <h2 class="section-title" id="run-title" data-run-title></h2>
+        <p class="note" data-metrics hidden></p>
+        <ol class="steps" data-steps></ol>
+        <div class="actions" data-controls>
+          <button class="button button-secondary" type="button" data-command="pause" data-copy="pause"></button>
+          <button class="button button-secondary" type="button" data-command="resume" data-copy="resume" hidden></button>
+          <button class="button button-quiet" type="button" data-command="stop" data-copy="stop"></button>
+        </div>
+        <div class="actions" data-after hidden>
+          <button class="button button-secondary" type="button" data-action="again" data-copy="try_again"></button>
+        </div>
+      </section>
+
+    </main>
+    <div class="toast" role="status" aria-live="polite" data-toast hidden>
+      <svg class="toast-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" /></svg>
+      <span data-toast-text></span>
+    </div>
+  </body>
+</html>

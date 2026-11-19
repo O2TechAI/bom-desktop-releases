@@ -1,0 +1,830 @@
+/* =====================================================================
+ * O2 BOM — shared design foundation.
+ *
+ * The only place fonts, the type scale, radii, tracking, icon sizes,
+ * motion and the colour palette are defined. Imported by the BOM app
+ * (src/styles.css) and by both integration entry points
+ * (integrations/odrive, integrations/oteams) so every surface renders
+ * from one system.
+ *
+ * JSX icon `size` props read the mirrored values in ./tokens.js.
+ * ================================================================== */
+
+:root {
+  /* ---------------------------------------------------------------------
+   * Design system foundation. Every surface (BOM, Export, Settings, AVL,
+   * History, ODrive, OTeams) reads from these tokens; nothing below should
+   * hard-code a font, size, radius, tracking or easing again.
+   * ------------------------------------------------------------------ */
+
+  /* Typeface — exactly two: Geist for every UI/text role, Fraunces for
+   * display headings. `--font-display` is the single switch for the
+   * headline face. */
+  /* Geist has no Han glyphs. Naming the CJK faces right after it sends
+   * Chinese to a family that has real weights (PingFang SC on macOS,
+   * Microsoft YaHei on Windows, Noto / Source Han on Linux) instead of a
+   * one-weight system fallback; Latin text still renders in Geist. */
+  --font-sans: "Geist Variable", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-display: "Fraunces Variable", Georgia, "Times New Roman", serif;
+  /* Code only: inline `code`, fenced blocks. Not a third UI face — it never
+   * sets labels or body copy, so the two-typeface rule above still holds. */
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+
+  /* Type scale — five steps, and five only, per page. 12px is the hard
+   * floor: no text anywhere in the product renders below it. Steps are
+   * rem-based so browser font-size preferences still apply. */
+  --text-micro: 0.75rem;    /* 12px — uppercase labels, badges, counters */
+  --text-body: 0.875rem;    /* 14px — body copy, table cells, inputs */
+  --text-lead: 1rem;        /* 16px — emphasis, summaries, empty states */
+  --text-title: 1.25rem;    /* 20px — panel and section titles */
+  --text-heading: 1.75rem;  /* 28px — page headings */
+
+  /* Display sizes are landing-page only and fluid by design. */
+  --text-display-sm: clamp(1.75rem, 1.15rem + 2.6vw, 2.625rem);
+  --text-display-md: clamp(2.25rem, 1.1rem + 5vw, 3.5rem);
+
+  /* Line heights pair with the steps above. */
+  --leading-tight: 1.15;
+  --leading-snug: 1.35;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.6;
+
+  /* Letter-spacing is a function of the step, not a per-rule guess. */
+  --tracking-micro: .06em;
+  --tracking-body: 0;
+  --tracking-lead: -.01em;
+  --tracking-title: -.02em;
+  --tracking-heading: -.03em;
+  --tracking-display: -.04em;
+
+  /* Weights — four roles, deliberately light. Medium is the default
+   * emphasis; semibold is reserved for numbers, primary actions and active
+   * navigation. There is no bold role: heavy text reads as noise at these
+   * densities. */
+  --weight-light: 300;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  /* Kept as an alias so nothing forks: there is no heavier role. Emphasis
+   * comes from colour and space, never from weight. */
+  --weight-semibold: var(--weight-medium);
+  /* The one exception: bold in Chinese text (Markdown `strong.is-cjk`).
+   * The CJK fallback fonts rarely have a 500, so 500 renders as 400 there;
+   * 600 is the lightest weight that reads as emphasis in them. */
+  --weight-cjk-emphasis: 600;
+
+  /* Spacing — one 4px-based scale, in two bands with a deliberate jump
+   * between them. Blocks are separated by space, not by borders and boxes,
+   * which only works if the two bands stay distinct:
+   *
+   *   1-4 (4-16px)   WITHIN a group: label to value, icon to text, cell
+   *                  padding, the gap between a row's two lines.
+   *   6-9 (24-48px)  BETWEEN groups: section to section, panel padding,
+   *                  the gap either side of a heading.
+   *
+   * These steps used to all resolve to 16px, which made within-group and
+   * between-group spacing identical. Proximity is the only grouping signal
+   * left once borders are gone, so collapsing the scale made every surface
+   * read as one flat list of equally-weighted things — the single largest
+   * cause of the product feeling "full". Keep the jump: 5 is the only
+   * in-between step, for dense table cells that need air but not a break. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
+  --space-9: 48px;
+
+  /* Unread notifications: 5.9:1 white on red; compact metadata, not a status tag. */
+  --unread-badge-fill: #a54644;
+  --unread-badge-text: #ffffff;
+  --unread-badge-size: var(--space-5);
+  --unread-badge-offset: var(--space-1);
+  --unread-badge-overlap: var(--space-2);
+
+  /* Radius — two steps and a pill, and that is the whole vocabulary.
+   * `sm` is every control, chip and input; `lg` is every panel and dialog.
+   * --radius-md / --radius-xl remain as aliases so nothing forks again. */
+  /* 8 / 14, down from 10 / 18 ("现在的圆角我觉得有点太圆 … 稍微没那么圆",
+   * 2026-10-11): still soft, no longer pebble-round. */
+  --radius-sm: 8px;
+  --radius-lg: 14px;
+  --radius-pill: 999px;
+  --radius-md: var(--radius-sm);
+  --radius-xl: var(--radius-lg);
+
+  /* Layout — the measures a page may be.
+   *
+   * The system had no layout layer at all, which is how Export ended up a
+   * 920px card holding a 420px column of fields and Settings ended up a 420px
+   * card stretched down a 950px window. Width is a property of the CONTENT:
+   * a column of fields is 560px wide wherever it appears, and the page
+   * centres it rather than inflating it.
+   *
+   *   form    a column of fields — Settings, Export, auth, a single dialog
+   *   prose   text meant to be read
+   *
+   * Tables, boards and file lists take the full width. */
+  --measure-form: 560px;
+  --measure-prose: 720px;
+  --page-gutter: 24px;   /* 16px at 760px and narrower; the same on both sides */
+  --section-gap: 64px;   /* 40px at 760px and narrower */
+  --card-padding: 24px;  /* 20px at 760px and narrower */
+
+  /* Control heights (§7.2): 32 dense (tables, toolbars, tabs), 36 default, 40 form submit. */
+  --control-sm: 32px;
+  --control-md: 36px;
+  --control-lg: 40px;
+
+  /* Icon sizes, mirrored in src/design/tokens.js for JSX `size` props. */
+  --icon-sm: 14px;
+  --icon-md: 16px;
+  --icon-lg: 20px;
+  --icon-xl: 24px;
+  --icon-feature: 32px;
+
+  /* Motion — shared durations and easings so loading, waiting and result
+   * states feel like one system.
+   *
+   *   fast    a swap the user asked for: content crossfade, hover, chevron.
+   *   base    anything entering or leaving: panels, rows, chips, dialogs.
+   *   slow    a large surface arriving — a full-screen view, a drawer.
+   *   spin    the ONE indeterminate loop speed. Every spinner in the
+   *           product reads from it, because two spinners at different
+   *           speeds on one screen is the clearest possible tell that the
+   *           interface was assembled rather than designed.
+   *
+   * These used to run 200 / 340 / 560ms, on the principle that motion should
+   * be felt as settling rather than as a state change that already happened.
+   * That principle is right for a page someone lands on once. It is wrong for
+   * the surface this product actually is: a buyer works a BOM for hours and
+   * opens the line panel hundreds of times a day, and at 560ms a panel plus a
+   * 480ms staggered entrance, the choreography was costing a second of every
+   * decision. An operator does not want to watch the interface settle; they
+   * want to be already looking at the next line.
+   *
+   * So the working range is 120–260ms, and the slower, staged feel is kept
+   * for the one place it earns its cost — the landing page, via
+   * `--duration-display`, which no product surface may use.
+   *
+   * `--stagger-step` is the delay between siblings in an entrance sequence,
+   * and it is only ever spent once — on first open. Replaying a stagger on
+   * every subsequent navigation turns a nice touch into a tax the user pays
+   * on every keystroke. */
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --duration-slow: 260ms;
+  --duration-slower: 320ms;
+  --duration-display: 560ms;
+  --duration-spin: 1s;
+  --stagger-step: 30ms;
+  /* A long decelerating tail: the movement is almost over for most of its
+   * duration, which is what reads as easing rather than sliding. */
+  --ease-out: cubic-bezier(.16, 1, .3, 1);
+  /* The curve for leaving, and the one the system was missing. `--ease-out`
+   * spends most of its duration nearly arrived, which is right for something
+   * settling into place and wrong for something going away: a panel that
+   * lingers at 95% of its old position for 200ms has not left, it has
+   * hesitated. An accelerating curve starts slowly enough to read as
+   * deliberate and then commits. Pair it with `--duration-fast`. */
+  --ease-in: cubic-bezier(.7, 0, .84, 0);
+  --ease-in-out: cubic-bezier(.65, 0, .35, 1);
+  --ease-spring: cubic-bezier(.34, 1.26, .64, 1);
+
+  font-family: var(--font-sans);
+  /* Read from the tokens rather than repeating them, so a tone (see the end
+     of this file) repaints the document ground too. Custom properties resolve
+     at computed-value time, so declaring these above --text / --page is fine. */
+  color: var(--text);
+  background: var(--page);
+  font-synthesis: none;
+
+  /* ===================================================================
+   * Colour.
+   *
+   * The palette is generated, not picked. Every value below was solved in
+   * CIE LCH for a target lightness, chroma and hue, then converted back to
+   * sRGB — which is why the contrast ratios in the comments are exact and
+   * why the status family reads as one family instead of six accidents.
+   *
+   * Three rules govern the whole thing:
+   *
+   *   1. NEUTRALS ARE WARM-NEUTRAL, NOT YELLOW-GREEN. Every neutral sits at
+   *      hue 78-85 with chroma under 6. The previous palette put the ground,
+   *      the dividers, the borders AND all three text tiers at hue ~100,
+   *      which is yellow-green: a whole page in one green-tinted hue, with
+   *      the only other colour on screen a brick red. That combination does
+   *      not read as "quiet and warm", it reads as dirty. Warmth belongs at
+   *      hue 78 — beige, the hue of paper — not at 100.
+   *
+   *   2. THE STATUS FAMILY HAS ONE WEIGHT. danger, warning, attention,
+   *      success and info are all at L* 42.5. They land on 5.9:1 against
+   *      --surface and 4.7:1 against their own -soft fill, to two decimal
+   *      places. Before this, warning was at chroma 55 and success at 18 —
+   *      the bad news was four times as saturated as the good news, so a
+   *      normal BOM screamed and a finished one turned to mud. A status pill
+   *      must not be louder because of what it says.
+   *
+   *   3. HUES ARE PULLED APART, AND THERE IS A COOL ROLE. 28 / 55 / 88 /
+   *      136 / 150 / 233. Three roles used to sit inside 17 degrees of each
+   *      other (primary 143, info 134, success 126) and warning and
+   *      attention inside 12, so five semantic colours were really two. The
+   *      warm three are now a deliberate severity ramp — red, orange,
+   *      mustard — and --info is a teal, the palette's only cool anchor.
+   *      That role is why 28 stray blues and teals had accumulated across
+   *      the product: the system had no cool colour, so every surface
+   *      invented one. It has one now, and nothing else may invent another.
+   *
+   * To change a value, change its L/C/h and re-solve. Do not hand-nudge a
+   * hex: that is how the ramp came apart the first time.
+   * ================================================================ */
+
+  /* Paper, in two planes.
+   *
+   * A cool grey desk with white cards resting on it, 1.15:1 apart. That is
+   * quiet, but enough that a table has a shape without an outline — this
+   * design finds its containers by elevation and fill and never by a border
+   * (see --card-border-width below), and a shadow needs something to fall
+   * on, which is why the ground is grey rather than white.
+   *
+   * Cards stay white so part photos, supplier logos, chart canvases and
+   * Excel previews — all of them white-backed — are not sitting in a hole.
+   *
+   * --surface-muted sits BETWEEN white and the ground, so a muted fill reads
+   * as recessed from a card rather than merging with the desk. */
+  --page: #ecf0f3;          /* L 94.5 C 2.2 h 255 — 1.15:1 under the card */
+  --surface: #ffffff;
+  --surface-muted: #f4f7fa; /* L 97   C 1.8 h 255 */
+  --surface-active: var(--primary-soft);
+  /* The lightest step there is: a row under the cursor. Named because the
+     row's own hover fill and anything that has to sit on top of it (a row's
+     action cluster) must be the same colour, or the cluster reads as a card
+     floating over the row. */
+  --row-hover: #f9fbfd;     /* L 98.4 C 1.2 h 255 */
+
+  /* Text — three tiers, and the floor is AA (4.5:1) on --surface. Body copy
+   * IS content and gets the content colour; a table cell's value is not a
+   * quieter kind of text, so --text-soft is an alias.
+   *
+   * Nothing below --faint exists on purpose. If text needs to be quieter
+   * than 4.5:1 it is not text, it is decoration, and it should be a rule,
+   * a dot or a gap instead.
+   *
+   * --faint clears 4.5:1 on --surface AND on --surface-muted, because the
+   * product puts footnote text on muted fills throughout the BOM table. It
+   * does NOT clear it on --page (4.05:1), so a footnote sitting on the
+   * ground takes --muted — see the field keys in the line drawer. */
+  --text: #212428;          /* L 14   C 3   h 258 — 15.58:1 on surface */
+  --text-soft: var(--text);
+  --muted: #5d6165;         /* L 41   C 3   h 255 —  6.24:1 */
+  --faint: #6c7074;         /* L 47   C 3   h 255 —  4.99:1 surface, 4.64:1 muted */
+
+  --divider: #e8ebef;       /* L 93   C 2   h 255 */
+  --divider-strong: #cdd2d7;/* L 84   C 3   h 255 */
+  /* An interior rule — a separator INSIDE a block. No card, panel or table
+   * takes an outline: see --card-border-width below. */
+  --surface-border: #dce0e4;/* L 89   C 2.6 h 255 */
+  /* The edge of anything you can operate: a field, a select, a secondary
+   * button, a dropzone, a toggle.
+   *
+   * It is NOT --divider-strong, and that distinction is the whole point.
+   * WCAG 1.4.11 asks for 3:1 on the boundary of a user interface component,
+   * and --divider-strong measures 1.52:1 on white — fine for a hairline
+   * between two rows, not fine as the only thing telling a reader where a
+   * field begins. Every control in the product was drawn at 1.52:1 until
+   * this token existed. */
+  --field-border: #878c90;  /* L 58   C 3   h 255 — 3.40:1 on surface, 3.16:1 on muted */
+  /* A card resting on the desk. One light source, two shadows: a contact
+   * shadow that says it is touching, and a soft lift that says how far. */
+  --surface-shadow: 0 1px 2px rgba(33, 36, 40, .05), 0 10px 28px -12px rgba(33, 36, 40, .18);
+  /* Dialogs, popovers and menus lift further than a card does — same light,
+   * more of it. */
+  --overlay-shadow: 0 12px 36px rgba(33, 36, 40, .16), 0 2px 6px rgba(33, 36, 40, .06);
+  /* The scrim behind a dialog. */
+  --scrim: rgba(33, 36, 40, .30);
+
+  /* Brand. The olive the product is known for, at a chroma that makes it a
+   * colour rather than a dark grey with a rumour of green (it was C 11). */
+  --primary: #314b2a;       /* L 29  C 24  h 136 — 9.7:1, white on it */
+  --primary-dark: #21381b;
+  --primary-soft: #d9e5cf;
+  --primary-foreground: #ffffff;
+
+  /* Status — one lightness, one weight, five hues. See rule 2 above.
+   *
+   * Red is for failure and for nothing else. "Needs decision" is not an
+   * error, it is a turn: it belongs to --attention. The warm three read as
+   * a severity ramp, so a glance answers "how bad" before a word is read. */
+  --danger: #a54644;        /* h 28  — 5.90:1 on white, 4.74:1 on -soft */
+  --danger-soft: #fde0db;
+  --warning: #975229;       /* h 55  — 5.91:1 on white, 4.76:1 on -soft */
+  --warning-soft: #fbe2d3;
+  --attention: #79621a;     /* h 88  — 5.87:1 on white, 4.72:1 on -soft */
+  --attention-soft: #f3e5cc;
+  --success: #3c6f4b;       /* h 150 — 5.89:1 on white, 4.74:1 on -soft */
+  --success-soft: #d8ecd9;
+  /* The palette's only cool role. Informational, neutral-in-tone states, and
+   * the home for anything that used to reach for a stray blue. */
+  --info: #136d86;          /* h 233 — 5.90:1 on white, 4.76:1 on -soft */
+  --info-soft: #d2ebf6;
+  /* "Ready for review": a line waiting on the buyer is not trouble, it is
+   * theirs to look at. Red read as an alarm and sky blue still stood apart
+   * from the finished lines (2026-11-11: "蓝色可以改成偏绿的颜色…灰绿色吧"),
+   * so it is a low-chroma grey-green, quieter than the two green chips. */
+  --review: #4f6a5e;        /* L 42.5 C 13 h 165 — 5.91:1 on white, 4.89:1 on -soft */
+  --review-soft: #dfede6;   /* L 92.5 C 6 h 165 */
+  /* The Decision chips as one family (2026-10-13, "o2和great放在一起看不和
+   * 谐"): the two greens share one hue (150) and differ only in depth —
+   * Great! the pale step, O2 recommended the deep one — where they used to
+   * be olive (h 136) beside mint (h 150). User resolved is a teal, Ready
+   * for review the grey-green above; all four text/fill pairs clear 5:1. */
+  --chip-great: #40674a;     /* L 40 C 24 h 150 — 5.69:1 on -soft */
+  --chip-great-soft: #e4f5e8;/* L 95 C 9 h 150 */
+  --chip-o2: #215030;        /* L 30 C 28 h 150 — 6.47:1 on -soft */
+  --chip-o2-soft: #bce0c4;   /* L 86 C 20 h 150 */
+  --chip-you: #1e6772;       /* L 40 C 22 h 215 — 5.30:1 on -soft */
+  --chip-you-soft: #d3edf2;  /* L 92 C 9 h 215 */
+
+  /* Data viz: the board's pictures (BomOverview). Brighter than the status
+   * family on purpose — a ring or a bar is read as a shape, never as text, so
+   * it does not owe 4.5:1, and at the status weight the board read as mud
+   * (owner, 2026-10-11: "图表的颜色改的更鲜艳一些,例如我们的主题色绿色").
+   * One ramp: good is the brand green at full chroma, settled-by-O2 the deep
+   * brand green, settled-by-you a teal, and the trouble ramp runs amber →
+   * orange → red so a glance says how bad. Every picture also carries its
+   * legend, so nothing depends on these hues alone. */
+  /* 2026-10-12: the good green came down from C 56 to C 34 — at full
+   * chroma it read as a neon outside the palette ("看着有点不太舒服"). It
+   * now sits between --success and the companion's shell. */
+  /* Later the same day it read as dull olive beside the amber
+   * ("进度绿色有点丑"): the hue moved cooler, toward emerald, and the chroma
+   * rose halfway back, so it is clean without being neon. The O2 green
+   * follows the hue. */
+  --viz-good: #54a672;      /* L 62 C 42 h 152 */
+  --viz-o2: #2e6442;        /* L 38 C 30 h 152 */
+  --viz-you: #2c98ac;       /* L 58 C 30 h 220 */
+  --viz-watch: #e8b344;     /* L 76 C 62 h 82  */
+  --viz-short: #e87f40;     /* L 64 C 62 h 55  */
+  --viz-gone: #cb4c49;      /* L 50 C 58 h 30  */
+  --viz-none: #cdd2d7;      /* L 84 C 3  h 255 */
+  --viz-review: #a0c0b1;    /* L 75 C 14 h 165 */
+  --viz-sky: #84bde2;       /* L 74 C 26 h 250 — a chart series colour, no status meaning */
+
+  /* Hover on a coloured control is DERIVED, never a sixth hand-picked hex.
+   * There is no --danger-dark, --attention-dark and so on, and there will not
+   * be: five more tokens whose only job is "the same colour but a bit darker"
+   * is how a palette doubles in size and stops being learnable.
+   *
+   *   a filled control   color-mix(in oklab, var(--x) 88%, #000)
+   *   a tinted control   color-mix(in oklab, var(--x-soft) 88%, var(--x))
+   *
+   * The second form matters: mixing a tint toward black greys it out, while
+   * mixing it toward its own strong colour deepens it, which is what "more
+   * of this state" should look like. --primary-dark is the one exception, and
+   * it exists because the brand fill is used at two levels by design. */
+
+  /* The one track/fill pair for sliders and meters. */
+  --control-track: #e1e6ea;
+  --control-fill: var(--primary);
+  --scrollbar-thumb: rgba(93, 97, 101, .24);
+  --scrollbar-thumb-hover: rgba(93, 97, 101, .42);
+
+  /* ===================================================================
+   * Structure, as tokens.
+   *
+   * A design is not a palette. Two products can hold the same colours and
+   * not look like the same product, because what a reader sees first is
+   * whether a card is a shadow or a rule, how round a control is, and how
+   * much air a table row gets. Those answers used to be written into
+   * individual rules in styles.css, which meant changing the design's mind
+   * meant editing thirty rules.
+   *
+   * They are tokens now. Every one is consumed in exactly one place in the
+   * base stylesheet, so the structure of the whole product moves by setting
+   * a value rather than by re-stating a rule. They are the switches for the
+   * next iteration; the values below are the design the owner chose.
+   * ================================================================ */
+
+  /* The ink every shadow is made of, as a bare triple so alpha stays at the
+   * call site. One value, so no rule ever hand-picks a shadow colour. */
+  --shadow-rgb: 33, 36, 40;
+
+  /* Focus, derived from the accent rather than restated as two more
+   * hexes. Three rules in styles.css used to carry rgba(60, 111, 75, …)
+   * literally — which is --success — so a theme that moved the accent
+   * left its own focus ring behind. */
+  --focus-ring: color-mix(in srgb, var(--success) 32%, transparent);
+  --focus-ring-soft: color-mix(in srgb, var(--success) 14%, transparent);
+
+  /* What a data container is made of. A card is either a rule or a shadow,
+   * never both: both is what a design looks like when it has not decided.
+   * This one is a shadow, so the width is 0 and every card, panel and table
+   * reads its edge from the elevation above.
+   *
+   * Set this to 1px and the whole product becomes an outlined design in one
+   * line — which is the point of it being a token. */
+  --card-border-width: 0;
+  --card-border-color: var(--surface-border);
+
+  /* The table, as three independent decisions: what the header is filled
+   * with, what separates two rows, and whether alternate rows are tinted.
+   * A ruled table sets --row-rule and leaves --row-stripe transparent; a
+   * striped one does the opposite.
+   *
+   * This design is striped. A rule every 44px inside an 18px radius reads
+   * as a grid bolted into a rounded card — two design systems stacked — and
+   * a grid is harder to read across than a stripe. The header keeps its
+   * rule and drops its fill, so the top edge is stated once. */
+  --th-fill: transparent;
+  --th-rule: var(--surface-border);
+  --row-rule: transparent;
+  --row-stripe: color-mix(in srgb, var(--surface-muted) 62%, var(--surface));
+
+  /* The rail takes the ground itself: it is the frame the cards sit in, not
+   * another card. */
+  /* The rail is a white frame of its own on the grey desk, inset by a
+   * gap, so the tools and the work read as two places ("左侧功能栏还是加一个
+   * 框,和右边工作区分开", 2026-10-11). Same fill, radius and lift as a card. */
+  --rail-fill: var(--surface);
+  --rail-rule: transparent;
+  --rail-radius: var(--radius-lg);
+  --rail-inset: var(--space-2);
+  --rail-shadow: var(--surface-shadow);
+  /* The desk under both frames: a step below the page's grey, so the rail
+   * (white) and the work (the page's grey) each read as a frame on it. */
+  --shell-ground: color-mix(in srgb, var(--page) 84%, var(--divider-strong));
+  --workspace-inset: var(--space-2);
+  --workspace-radius: var(--radius-lg);
+  --workspace-shadow: var(--surface-shadow);
+
+  /* Two shadows the base stylesheet used to spell out by hand. */
+  --drawer-shadow: -22px 0 56px rgba(var(--shadow-rgb), .18);
+  --control-shadow: 0 1px 2px rgba(var(--shadow-rgb), .14);
+}
+
+@media (min-width: 1600px) {
+  :root {
+    --text-micro: 0.8125rem;
+    --text-body: 0.9375rem;
+    --text-lead: 1.0625rem;
+    --text-title: 1.375rem;
+    --text-heading: 1.875rem;
+  }
+}
+
+@media (max-width: 480px) {
+  :root {
+    --text-title: 1.1875rem;
+    --text-heading: 1.5rem;
+  }
+}
+
+
+/* =====================================================================
+ * Themes — four designs, one accent.
+ *
+ * The first attempt at this was four palettes, and the owner's reading of
+ * it was exactly right: it was "just changing colours". Two screens can
+ * hold different hexes and still be the same design, because what a
+ * reader registers first is not hue — it is whether a card floats or is
+ * ruled, how round things are, and how much air a row gets.
+ *
+ * So a theme here sets the structural tokens above as well as the
+ * palette, and themes.css carries the handful of rules that no token can
+ * express. What none of them touches is the accent's ROLE: the green is
+ * the only chromatic colour in all four, and the status family keeps its
+ * one-weight ramp, so switching theme never changes what a screen says.
+ *
+ *   clean   white on white, no elevation at all, hairlines and 4px
+ *           corners. The green carries every affordance.
+ *   soft    cool grey ground, white cards floating on it, 18px corners,
+ *           no rules anywhere. The roomiest of the four.
+ *   eco     a pale green ground at hue 146, the accent at home on it;
+ *           ruled rather than floating, 10px corners, longer measure.
+ *   dark    near-black canvas, layered surfaces, the accent re-solved
+ *           light so a filled button is still a filled button.
+ *
+ * Every colour is solved in CIE LCH and every text tier clears 4.5:1 on
+ * its own surface. The ratios in the comments are measured.
+ *
+ * One deliberate difference from the palette above: --faint is solved to
+ * clear 4.5:1 on --surface-muted as well as on --surface. The base palette
+ * only promises the latter, and the product then puts footnote text on muted
+ * fills all over the BOM table and the line drawer, where it measures
+ * 4.15:1. That is a real gap in the shipped palette and it is not this
+ * layer's to fix; these four simply do not repeat it.
+ *
+ * Applied as `data-theme` on <html> (src/design/theme.js). Each block is
+ * also published on a bare `[data-theme]` so an element can adopt a theme
+ * for its own subtree — that exists for the picker's swatches, which have
+ * to show a theme that is not the one currently applied, and it is why
+ * there are no theme hexes anywhere in the JS.
+ *
+ * With no attribute at all the product renders the palette above, which
+ * is the warm paper it shipped with. Nothing here overwrites it: deleting
+ * this section and themes.css restores that product exactly.
+ * ================================================================== */
+
+/* --- 1. Clean --------------------------------------------------------
+ * White ground, white cards, and nothing floating.
+ *
+ * The plane step is gone, so structure cannot come from fill: it comes
+ * from the hairline, which is why --card-border-width stays at 1 and
+ * --surface-shadow goes to none. Corners tighten to 4px because a soft
+ * radius on a flat, ruled surface reads as a sticker rather than as a
+ * frame. The table header loses its fill and keeps only its rule.
+ *
+ * The result is the lightest of the four and the one where the green does
+ * the most work — it is the only colour on the screen. */
+:root[data-theme="clean"],
+[data-theme="clean"] {
+  --shell-ground: var(--page);
+  --workspace-inset: 0;
+  --workspace-radius: 0;
+  --workspace-shadow: none;
+  --rail-radius: 0;
+  --rail-inset: 0;
+  --rail-shadow: none;
+  --page: #ffffff;
+  --surface: #ffffff;
+  --surface-muted: #f5f7f9; /* L 97.2 C 1.2 h 250 */
+  --row-hover: #fafcfd;     /* L 98.8 C 0.8 h 250 */
+  --text: #202223;          /* L 13   C 1.5 h 250 — 15.98:1 on surface */
+  --muted: #5e6164;         /* L 41   C 2   h 250 —  6.23:1 */
+  --faint: #6d7073;         /* L 47   C 2   h 250 —  4.98:1 on surface, 4.64:1 on --surface-muted */
+  --divider: #eaedee;       /* L 93.5 C 1.2 h 250 */
+  --divider-strong: #ced2d5;/* L 84   C 2   h 250 */
+  --surface-border: #e3e6e8;/* L 91   C 1.6 h 250 — 1.25:1 on surface */
+  --control-track: #e6e8eb;
+  --shadow-rgb: 32, 34, 35;
+  --scrim: rgba(32, 34, 35, .26);
+  --scrollbar-thumb: rgba(94, 97, 100, .22);
+  --scrollbar-thumb-hover: rgba(94, 97, 100, .40);
+
+  /* Structure: flat and ruled. */
+  --radius-sm: 4px;
+  --radius-lg: 8px;
+  --surface-shadow: none;
+  --overlay-shadow: 0 8px 24px rgba(32, 34, 35, .10), 0 0 0 1px var(--surface-border);
+  --drawer-shadow: -1px 0 0 var(--surface-border);
+  --control-shadow: none;
+  --card-border-width: 1px;
+  --th-fill: transparent;
+  --row-rule: var(--divider);
+  --row-stripe: transparent;
+  --rail-fill: #ffffff;
+  --rail-rule: var(--surface-border);
+}
+
+/* --- 2. Soft ---------------------------------------------------------
+ * A cool grey desk with white cards resting on it.
+ *
+ * The exact opposite structural choice to Clean: no hairline anywhere
+ * (--card-border-width 0), and every container is found by its elevation
+ * and its fill. Corners open to 18px, which is only legible because the
+ * cards have room around them.
+ *
+ * This is the one that will look most like current SaaS; that is the
+ * point of having it in the set. */
+:root[data-theme="soft"],
+[data-theme="soft"] {
+  --page: #ecf0f3;          /* L 94.5 C 2.2 h 255 — 1.15:1 under the card */
+  --surface: #ffffff;
+  --surface-muted: #f4f7fa; /* L 97   C 1.8 h 255 */
+  --row-hover: #f9fbfd;     /* L 98.4 C 1.2 h 255 */
+  --text: #212428;          /* L 14   C 3   h 258 — 15.58:1 on surface */
+  --muted: #5d6165;         /* L 41   C 3   h 255 —  6.24:1 */
+  --faint: #6c7074;         /* L 47   C 3   h 255 —  4.99:1 on surface, 4.64:1 on --surface-muted */
+  --divider: #e8ebef;       /* L 93   C 2   h 255 */
+  --divider-strong: #cdd2d7;/* L 84   C 3   h 255 */
+  --surface-border: #dce0e4;/* L 89   C 2.6 h 255 */
+  --control-track: #e1e6ea;
+  --shadow-rgb: 33, 36, 40;
+  --scrim: rgba(33, 36, 40, .30);
+  --scrollbar-thumb: rgba(93, 97, 101, .24);
+  --scrollbar-thumb-hover: rgba(93, 97, 101, .42);
+
+  /* Structure: elevated and round, with nothing outlined. */
+  /* 8 / 14, down from 10 / 18 ("现在的圆角我觉得有点太圆 … 稍微没那么圆",
+   * 2026-10-11): still soft, no longer pebble-round. */
+  --radius-sm: 8px;
+  --radius-lg: 14px;
+  --surface-shadow: 0 1px 2px rgba(33, 36, 40, .05), 0 10px 28px -12px rgba(33, 36, 40, .18);
+  --overlay-shadow: 0 12px 36px rgba(33, 36, 40, .16), 0 2px 6px rgba(33, 36, 40, .06);
+  --drawer-shadow: -22px 0 56px rgba(33, 36, 40, .18);
+  --control-shadow: 0 1px 2px rgba(33, 36, 40, .14);
+  --card-border-width: 0;
+  --th-fill: transparent;
+  /* Rows are told apart by tint, not by rule: a ruled table inside an
+     18px radius reads as two different design systems stacked. */
+  --row-rule: transparent;
+  --row-stripe: color-mix(in srgb, var(--surface-muted) 62%, var(--surface));
+  /* The rail is a white frame of its own on the grey desk, inset by a
+   * gap, so the tools and the work read as two places ("左侧功能栏还是加一个
+   * 框,和右边工作区分开", 2026-10-11). Same fill, radius and lift as a card. */
+  --rail-fill: var(--surface);
+  --rail-rule: transparent;
+  --rail-radius: var(--radius-lg);
+  --rail-inset: var(--space-2);
+  --rail-shadow: var(--surface-shadow);
+  /* The desk under both frames: a step below the page's grey, so the rail
+   * (white) and the work (the page's grey) each read as a frame on it. */
+  --shell-ground: color-mix(in srgb, var(--page) 84%, var(--divider-strong));
+  --workspace-inset: var(--space-2);
+  --workspace-radius: var(--radius-lg);
+  --workspace-shadow: var(--surface-shadow);
+}
+
+/* --- 3. Eco ----------------------------------------------------------
+ * A pale green ground, and the accent finally at home on it.
+ *
+ * The neutrals here sit at hue 146 rather than in the warm band the rest
+ * of the system uses — a deliberate break, and the one place the palette
+ * is allowed it. The old failure this looks like was hue ~100, which is
+ * yellow-green and reads as dirty; 146 at C 6 is a pale sage, and with
+ * the brand green at the same hue the page becomes one material instead
+ * of a green button on beige paper.
+ *
+ * Structurally it is the calm one: ruled rather than floating (the shadow
+ * is a whisper, the hairline does the work), 10px corners, and a longer
+ * measure — --leading-relaxed goes to 1.7, which is the only theme that
+ * changes how text is set rather than how it is boxed.
+ *
+ * Chroma is the whole risk. Keep the ground at or under C 6 and the card
+ * at C 1.6: the moment either climbs, the page stops reading as paper
+ * with light on it and starts reading as tinted plastic. */
+:root[data-theme="eco"],
+[data-theme="eco"] {
+  --shell-ground: var(--page);
+  --workspace-inset: 0;
+  --workspace-radius: 0;
+  --workspace-shadow: none;
+  --rail-radius: 0;
+  --rail-inset: 0;
+  --rail-shadow: none;
+  --page: #e8f2e9;          /* L 94.5 C 6   h 146 — 1.13:1 under the card */
+  --surface: #fbfefb;       /* L 99.3 C 1.6 h 146 */
+  --surface-muted: #f0f8f1; /* L 96.8 C 4.5 h 146 */
+  --row-hover: #f7fbf7;     /* L 98.2 C 2.6 h 146 */
+  --text: #202521;          /* L 14   C 4   h 150 — 15.33:1 on surface */
+  --muted: #5b635c;         /* L 41   C 5   h 150 —  6.11:1 */
+  --faint: #6a716b;         /* L 47   C 5   h 150 —  4.94:1 on surface, 4.63:1 on --surface-muted */
+  --divider: #e3ece4;       /* L 92.5 C 5   h 146 */
+  --divider-strong: #c6d2c7;/* L 83   C 7   h 146 */
+  --surface-border: #d8e2d9;/* L 89   C 6   h 146 — 1.31:1 on surface */
+  --control-track: #dee8df;
+  --shadow-rgb: 32, 37, 33;
+  --scrim: rgba(32, 37, 33, .30);
+  --scrollbar-thumb: rgba(91, 99, 92, .24);
+  --scrollbar-thumb-hover: rgba(91, 99, 92, .42);
+
+  /* Structure: ruled and calm, with air between the lines. */
+  --radius-sm: 10px;
+  --radius-lg: 16px;
+  --leading-relaxed: 1.7;
+  --surface-shadow: 0 1px 2px rgba(32, 37, 33, .04);
+  --overlay-shadow: 0 10px 30px rgba(32, 37, 33, .12), 0 0 0 1px var(--surface-border);
+  --drawer-shadow: -1px 0 0 var(--surface-border), -18px 0 44px rgba(32, 37, 33, .10);
+  --control-shadow: none;
+  --card-border-width: 1px;
+  --th-fill: var(--surface-muted);
+  --row-rule: var(--divider);
+  --row-stripe: transparent;
+  /* The rail is the deepest plane: the ground with a little more of its own
+     rule mixed in, so the three planes read as one material in three
+     thicknesses rather than as three colours. */
+  --rail-fill: color-mix(in srgb, var(--page) 72%, var(--divider-strong));
+  --rail-rule: transparent;
+}
+
+/* --- 4. Dark ---------------------------------------------------------
+ * Near-black canvas, surfaces layered up out of it.
+ *
+ * The part of a dark theme that is actually hard is not the greys, it is
+ * the accent. --primary is a FILL with --primary-foreground on it, and
+ * the product's green is L 29: a filled button in that green on a L 13
+ * canvas is a dark rectangle on a dark rectangle. So the pair inverts —
+ * the green goes light (L 70) and its foreground goes near-black — and
+ * --primary-dark, which is the emphatic text colour on --primary-soft,
+ * goes lighter still rather than darker. The name keeps meaning "more
+ * emphatic", which is what every rule in the product uses it for.
+ *
+ * The status family is re-solved at one lightness the same way the light
+ * palette is: all five land at 7.2:1 on the surface and 5.2:1 on their
+ * own soft fill, so a pill is still not louder because of what it says.
+ *
+ * Elevation carries almost nothing here — a black shadow on a black
+ * canvas is invisible — so containers are found by their surface step
+ * and a hairline, which is why --card-border-width stays at 1. */
+:root[data-theme="dark"],
+[data-theme="dark"] {
+  --shell-ground: var(--page);
+  --workspace-inset: 0;
+  --workspace-radius: 0;
+  --workspace-shadow: none;
+  --rail-radius: 0;
+  --rail-inset: 0;
+  --rail-shadow: none;
+  --page: #16191b;          /* L 8.5 C 2   h 255 */
+  --surface: #1f2224;       /* L 13  C 2.2 h 255 — 1.10:1 over the page */
+  --surface-muted: #292c30; /* L 18  C 2.6 h 255 — 1.14:1 over the surface */
+  --row-hover: #25282b;     /* L 16  C 2.4 h 255 */
+  --surface-active: var(--primary-soft);
+  --text: #eceef0;          /* L 94  C 1.5 h 255 — 13.76:1 on surface */
+  --text-soft: var(--text);
+  --muted: #a8acaf;         /* L 70  C 2.5 h 255 —  7.00:1 */
+  --faint: #95999d;         /* L 63  C 2.5 h 255 —  5.58:1 on surface, 4.89:1 on --surface-muted */
+  --divider: #2f3337;       /* L 21  C 3   h 255 */
+  --divider-strong: #42474c;/* L 30  C 3.5 h 255 */
+  --surface-border: #313539;/* L 22  C 3   h 255 — 1.29:1 on surface */
+  --control-track: #313539;
+
+  /* The accent, inverted. 6.96:1 on the surface; white-on-green becomes
+     near-black-on-green at 7.45:1. */
+  --primary: #86b877;            /* L 70 C 40 h 136 */
+  --primary-dark: #afd7a1;       /* L 82 C 32 h 136 — 7.17:1 on --primary-soft */
+  --primary-soft: #2f3d2a;       /* L 24 C 14 h 136 */
+  --primary-foreground: #181d17; /* L 10 C 5  h 136 */
+
+  /* One lightness, five hues — 7.2:1 on surface, 5.2:1 on their own fill. */
+  --danger: #ea9892;        /* h 28  */
+  --danger-soft: #4b3331;
+  --warning: #dfa07c;       /* h 55  */
+  --warning-soft: #48352b;
+  --attention: #c5ab70;     /* h 88  */
+  --attention-soft: #403827;
+  --success: #7ebc8e;       /* h 150 */
+  --success-soft: #2c3d30;
+  --info: #4cbbde;          /* h 233 */
+  --info-soft: #213d47;
+  --review: #a2c3b4;        /* L 76 C 14 h 165 — 5.61:1 on -soft */
+  --review-soft: #33413b;   /* L 26 C 7 h 165 */
+  --chip-great: #a0cbaa;     /* 6.38:1 on -soft */
+  --chip-great-soft: #303c33;
+  --chip-o2: #b8e8c3;        /* 5.94:1 on -soft */
+  --chip-o2-soft: #3a5641;
+  --chip-you: #89ccd7;       /* 6.01:1 on -soft */
+  --chip-you-soft: #2b4145;
+
+  --viz-good: #6cb584;      /* L 68 C 38 h 152 */
+  --viz-o2: #49783c;        /* L 46 C 40 h 136 */
+  --viz-you: #41a8bd;       /* L 64 C 30 h 220 */
+  --viz-watch: #e6b34e;     /* L 76 C 58 h 82  */
+  --viz-short: #ea874c;     /* L 66 C 58 h 55  */
+  --viz-gone: #dc6861;      /* L 58 C 52 h 30  */
+  --viz-none: #565a5e;      /* L 38 C 3  h 255 */
+  --viz-review: #7e9d8f;    /* L 62 C 14 h 165 */
+  --viz-sky: #68a8cf;       /* L 66 C 28 h 250 */
+
+  --shadow-rgb: 0, 0, 0;
+  --scrim: rgba(0, 0, 0, .62);
+  --scrollbar-thumb: rgba(168, 172, 175, .22);
+  --scrollbar-thumb-hover: rgba(168, 172, 175, .38);
+
+  --radius-sm: 6px;
+  --radius-lg: 10px;
+  --surface-shadow: 0 1px 2px rgba(0, 0, 0, .40);
+  --overlay-shadow: 0 14px 40px rgba(0, 0, 0, .55), 0 0 0 1px var(--divider-strong);
+  --drawer-shadow: -1px 0 0 var(--divider-strong), -24px 0 60px rgba(0, 0, 0, .5);
+  --control-shadow: none;
+  --card-border-width: 1px;
+  --th-fill: var(--surface-muted);
+  --th-rule: var(--divider-strong);
+  --row-rule: var(--divider);
+  --row-stripe: transparent;
+  --rail-fill: #101315;
+  --rail-rule: var(--divider);
+
+  /* Part photos, chart canvases and workbook previews are all white-backed
+     assets. On a near-black surface they need a plate, or they punch a
+     white hole in the page. */
+  --plate: #e8eaec;
+}
+
+/* No shadows, in any theme (owner, 2026-10-12: "summary那个卡片不要阴影,
+ * 整个网页都不要阴影"). A card is a white fill on the grey ground; a popover,
+ * menu or toast that floats over content gets a 1px ring instead, and the
+ * drawer a hairline at its edge. Last in the file so it wins over every
+ * theme block above. */
+:root,
+:root[data-theme],
+[data-theme] {
+  --surface-shadow: none;
+  --overlay-shadow: 0 0 0 1px var(--surface-border);
+  --drawer-shadow: -1px 0 0 var(--surface-border);
+  --control-shadow: none;
+  --rail-shadow: none;
+  --workspace-shadow: none;
+}
+
+/* Chinese interface (`<html lang="zh-CN">`, set from the account language):
+ * medium is drawn at 600. The CJK faces in --font-sans have no 500 on
+ * Windows and Linux, so a 500 title, active tab or heading fell back to 400
+ * and lost its emphasis. English and Spanish keep 500. */
+:root:lang(zh) { --weight-medium: var(--weight-cjk-emphasis); }
+
+@media (max-width: 760px) {
+  :root { --page-gutter: 16px; --section-gap: 40px; --card-padding: 20px; }
+}

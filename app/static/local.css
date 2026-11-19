@@ -1,0 +1,115 @@
+/* The app's own pages (offline, continue in browser). They sit on the same
+ * card as the site's sign-in page and read the BOM tokens, copied from
+ * web/apps/bom/src/design/tokens.css by scripts/copy-assets.mjs. */
+@import url("vendor/tokens.css");
+
+@font-face {
+  font-family: "Geist Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("vendor/geist-latin-ext-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: "Geist Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("vendor/geist-latin-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body { height: 100%; margin: 0; }
+
+body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-7) var(--space-5);
+  color: var(--text);
+  /* The site's sign-in ground (.auth-screen). */
+  background:
+    radial-gradient(circle at 50% 18%, color-mix(in srgb, var(--success) 12%, transparent), transparent 34%),
+    var(--page);
+  font-family: var(--font-sans);
+  font-size: var(--text-body);
+  line-height: var(--leading-relaxed);
+  text-wrap: pretty;
+}
+
+.card {
+  display: grid;
+  width: min(430px, 100%);
+  padding: var(--space-7);
+  justify-items: center;
+  text-align: center;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--overlay-shadow);
+}
+
+.brand {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  margin-bottom: var(--space-5);
+  padding: 9px; /* the 34px mark in a 52px tile, as on the site's sign-in card */
+  place-items: center;
+  border-radius: var(--radius-lg);
+}
+
+.brand img { width: 100%; height: 100%; object-fit: contain; }
+
+h1 {
+  margin: var(--space-2) 0;
+  font-size: var(--text-heading);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-snug);
+  letter-spacing: var(--tracking-heading);
+  text-wrap: balance;
+}
+
+p { max-width: 350px; margin: 0; color: var(--muted); }
+
+.actions {
+  display: grid;
+  width: 100%;
+  margin-top: var(--space-6);
+  gap: var(--space-2);
+}
+
+.button {
+  display: inline-flex;
+  min-height: var(--control-lg);
+  padding: 0 var(--space-4);
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-weight: var(--weight-regular);
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
+}
+
+/* The site's focus ring (styles.css). */
+.button:focus-visible { outline: 2px solid var(--success); outline-offset: 2px; }
+
+.button-primary { color: var(--primary-foreground); background: var(--primary); border: 0; }
+.button-primary:hover { background: var(--primary-dark); }
+
+/* The site's .secondary-button: a muted fill with the control edge. */
+.button-secondary { color: var(--primary-dark); background: var(--surface-muted); border: 1px solid var(--field-border); }
+.button-secondary:hover { background: var(--surface-active); }
+
+.button-quiet { color: var(--primary-dark); background: transparent; border: 0; }
+.button-quiet:hover { background: var(--surface-muted); }
+
+@media (prefers-reduced-motion: reduce) {
+  .button { transition: none; }
+}
