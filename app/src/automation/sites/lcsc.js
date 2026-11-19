@@ -52,7 +52,21 @@ module.exports = {
     orders: ORDERS_URL,
   },
   targets: {
-    "cookies.accept": {
+    /* The BOM tool: upload a CSV, create the list, add the matches. */
+  "bom.upload": {
+    title: T("BOM file", "BOM 文件", "Archivo BOM"),
+    hidden: true,
+    any: [{ css: "input[type=file][accept*='csv']" }],
+  },
+  "bom.create": {
+    title: T("Create BOM", "创建 BOM", "Crear BOM"),
+    any: [{ role: "button", name: /^create bom$/i }],
+  },
+  "bom.addToCart": {
+    title: T("Add the matched parts", "加入匹配的料号", "Añadir las piezas"),
+    any: [{ role: "button", name: /^add to cart$/i }],
+  },
+  "cookies.accept": {
       title: T("Accept cookies", "接受 Cookie", "Aceptar cookies"),
       any: [{ role: "button", name: /^accept all cookies$/i }],
     },
@@ -277,6 +291,19 @@ module.exports = {
     ],
   },
   tasks: {
+    /* The BOM tool path: one upload instead of one product page per part. */
+    bulkAddBom: [
+      { do: "goto", url: "https://www.lcsc.com/bom" },
+      { do: "click", target: "cookies.accept", optional: true, timeout: 2500 },
+      { do: "upload", target: "bom.upload", filesParam: "file" },
+      { do: "waitForUrl", url: /\/bom\/options/ },
+      { do: "click", target: "bom.create" },
+      { do: "waitForUrl", url: /personalCenter\/myProject\/detail/ },
+      { do: "click", target: "bom.addToCart", optional: true },
+      { do: "handoff", message: "sign_in", when: "account.signInForm", untilGone: "account.signInForm", timeout: 600000 },
+      { do: "click", target: "bom.addToCart", optional: true },
+      { do: "wait", ms: 3000 },
+    ],
     addToCart: [{ do: "walk", to: ["product", "results"] }, { do: "act", name: ["addToCartHere", "addToCart"] }],
     openCart: [
       { do: "walk", to: "cart" },
@@ -325,6 +352,7 @@ module.exports = {
     ],
   },
   taskParams: {
+    bulkAddBom: ["file"],
     removeFromCart: ["part"],
     checkout: [],
     placeOrder: [],

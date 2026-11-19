@@ -11,6 +11,7 @@ const { ACTIONS, Runner } = require("../src/automation/runner");
 const { SITES, defineSite } = require("../src/automation/sites");
 const { COMMON_TARGETS } = require("../src/automation/sites/common");
 const { BuyLabFlow, bulkLines, parseLines } = require("../src/buy-lab-flow");
+const fs = require("node:fs");
 const {
   browserChoices,
   launchBounds,
@@ -508,6 +509,31 @@ test("a supplier with a bulk list adds the whole list in one call", async () => 
   const bulk = calls.filter((call) => call.task === "bulkAddList");
   assert.equal(bulk.length, 1);
   assert.deepEqual(bulk[0].params, { lines: "2, A\n3, B" });
+  assert.deepEqual(flow.lines.map((line) => line.status), ["added", "added"]);
+});
+
+
+test("a supplier with a BOM tool uploads one CSV file", async () => {
+  const site = {
+    id: "lcsc",
+    name: "LCSC",
+    tasks: { addToCart: [], openCart: [], placeOrder: [], orders: [], track: [], bulkAddBom: [] },
+    taskParams: { bulkAddBom: ["file"] },
+    machine: { states: {}, transitions: [] },
+  };
+  const calls = [];
+  let content = null;
+  const flow = new BuyLabFlow({ sites: [site], getLive: () => ({}), onChange: () => {} });
+  flow.runTask = async (task, params) => {
+    calls.push({ task, params });
+    if (task === "bulkAddBom") content = fs.readFileSync(params.file, "utf8");
+    return { status: "done", steps: [], results: {} };
+  };
+  await flow.start({ supplier: "lcsc", text: "C1525 10\nC25804 50" });
+  assert.equal(calls.filter((call) => call.task === "bulkAddBom").length, 1);
+  assert.match(content, /^LCSC Part Number,Quantity/);
+  assert.match(content, /C1525,10/);
+  assert.match(content, /C25804,50/);
   assert.deepEqual(flow.lines.map((line) => line.status), ["added", "added"]);
 });
 

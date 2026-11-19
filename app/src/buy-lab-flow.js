@@ -10,6 +10,10 @@
  * nothing is approved on the person's behalf, and a task that cannot go on
  * waits instead of guessing. */
 
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+
 const { Runner } = require("./automation/runner");
 
 const MAX_LINES = 50;
@@ -35,6 +39,15 @@ function parseLines(text) {
   });
 }
 
+
+/** A CSV the supplier's BOM tool can read: part and quantity per line. */
+function writeBomFile(siteId, lines) {
+  const header = siteId === "lcsc" ? "LCSC Part Number,Quantity" : "Part Number,Quantity";
+  const body = lines.map((line) => `${line.mpn},${line.quantity}`).join("\n");
+  const file = path.join(os.tmpdir(), `o2-bom-${siteId}-${process.pid}-${Date.now()}.csv`);
+  fs.writeFileSync(file, `${header}\n${body}\n`, "utf8");
+  return file;
+}
 
 /** "quantity, part" lines for the cart's own Bulk Add box. */
 function bulkLines(lines) {
@@ -191,12 +204,22 @@ class BuyLabFlow {
     this.emit();
     try {
       const site = this.sites.find((entry) => entry.id === this.supplier);
-      if (site?.tasks.bulkAddList) {
-        // One page, one batch: the cart's own Bulk Add box takes the list.
+      if (site?.tasks.bulkAddBom || site?.tasks.bulkAddList) {
+        // One page, one batch: a BOM file or the cart's own Bulk Add box.
         this.emit({ message: "bulk-adding" });
         for (const line of this.lines) line.status = "adding";
         this.emit();
-        const snapshot = await this.runTask("bulkAddList", { lines: bulkLines(this.lines) });
+        let snapshot;
+        if (site.tasks.bulkAddBom) {
+          const file = writeBomFile(this.supplier, this.lines);
+          try {
+            snapshot = await this.runTask("bulkAddBom", { file });
+          } finally {
+            try { fs.unlinkSync(file); } catch { /* already gone */ }
+          }
+        } else {
+          snapshot = await this.runTask("bulkAddList", { lines: bulkLines(this.lines) });
+        }
         const failed = snapshot.steps.find((step) => step.status === "failed");
         if (snapshot.status !== "done") {
           for (const line of this.lines) {
@@ -295,4 +318,4 @@ class BuyLabFlow {
 }
 
 
-module.exports = { BuyLabFlow, bulkLines, parseLines, REQUIRED_TASKS };
+module.exports = { BuyLabFlow, bulkLines, parseLines, writeBomFile, REQUIRED_TASKS };
