@@ -67,6 +67,12 @@ class ChromePage extends EventEmitter {
     return this.destroyed;
   }
 
+  /** Load the page again (the Runner lets go of a check this way). */
+  reload() {
+    if (this.destroyed) return;
+    void this.page.reload().catch(() => {});
+  }
+
   isLoading() {
     return this.loading;
   }

@@ -24,7 +24,7 @@ const COMMON_TARGETS = {
     any: [
       { css: "#challenge-form, #challenge-stage, #cf-challenge-running, iframe[src*='challenges.cloudflare.com'], iframe[src*='cdn-cgi/challenge']" },
       { css: "#px-captcha, iframe[src*='captcha'], iframe[title*='captcha' i]" },
-      { role: "heading", name: /^(access to this page has been denied|access denied|performing security verification|verify you are human|just a moment|请稍候|正在验证|安全验证|正在进行安全验证|请验证您是真人|請驗證您是真人|正在進行安全驗證|verificación de seguridad|verifica que eres un ser humano)/i },
+      { role: "heading", name: /^(performing security verification|verify you are human|just a moment|请稍候|正在验证|安全验证|正在进行安全验证|请验证您是真人|請驗證您是真人|正在進行安全驗證|verificación de seguridad|verifica que eres un ser humano)/i },
     ],
   },
   /* Cloudflare's challenge page in any language: its headings are translated

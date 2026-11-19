@@ -478,20 +478,20 @@ class Runner {
       this.driver.checkStopped();
       try {
         if (!this.driver.contents.isLoading()) {
-          const present = await this.driver.present(this.matchNamed, { params: this.params });
-          state = recognise(machine, this.driver.contents.getURL(), present);
-          if (state === UNKNOWN && this.profile.targets.blocked) {
-            // A shop's own refusal is not a page to wait on: no field, no
-            // button, no way for the person to get past it.
+          // A shop's own refusal (DataDome and friends) is not a page to wait
+          // on: no field, no button, no way for the person to get past it.
+          if (this.profile.targets.blocked) {
             const refusal = await this.driver.present({ blocked: this.profile.targets.blocked }, { params: this.params });
             if (refusal.blocked) {
               throw new AutomationError("blocked", "The supplier refused this browser (Access Denied).");
             }
           }
+          const present = await this.driver.present(this.matchNamed, { params: this.params });
+          state = recognise(machine, this.driver.contents.getURL(), present);
           if (state !== UNKNOWN && state !== not) return state;
         }
       } catch (error) {
-        if (error?.code === "stopped" || error?.code === "closed") throw error;
+        if (["stopped", "closed", "blocked"].includes(error?.code)) throw error;
         // mid-navigation; look again
       }
       if (Date.now() >= deadline) return state;

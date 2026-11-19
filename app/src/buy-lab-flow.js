@@ -99,6 +99,18 @@ class BuyLabFlow {
     this.runner = runner;
     try {
       const snapshot = await runner.run();
+      const refused = snapshot.steps.some((step) => step.error?.code === "blocked");
+      if (refused && attempt === 0) {
+        this.emit({ message: "reloading-blocked" });
+        await live.reload?.();
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        return this.runTask(task, params, 1);
+      }
+      if (refused) {
+        const error = new Error("blocked");
+        error.code = "blocked";
+        throw error;
+      }
       this.observe(snapshot);
       return snapshot;
     } catch (error) {
