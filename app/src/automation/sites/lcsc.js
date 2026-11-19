@@ -112,6 +112,21 @@ module.exports = {
     within: { any: [{ css: ".v-dialog--active" }] },
     any: [{ role: "button", name: /^add$/i }],
   },
+  /* (2026-11-20, live, signed in) The cart page shows one of the person's
+   * carts: the name beside "Cart_..." opens .selectCartWrap: the other
+   * carts newest first (names are Cart_<timestamp>), the shown one last and
+   * ticked, so the first is the one just made. A cart added from the
+   * BOM tool is not shown by itself; picking it is remembered by the account
+   * (it stays after a reload). Each item also has a delete icon: only the
+   * name is clicked. */
+  "cart.switch": {
+    title: T("Which cart", "选择购物车", "Qué carrito"),
+    any: [{ css: ".guide_1_box span[role=button][aria-haspopup]" }],
+  },
+  "cart.newest": {
+    title: T("The newest cart", "最新的购物车", "El carrito más reciente"),
+    any: [{ css: ".menuable__content__active .selectCartItem .text-truncate" }],
+  },
   "checkout.noAddress": {
     title: T("No shipping address", "没有收货地址", "Sin dirección de envío"),
     any: [{ text: /no shipping address found/i }],
@@ -297,7 +312,13 @@ module.exports = {
       review: {
         title: T("Review order", "确认订单", "Revisar el pedido"),
         match: { all: ["review.submit"] },
-        enter: [{ do: "read", target: "review.total", as: "total", optional: true, timeout: 3000 }],
+        // (2026-11-20, live) Total first shows goods + handling ($3.42) and
+        // takes the shipping fee a moment later ($11.41): the person approves
+        // the amount they will pay, so it is read once it has settled.
+        enter: [
+          { do: "wait", ms: 5000 },
+          { do: "read", target: "review.total", as: "total", optional: true, timeout: 3000 },
+        ],
       },
       checkoutStep: {
         title: T("Checkout", "结账", "Pago"),
@@ -469,15 +490,22 @@ module.exports = {
       { do: "handoff", message: "sign_in", when: "bom.loginWall", whenTimeout: 4000, untilGone: "bom.loginWall", timeout: 600000 },
       // Signed in now: Add to Cart must work (skipping it reported a cart that
       // was never filled), and its dialog must be answered: the entire list,
-      // into the person's existing cart, or a new one when they have none.
+      // into a new cart. An existing cart would add this list's quantities to
+      // lines already there (2026-11-20, live: 100 + 100 became 200), and its
+      // other lines would be ordered with it.
       { do: "click", target: "bom.addToCart" },
       { do: "waitFor", target: "bom.addDialog", timeout: 15000 },
       { do: "click", target: "bom.addToField" },
-      { do: "click", target: "bom.existingCart", optional: true, timeout: 2000 },
-      { do: "click", target: "bom.newCart", when: "bom.newCart" },
+      { do: "click", target: "bom.newCart" },
       { do: "click", target: "bom.addConfirm" },
       { do: "waitForHidden", target: "bom.addDialog", timeout: 20000 },
       { do: "wait", ms: 2000 },
+      // The new cart is the one checked out: shown on the cart page from now on.
+      { do: "goto", url: "https://www.lcsc.com/cart" },
+      { do: "click", target: "cart.switch", timeout: 20000 },
+      { do: "wait", ms: 1500 },
+      { do: "click", target: "cart.newest", timeout: 10000 },
+      { do: "wait", ms: 3000 },
     ],
     addToCart: [{ do: "walk", to: ["product", "results"] }, { do: "act", name: ["addToCartHere", "addToCart"] }],
     openCart: [
