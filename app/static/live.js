@@ -5,7 +5,7 @@
 
 const canvas = document.querySelector("[data-screen]");
 const stage = document.querySelector("[data-stage]");
-const status = document.querySelector("[data-status]");
+const status = document.querySelector("[data-stage] [data-status]");
 const context = canvas.getContext("2d", { alpha: false });
 
 let page = { width: 1280, height: 900 };

@@ -252,3 +252,68 @@ table.lines td.n { width: 40px; color: var(--muted, #5b6b76); }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
 }
+
+
+/* The live overlay: the supplier's Chrome drawn on a canvas, on top of the
+   list. It is only shown when the shop stops for the person or on request. */
+.live {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  background: #0f1418;
+}
+
+.live[hidden] { display: none !important; }
+
+.live .stage {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.live .screen {
+  display: block;
+  background: #ffffff;
+  outline: 0;
+  cursor: default;
+}
+
+.live .status {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  margin: 0;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(16, 24, 32, 0.72);
+  color: #f2f6f9;
+  font-size: 13px;
+  pointer-events: none;
+}
+
+.live .status[hidden] { display: none; }
+
+.live .back {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 2;
+  padding: 6px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+  background: rgba(16, 24, 32, 0.72);
+  color: #f2f6f9;
+  font-size: 13px;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.live .back:hover,
+.live .back:focus-visible {
+  opacity: 1;
+  background: rgba(16, 24, 32, 0.9);
+  outline: 0;
+}

@@ -2,15 +2,15 @@
 
 /* Buy lab: a pasted list, a purchase, and the tracking that follows.
  *
- * The window has two pages. The flow page (buy-lab.html) is the list and its
- * states; the live page (live.html) is a real Chrome drawn as a picture and
- * is only shown when the shop stops for the person (a security check, a
- * sign-in) or when they ask for it.
+ * One page holds both the flow (buy-lab.html) and, as an overlay, the live
+ * picture of the supplier's Chrome (live.js draws it on a canvas). Each
+ * supplier runs in its own Chrome (off-screen, rebrowser-playwright) behind
+ * that overlay: frames come over Page.startScreencast, the person's input
+ * goes back over the DevTools Input domain, and the purchase itself is driven
+ * by the same Runner as the supplier windows (buy-lab-flow.js).
  *
- * Each supplier runs in its own Chrome (off-screen, rebrowser-playwright)
- * behind the live page: frames come over Page.startScreencast, the person's
- * input goes back over the DevTools Input domain, and the purchase itself is
- * driven by the same Runner as the supplier windows (buy-lab-flow.js). */
+ * The overlay is shown only when the shop stops for the person (a security
+ * check, a sign-in) or when they ask for it. */
 
 const { BaseWindow, WebContentsView, ipcMain } = require("electron");
 const path = require("node:path");
@@ -23,7 +23,7 @@ const { LiveBrowser } = require("./live-browser");
 const BACKGROUND = "#0f1418";
 const LAB_SITES = ["digikey", "mouser", "lcsc"];
 
-/** flow page or live page contents -> BuyLabWindow */
+/** the page's contents -> BuyLabWindow */
 const byContents = new WeakMap();
 
 
@@ -34,7 +34,7 @@ class BuyLabWindow {
     return window;
   }
 
-  constructor({ language, flowUrl, flowPreload, pageUrl, pagePreload, partition, userDataDir, downloadsPath, openExternal, onClosed }) {
+  constructor({ language, pageUrl, pagePreload, partition, userDataDir, downloadsPath, openExternal, onClosed }) {
     this.language = language;
     this.openExternal = openExternal;
     this.downloadsPath = downloadsPath;
@@ -58,37 +58,10 @@ class BuyLabWindow {
       autoHideMenuBar: process.platform !== "darwin",
     });
 
-    this.flow = this.makeView(flowPreload, partition);
-    this.canvas = this.makeView(pagePreload, partition);
-    byContents.set(this.flow.webContents, this);
-    byContents.set(this.canvas.webContents, this);
-    this.window.contentView.addChildView(this.flow);
-    this.window.contentView.addChildView(this.canvas);
-
-    this.flowState = new BuyLabFlow({
-      sites: this.sites,
-      getLive: (id) => this.lives.get(id),
-      onChange: (state) => this.publishFlow(state),
-    });
-
-    this.flow.webContents.on("did-finish-load", () => {
-      this.publishFlow(this.flowState.state());
-      this.showView("flow");
-    });
-    void this.flow.webContents.loadURL(flowUrl);
-    void this.canvas.webContents.loadURL(pageUrl);
-
-    this.layout();
-    this.window.on("resize", () => this.layout());
-    this.window.on("closed", () => { void this.close(); });
-    this.window.show();
-  }
-
-  makeView(preload, partition) {
-    return new WebContentsView({
+    this.page = new WebContentsView({
       webPreferences: {
         partition,
-        preload,
+        preload: pagePreload,
         contextIsolation: true,
         sandbox: true,
         nodeIntegration: false,
@@ -97,6 +70,25 @@ class BuyLabWindow {
         navigateOnDragDrop: false,
       },
     });
+    byContents.set(this.page.webContents, this);
+    this.window.contentView.addChildView(this.page);
+
+    this.flowState = new BuyLabFlow({
+      sites: this.sites,
+      getLive: (id) => this.lives.get(id),
+      onChange: (state) => this.publishFlow(state),
+    });
+
+    this.page.webContents.on("did-finish-load", () => {
+      this.page.webContents.send("buy-lab:view", this.view);
+      this.publishFlow(this.flowState.state());
+    });
+    void this.page.webContents.loadURL(pageUrl);
+
+    this.layout();
+    this.window.on("resize", () => this.layout());
+    this.window.on("closed", () => { void this.close(); });
+    this.window.show();
   }
 
   async start() {
@@ -126,50 +118,43 @@ class BuyLabWindow {
 
   onFrame(id, frame) {
     this.lastFrame.set(id, frame);
-    if (this.closed || id !== this.active || this.view !== "live") return;
-    if (this.canvas.webContents.isDestroyed()) return;
-    this.canvas.webContents.send("live:frame", frame);
+    if (this.closed || this.view !== "live" || id !== this.active) return;
+    if (this.page.webContents.isDestroyed()) return;
+    this.page.webContents.send("live:frame", frame);
   }
 
   setLoading(id, loading) {
     this.loading.set(id, loading);
-    if (this.closed || this.flow.webContents.isDestroyed()) return;
-    this.flow.webContents.send("buy-lab:loading", { id, loading });
+    if (this.closed || this.page.webContents.isDestroyed()) return;
+    this.page.webContents.send("buy-lab:loading", { id, loading });
   }
 
   layout() {
     if (this.window.isDestroyed()) return;
     const { width, height } = this.window.getContentBounds();
-    this.flow.setBounds({ x: 0, y: 0, width, height });
-    this.canvas.setBounds({ x: 0, y: 0, width, height });
+    this.page.setBounds({ x: 0, y: 0, width, height });
   }
 
   showView(name) {
     if (this.closed) return;
     this.view = name === "live" ? "live" : "flow";
-    this.flow.setVisible(this.view === "flow");
-    this.canvas.setVisible(this.view === "live");
+    if (!this.page.webContents.isDestroyed()) this.page.webContents.send("buy-lab:view", this.view);
     if (this.view === "live") {
       const id = this.flowState.supplier || this.active;
       if (id && this.lives.has(id)) {
         this.active = id;
         const frame = this.lastFrame.get(id);
-        if (frame) this.canvas.webContents.send("live:frame", frame);
+        if (frame && !this.page.webContents.isDestroyed()) this.page.webContents.send("live:frame", frame);
         void this.lives.get(id).refresh();
       }
-      this.canvas.webContents.focus();
-    } else {
-      this.flow.webContents.focus();
-      this.flow.webContents.send("buy-lab:view", this.view);
+      this.page.webContents.focus();
     }
-    this.flow.webContents.send("buy-lab:view", this.view);
   }
 
   publishFlow(state) {
     if (this.closed) return;
-    if (!this.flow.webContents.isDestroyed()) this.flow.webContents.send("buy-lab:flow", state);
+    if (!this.page.webContents.isDestroyed()) this.page.webContents.send("buy-lab:flow", state);
     if (state.status === "waiting" && !state.confirm) this.showView("live");
-    else if (["done", "failed", "stopped"].includes(state.status)) this.showView("flow");
   }
 
   select(id) {
@@ -231,8 +216,7 @@ class BuyLabWindow {
     this.flowState.stop();
     await Promise.all([...this.lives.values()].map((live) => live.close().catch(() => {})));
     this.lives.clear();
-    if (!this.flow.webContents.isDestroyed()) this.flow.webContents.close();
-    if (!this.canvas.webContents.isDestroyed()) this.canvas.webContents.close();
+    if (!this.page.webContents.isDestroyed()) this.page.webContents.close();
     if (!this.window.isDestroyed()) this.window.destroy();
     this.onClosed?.(this);
   }
@@ -240,20 +224,18 @@ class BuyLabWindow {
 
 
 function registerBuyLabIpc() {
-  const ownerOf = (event, view) => {
+  const ownerOf = (event) => {
     const owner = byContents.get(event.sender);
     if (!owner || event.senderFrame?.parent) return null;
-    if (view === "flow" && owner.flow.webContents !== event.sender) return null;
-    if (view === "live" && owner.canvas.webContents !== event.sender) return null;
     return owner;
   };
 
   ipcMain.handle("buy-lab:state", (event) => {
-    const owner = ownerOf(event, "flow");
+    const owner = ownerOf(event);
     return owner ? owner.flowState.state() : null;
   });
   ipcMain.handle("buy-lab:start", (event, payload) => {
-    const owner = ownerOf(event, "flow");
+    const owner = ownerOf(event);
     if (!owner) return false;
     const { supplier, text } = payload && typeof payload === "object" ? payload : {};
     return owner.startPurchase({ supplier: String(supplier || ""), text: String(text || "") }).catch((error) => {
@@ -261,47 +243,29 @@ function registerBuyLabIpc() {
       return false;
     });
   });
-  ipcMain.handle("buy-lab:stop", (event) => {
-    const owner = ownerOf(event, "flow");
-    return owner ? owner.stop() : false;
-  });
-  ipcMain.handle("buy-lab:confirm", (event) => {
-    const owner = ownerOf(event, "flow");
-    return owner ? owner.confirm() : false;
-  });
-  ipcMain.handle("buy-lab:select", (event, id) => {
-    const owner = ownerOf(event, "flow");
-    return owner ? owner.select(String(id)) : false;
-  });
+  ipcMain.handle("buy-lab:stop", (event) => ownerOf(event)?.stop() ?? false);
+  ipcMain.handle("buy-lab:confirm", (event) => ownerOf(event)?.confirm() ?? false);
+  ipcMain.handle("buy-lab:select", (event, id) => ownerOf(event)?.select(String(id)) ?? false);
   ipcMain.handle("buy-lab:show-live", (event) => {
-    const owner = ownerOf(event, "flow");
+    const owner = ownerOf(event);
     if (!owner) return false;
     owner.showView("live");
     return true;
   });
   ipcMain.handle("buy-lab:show-flow", (event) => {
-    const owner = ownerOf(event, "live");
+    const owner = ownerOf(event);
     if (!owner) return false;
     owner.showView("flow");
     return true;
   });
-  ipcMain.handle("buy-lab:reload", (event) => {
-    const owner = ownerOf(event, "live");
-    return owner ? owner.reload() : false;
-  });
-  ipcMain.handle("buy-lab:open-external", (event) => {
-    const owner = ownerOf(event, "flow") || ownerOf(event, "live");
-    return owner ? owner.openActiveExternal() : false;
-  });
+  ipcMain.handle("buy-lab:reload", (event) => ownerOf(event)?.reload() ?? false);
+  ipcMain.handle("buy-lab:open-external", (event) => ownerOf(event)?.openActiveExternal() ?? false);
   ipcMain.handle("live:input", (event, payload) => {
-    const owner = ownerOf(event, "live");
+    const owner = ownerOf(event);
     if (!owner) return false;
     return owner.input(payload && typeof payload === "object" ? payload : {});
   });
-  ipcMain.handle("live:reload", (event) => {
-    const owner = ownerOf(event, "live");
-    return owner ? owner.reload() : false;
-  });
+  ipcMain.handle("live:reload", (event) => ownerOf(event)?.reload() ?? false);
 }
 
 

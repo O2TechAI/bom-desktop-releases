@@ -356,7 +356,8 @@ function openSupplier(id) {
 }
 
 
-/** Buy lab: DigiKey and Mouser shown from a real Chrome, one tab each. */
+/** Buy lab: a pasted list, a purchase and its tracking, with a live picture
+ * of the supplier's own Chrome when the shop stops for the person. */
 async function openBuyLab() {
   if (buyLabWindow) {
     buyLabWindow.focus();
@@ -365,10 +366,8 @@ async function openBuyLab() {
   if (buyLabOpening) return buyLabOpening;
   buyLabOpening = BuyLabWindow.create({
     language,
-    flowUrl: localUrl("buy-lab.html", { lang: language }),
-    flowPreload: path.join(__dirname, "buy-lab-preload.js"),
-    pageUrl: localUrl("live.html", { lang: language }),
-    pagePreload: path.join(__dirname, "live-preload.js"),
+    pageUrl: localUrl("buy-lab.html", { lang: language }),
+    pagePreload: path.join(__dirname, "buy-lab-preload.js"),
     partition: PARTITION,
     userDataDir: app.getPath("userData"),
     openExternal: (url) => void openExternal(url),
@@ -411,6 +410,15 @@ function registerSiteIpc() {
     if (!suppliers.some((site) => site.id === id)) return { ok: false, message: "Unknown supplier" };
     try {
       await openSupplier(id);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, message: error.message };
+    }
+  });
+  ipcMain.handle("desktop:open-buy-lab", async (event) => {
+    if (!fromSite(event)) return { ok: false, message: "Not allowed" };
+    try {
+      await openBuyLab();
       return { ok: true };
     } catch (error) {
       return { ok: false, message: error.message };

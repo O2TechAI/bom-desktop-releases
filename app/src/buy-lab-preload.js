@@ -1,7 +1,8 @@
 "use strict";
 
-/* The Buy lab flow page's only bridge: the list starts a purchase, the page
- * follows its states, and a confirmation is the person's click. Nothing else
+/* The Buy lab page's only bridge: the list starts a purchase, the page
+ * follows its states, a confirmation is the person's click, and the live
+ * overlay sends the person's input to the supplier's Chrome. Nothing else
  * reaches the app. */
 
 const { contextBridge, ipcRenderer } = require("electron");
@@ -25,4 +26,18 @@ contextBridge.exposeInMainWorld("buyLab", {
   onView: (callback) => {
     ipcRenderer.on("buy-lab:view", (_event, view) => callback(String(view)));
   },
+  onFrame: (callback) => {
+    ipcRenderer.on("live:frame", (_event, frame) => callback(frame));
+  },
+  input: (event) => ipcRenderer.invoke("live:input", event),
+});
+
+/* live.js draws the overlay; this is the bridge it expects. */
+contextBridge.exposeInMainWorld("liveBridge", {
+  onFrame: (callback) => {
+    ipcRenderer.on("live:frame", (_event, frame) => callback(frame));
+  },
+  input: (event) => ipcRenderer.invoke("live:input", event),
+  reload: () => ipcRenderer.invoke("live:reload"),
+  back: () => ipcRenderer.invoke("buy-lab:show-flow"),
 });

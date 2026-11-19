@@ -257,3 +257,20 @@ elements.external.addEventListener("click", () => { void window.buyLab.openExter
 
 window.buyLab.onFlow((state) => render(state));
 window.buyLab.state().then((state) => render(state)).catch(() => {});
+
+/* The live overlay: the supplier's Chrome on top of the list, shown when the
+ * shop stops for the person or when they open it. live.js draws the frames
+ * and forwards the input; here only the overlay's visibility changes. */
+const overlay = document.querySelector("[data-live]");
+
+function setView(view) {
+  const live = view === "live";
+  overlay.hidden = !live;
+  if (!live) return;
+  requestAnimationFrame(() => {
+    window.dispatchEvent(new Event("resize"));
+    document.querySelector("[data-screen]")?.focus();
+  });
+}
+
+window.buyLab.onView((view) => setView(view));

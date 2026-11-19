@@ -6,6 +6,7 @@
     <title>Buy lab</title>
     <link rel="stylesheet" href="buy-lab.css" />
     <script type="module" src="buy-lab.js"></script>
+    <script type="module" src="live.js"></script>
   </head>
   <body>
     <header class="bar">
@@ -77,5 +78,13 @@
         </div>
       </section>
     </main>
+
+    <div class="live" data-live hidden>
+      <div class="stage" data-stage>
+        <canvas class="screen" data-screen tabindex="0" aria-label="Supplier page"></canvas>
+        <p class="status" data-status role="status">Connecting to Chrome…</p>
+        <button class="back" type="button" data-back>← Back to the list</button>
+      </div>
+    </div>
   </body>
 </html>
