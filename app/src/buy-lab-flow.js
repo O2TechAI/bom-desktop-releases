@@ -36,6 +36,11 @@ function parseLines(text) {
 }
 
 
+/** "quantity, part" lines for the cart's own Bulk Add box. */
+function bulkLines(lines) {
+  return lines.map((line) => `${line.quantity}, ${line.mpn}`).join("\n");
+}
+
 function paramsFor(profile, task, params) {
   const wanted = profile.taskParams?.[task] || [];
   return Object.fromEntries(wanted.map((key) => [key, String(params[key] ?? "")]));
@@ -185,7 +190,26 @@ class BuyLabFlow {
     this.running = true;
     this.emit();
     try {
-      for (const line of this.lines) {
+      const site = this.sites.find((entry) => entry.id === this.supplier);
+      if (site?.tasks.bulkAddList) {
+        // One page, one batch: the cart's own Bulk Add box takes the list.
+        this.emit({ message: "bulk-adding" });
+        for (const line of this.lines) line.status = "adding";
+        this.emit();
+        const snapshot = await this.runTask("bulkAddList", { lines: bulkLines(this.lines) });
+        const failed = snapshot.steps.find((step) => step.status === "failed");
+        if (snapshot.status !== "done") {
+          for (const line of this.lines) {
+            line.status = "failed";
+            line.error = failed?.error?.message || snapshot.status;
+          }
+        } else {
+          for (const line of this.lines) line.status = "added";
+        }
+        this.emit();
+        if (this.status === "stopped") { this.emit({ status: "stopped", message: "stopped" }); return; }
+      } else {
+        for (const line of this.lines) {
         this.emit({ message: "adding" });
         line.status = "adding";
         this.emit();
@@ -210,6 +234,7 @@ class BuyLabFlow {
         }
         this.emit();
         if (this.status === "stopped") { this.emit({ status: "stopped", message: "stopped" }); return; }
+        }
       }
 
       this.emit({ message: "reading-cart" });
@@ -242,6 +267,9 @@ class BuyLabFlow {
       }
       this.emit({ status: "done", message: null });
     } catch (error) {
+      if (error?.code === "blocked") {
+        for (const line of this.lines) if (line.status !== "added") line.status = "blocked";
+      }
       this.emit({ status: "failed", message: error?.code === "blocked" ? "blocked" : error.message });
     } finally {
       this.running = false;
@@ -267,4 +295,4 @@ class BuyLabFlow {
 }
 
 
-module.exports = { BuyLabFlow, parseLines, REQUIRED_TASKS };
+module.exports = { BuyLabFlow, bulkLines, parseLines, REQUIRED_TASKS };

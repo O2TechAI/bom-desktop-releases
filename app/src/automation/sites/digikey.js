@@ -309,6 +309,23 @@ const TRANSITIONS = [
     ],
   },
   {
+    /* The whole pasted list at once: one fill, one click, still on the cart
+     * page. */
+    name: "bulkAddToList",
+    title: T("Add the pasted list", "按粘贴列表加购", "Añadir la lista pegada"),
+    auto: false,
+    from: ["cart"],
+    to: ["cart"],
+    steps: [
+      { do: "fill", target: "cart.bulkText", value: "{{lines}}" },
+      { do: "click", target: "cart.bulkAdd" },
+      { do: "wait", ms: 2500 },
+      { do: "handoff", message: "bulk_error", when: "cart.bulkError", untilGone: "cart.bulkError" },
+      { do: "waitForHidden", target: "cart.empty", timeout: 20000 },
+      { do: "waitFor", target: "cart.rows", timeout: 20000 },
+    ],
+  },
+  {
     name: "openOrder",
     title: T("Open the order", "打开该订单", "Abrir el pedido"),
     auto: false,
@@ -347,6 +364,10 @@ module.exports = {
     bulkAdd: [
       { do: "walk", to: "cart" },
       { do: "act", name: "bulkAddToCart" },
+    ],
+    bulkAddList: [
+      { do: "walk", to: "cart" },
+      { do: "act", name: "bulkAddToList" },
     ],
     openCart: [
       { do: "walk", to: "cart" },
@@ -411,6 +432,7 @@ module.exports = {
   },
   taskParams: {
     bulkAdd: ["part", "quantity"],
+    bulkAddList: ["lines"],
     removeFromCart: ["part"],
     checkout: [],
     placeOrder: [],
@@ -421,6 +443,7 @@ module.exports = {
   taskDefaults: {
     addToCart: { part: "GRM155R71C104KA88D", quantity: "10" },
     bulkAdd: { part: "GRM155R71C104KA88D", quantity: "10" },
+    bulkAddList: { lines: "10, GRM155R71C104KA88D" },
     removeFromCart: { part: "GRM155R71C104KA88D" },
   },
 };

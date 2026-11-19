@@ -10,6 +10,7 @@
  * in chrome-page.js (SupplierBrowser); this only adds the picture and input. */
 
 const { SupplierBrowser } = require("./automation/chrome-page");
+const { hideChromeFromTaskbar } = require("./taskbar");
 
 /* Where the off-screen Chrome window lives; far from any real display so the
  * person only sees the app. */
@@ -30,6 +31,7 @@ class LiveBrowser {
       choices,
       args: OFFSCREEN,
     });
+    hideChromeFromTaskbar(profilePath);
     const live = new LiveBrowser(browser, onFrame);
     await live.start();
     return live;

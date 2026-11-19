@@ -1,2 +1,12 @@
 static/vendor/
 release/
+
+# Local browser/test profiles
+.probe-*/
+.tb-*/
+.snap-*/
+.flow-*/
+.blocked-*/
+.testprofile*/
+.devprofile/
+.liveprofile/

@@ -10,7 +10,7 @@ const { UNKNOWN, defineMachine, nextTransition, recognise } = require("../src/au
 const { ACTIONS, Runner } = require("../src/automation/runner");
 const { SITES, defineSite } = require("../src/automation/sites");
 const { COMMON_TARGETS } = require("../src/automation/sites/common");
-const { BuyLabFlow, parseLines } = require("../src/buy-lab-flow");
+const { BuyLabFlow, bulkLines, parseLines } = require("../src/buy-lab-flow");
 const {
   browserChoices,
   launchBounds,
@@ -486,6 +486,29 @@ test("a security check hands Chrome to the person, then takes it back", () => {
   flow.observe({ status: "waiting", message: "challenge", confirming: null });
   flow.observe({ status: "failed" });
   assert.deepEqual(seen, [true, false, true, false]);
+});
+
+
+test("a supplier with a bulk list adds the whole list in one call", async () => {
+  assert.equal(bulkLines([{ mpn: "A", quantity: "2" }, { mpn: "B", quantity: "3" }]), "2, A\n3, B");
+  const site = {
+    id: "digikey",
+    name: "DigiKey",
+    tasks: { addToCart: [], openCart: [], placeOrder: [], orders: [], track: [], bulkAddList: [] },
+    taskParams: { bulkAddList: ["lines"] },
+    machine: { states: {}, transitions: [] },
+  };
+  const calls = [];
+  const flow = new BuyLabFlow({ sites: [site], getLive: () => ({}), onChange: () => {} });
+  flow.runTask = async (task, params) => {
+    calls.push({ task, params });
+    return { status: "done", steps: [], results: {} };
+  };
+  await flow.start({ supplier: "digikey", text: "A 2\nB 3" });
+  const bulk = calls.filter((call) => call.task === "bulkAddList");
+  assert.equal(bulk.length, 1);
+  assert.deepEqual(bulk[0].params, { lines: "2, A\n3, B" });
+  assert.deepEqual(flow.lines.map((line) => line.status), ["added", "added"]);
 });
 
 
