@@ -7,12 +7,12 @@ what it shows when the site cannot be reached. A release of the site reaches
 desktop users on their next page load, with no app update.
 
 ```
-web/apps/desktop/
+app/
   src/main.js            window, session, navigation guards, offline page
   src/policy.js          where the window may go, what the site may use (pure, tested)
   src/config.js          which site to open; packaged builds accept O2 sites only
   src/desktop-login.js   Google/Microsoft sign-in through the system browser
-  src/preload.js         window.o2Desktop = { platform, version }, nothing else
+  src/preload.js         window.o2Desktop: platform, version, openSupplier, openBuyLab, updates
   src/updater.js         updates from the public releases repository
   src/automation/        supplier windows: browser actions on DigiKey, Mouser, LCSC
   static/                the app's own pages (offline, continue in browser, task panel)
