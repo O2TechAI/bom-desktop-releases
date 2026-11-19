@@ -44,6 +44,7 @@ class BuyLabWindow {
     this.active = null;
     this.view = "flow";
     this.lives = new Map();
+    this.opening = new Map();
     this.lastFrame = new Map();
     this.loading = new Map();
     this.sites = SITES.filter((site) => LAB_SITES.includes(site.id));
@@ -92,8 +93,24 @@ class BuyLabWindow {
   }
 
   async start() {
-    await Promise.all(this.sites.map((site) => this.openSite(site)));
+    // Only the first supplier starts with the window; the others start when
+    // the person picks them, so three Chromes never open at once (shops
+    // notice that, and a blocked shop costs time).
+    await this.ensureSite(this.sites[0]?.id);
     return this;
+  }
+
+  /** The supplier's Chrome, started now if it isn't running yet. */
+  async ensureSite(id) {
+    if (!id) return null;
+    if (this.lives.has(id)) return this.lives.get(id);
+    const site = this.sites.find((entry) => entry.id === id);
+    if (!site) return null;
+    const pending = this.opening.get(id);
+    if (pending) return pending;
+    const opening = this.openSite(site).finally(() => this.opening.delete(id));
+    this.opening.set(id, opening);
+    return opening;
   }
 
   async openSite(site) {
@@ -158,12 +175,17 @@ class BuyLabWindow {
   }
 
   select(id) {
-    if (!this.lives.has(id)) return false;
+    if (!this.sites.some((site) => site.id === id)) return false;
     this.active = id;
+    // Picking a supplier starts its Chrome now, in the background.
+    void this.ensureSite(id).catch(() => {});
     return true;
   }
 
   async startPurchase({ supplier, text }) {
+    await this.ensureSite(supplier);
+    if (!this.lives.has(supplier)) throw new Error("The supplier page did not start");
+    this.active = supplier;
     await this.flowState.start({ supplier, text });
     return true;
   }

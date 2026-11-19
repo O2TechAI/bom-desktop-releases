@@ -81,7 +81,7 @@ class BuyLabFlow {
     this.onChange(this.state());
   }
 
-  async runTask(task, params = {}) {
+  async runTask(task, params = {}, attempt = 0) {
     const site = this.sites.find((entry) => entry.id === this.supplier);
     const live = this.getLive(this.supplier);
     if (!site || !live) throw new Error("The supplier page is not ready");
@@ -97,10 +97,23 @@ class BuyLabFlow {
       onChange: (snapshot) => this.observe(snapshot),
     });
     this.runner = runner;
-    const snapshot = await runner.run();
-    this.runner = null;
-    this.observe(snapshot);
-    return snapshot;
+    try {
+      const snapshot = await runner.run();
+      this.observe(snapshot);
+      return snapshot;
+    } catch (error) {
+      // A shop's own refusal (DataDome's "Access Denied") sometimes clears on
+      // one reload; after that it is a failure, not something to wait on.
+      if (error?.code === "blocked" && attempt === 0) {
+        this.emit({ message: "reloading-blocked" });
+        await live.reload?.();
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        return this.runTask(task, params, 1);
+      }
+      throw error;
+    } finally {
+      this.runner = null;
+    }
   }
 
   /** Publish the run's state; a hand-off or a confirmation asks the window to
@@ -158,6 +171,12 @@ class BuyLabFlow {
             line.status = "added";
           }
         } catch (error) {
+          if (error?.code === "blocked") {
+            line.status = "blocked";
+            line.error = "";
+            this.emit({ status: "failed", message: "blocked" });
+            return;
+          }
           line.status = "failed";
           line.error = error.message;
         }
@@ -195,7 +214,7 @@ class BuyLabFlow {
       }
       this.emit({ status: "done", message: null });
     } catch (error) {
-      this.emit({ status: "failed", message: error.message });
+      this.emit({ status: "failed", message: error?.code === "blocked" ? "blocked" : error.message });
     } finally {
       this.running = false;
       this.runner = null;

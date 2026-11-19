@@ -83,6 +83,15 @@ class LiveBrowser {
     }
   }
 
+  /** Load the page again (a shop's refusal sometimes clears on a reload),
+   * then ask for fresh frames. */
+  async reload() {
+    if (this.closed) return false;
+    await this.page.reload({ waitUntil: "domcontentloaded" }).catch(() => {});
+    await this.refresh();
+    return true;
+  }
+
   /** Page size in CSS pixels: the picture's own size. */
   size() {
     return this.frame && this.frame.width && this.frame.height

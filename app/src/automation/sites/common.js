@@ -38,6 +38,17 @@ const COMMON_TARGETS = {
       { css: "script[src*='/cdn-cgi/challenge-platform/'][src*='/orchestrate/chl_page/']" },
     ],
   },
+  /* A shop's own refusal (DataDome and friends): a static "Access Denied"
+   * page with no field to fill and nothing to click. It is not a challenge;
+   * waiting for the person cannot get past it, so a run fails instead. */
+  "blocked": {
+    title: T("Access denied", "被站点拒绝", "Acceso denegado"),
+    hidden: true,
+    any: [
+      { role: "heading", name: /access to this page has been denied|access denied|请求被拒绝|访问被拒绝/i },
+      { text: /access to this page has been denied|because we believe you are using automation tools|请求被拒绝|访问被拒绝/i },
+    ],
+  },
   "search.input": {
     title: T("Search box", "搜索框", "Cuadro de búsqueda"),
     any: [

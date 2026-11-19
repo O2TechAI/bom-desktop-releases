@@ -480,6 +480,14 @@ class Runner {
         if (!this.driver.contents.isLoading()) {
           const present = await this.driver.present(this.matchNamed, { params: this.params });
           state = recognise(machine, this.driver.contents.getURL(), present);
+          if (state === UNKNOWN && this.profile.targets.blocked) {
+            // A shop's own refusal is not a page to wait on: no field, no
+            // button, no way for the person to get past it.
+            const refusal = await this.driver.present({ blocked: this.profile.targets.blocked }, { params: this.params });
+            if (refusal.blocked) {
+              throw new AutomationError("blocked", "The supplier refused this browser (Access Denied).");
+            }
+          }
           if (state !== UNKNOWN && state !== not) return state;
         }
       } catch (error) {

@@ -11,13 +11,15 @@ const COPY = {
     confirm: "Place the order", live: "Open supplier page", external: "Open in browser",
     lines: "Lines", part: "Part", qty: "Qty", state: "State", note: "Note",
     cart: "Cart", orders: "Orders", tracking: "Tracking",
-    ready: "Ready", working: "Working", waiting: "Waiting for you", done: "Done", failed: "Failed", stopped: "Stopped",
+    ready: "Ready", working: "Working", waiting: "Waiting for you", done: "Done", failed: "Failed", stopped: "Stopped", blocked: "Blocked",
     waitingPerson: "Sign in, or finish the security check, in the supplier page.",
     pending: "Pending", adding: "Adding", added: "Added",
     messages: {
       adding: "Adding the next line", "reading-cart": "Reading the cart", "placing-order": "Going to the review page",
       "reading-orders": "Reading the orders", tracking: "Reading the shipments", approved: "Approved",
       "waiting-confirm": "Waiting for your yes", "waiting-person": "Waiting for you in the supplier page",
+      "reloading-blocked": "Reloading the page once",
+      blocked: "The supplier refused this browser (Access Denied); try again later or use its API.",
     },
     empty: "Nothing yet", orderNumber: "Order", none: "—",
   },
@@ -30,13 +32,15 @@ const COPY = {
     confirm: "确认下单", live: "打开原始页面", external: "在浏览器中打开",
     lines: "明细", part: "型号", qty: "数量", state: "状态", note: "说明",
     cart: "购物车", orders: "订单", tracking: "物流",
-    ready: "准备就绪", working: "进行中", waiting: "等待你操作", done: "完成", failed: "失败", stopped: "已停止",
+    ready: "准备就绪", working: "进行中", waiting: "等待你操作", done: "完成", failed: "失败", stopped: "已停止", blocked: "被拒绝",
     waitingPerson: "请在供应商页面里完成登录或安全验证。",
     pending: "待处理", adding: "加入中", added: "已加入",
     messages: {
       adding: "正在加入下一行", "reading-cart": "正在读取购物车", "placing-order": "正在进入确认页",
       "reading-orders": "正在读取订单", tracking: "正在读取物流", approved: "已确认",
       "waiting-confirm": "等待你确认下单", "waiting-person": "等待你在供应商页面操作",
+      "reloading-blocked": "正在刷新页面一次",
+      blocked: "站点拒绝访问（Access Denied），请稍后再试或改用其 API",
     },
     empty: "还没有内容", orderNumber: "订单", none: "—",
   },
@@ -49,13 +53,15 @@ const COPY = {
     confirm: "Realizar el pedido", live: "Abrir la página del proveedor", external: "Abrir en el navegador",
     lines: "Líneas", part: "Pieza", qty: "Cant.", state: "Estado", note: "Nota",
     cart: "Carrito", orders: "Pedidos", tracking: "Seguimiento",
-    ready: "Listo", working: "En curso", waiting: "Esperándote", done: "Hecho", failed: "Falló", stopped: "Detenido",
+    ready: "Listo", working: "En curso", waiting: "Esperándote", done: "Hecho", failed: "Falló", stopped: "Detenido", blocked: "Bloqueado",
     waitingPerson: "Inicia sesión o completa la comprobación en la página del proveedor.",
     pending: "Pendiente", adding: "Añadiendo", added: "Añadida",
     messages: {
       adding: "Añadiendo la siguiente línea", "reading-cart": "Leyendo el carrito", "placing-order": "Yendo a la revisión",
       "reading-orders": "Leyendo los pedidos", tracking: "Leyendo los envíos", approved: "Aprobado",
       "waiting-confirm": "Esperando tu confirmación", "waiting-person": "Esperándote en la página del proveedor",
+      "reloading-blocked": "Recargando la página una vez",
+      blocked: "El proveedor rechazó este navegador (Access Denied); inténtalo más tarde o usa su API.",
     },
     empty: "Nada todavía", orderNumber: "Pedido", none: "—",
   },
@@ -126,7 +132,7 @@ function statusText(state) {
     case "running": return copy.messages[state.message] || copy.working;
     case "waiting": return state.confirm ? copy.waiting : (copy.messages[state.message] || copy.waitingPerson);
     case "done": return copy.done;
-    case "failed": return state.message || copy.failed;
+    case "failed": return copy.messages[state.message] || state.message || copy.failed;
     case "stopped": return copy.stopped;
     default: return copy.ready;
   }
