@@ -85,16 +85,20 @@ class Runner {
    * @param {number} [options.warmupMs] how long to look at the shop's home page
    * @param {number} [options.navigationGapMs] least time between two addresses
    * @param {number} [options.checkSettleMs] pause after the person's check
+   * @param {object} [options.session] state shared by the runs of one larger
+   *   job ({ warmedUp }): several tasks in a row warm the shop up once
    * @param {object} [options.driverOptions]
    */
   constructor({
     contents, profile, task, params = {}, onChange = () => {}, themeCss = "", driverOptions = {},
     warmupMs = WARMUP_MS, navigationGapMs = NAVIGATION_GAP, checkSettleMs = CHECK_SETTLE_MS,
+    session = { warmedUp: false },
   }) {
     const steps = profile.tasks[task];
     if (!steps) throw new Error(`${profile.name} has no task "${task}"`);
     for (const step of steps) {
       if (!ACTIONS.has(step.do)) throw new Error(`Unknown action "${step.do}"`);
+      if (step.do === "waitForUrl" && step.pattern == null) throw new Error(`${profile.name}: waitForUrl needs a pattern`);
       for (const name of [step.target, step.when, step.unless, step.until, step.untilGone, step.or].filter(Boolean)) {
         if (!profile.targets[name]) throw new Error(`${profile.name} has no target "${name}"`);
       }
@@ -144,7 +148,7 @@ class Runner {
      * how often it stopped for them at all, and how often the session was
      * warmed up first. Kept per run and logged when it ends. */
     this.metrics = { checks: 0, handoffs: 0, warmups: 0 };
-    this.warmedUp = false;
+    this.session = session;
     this.lastNavigationAt = 0;
     this.warmupMs = warmupMs;
     this.navigationGapMs = navigationGapMs;
@@ -393,10 +397,11 @@ class Runner {
 
   /** Visit the shop's home page once before going deeper into it: the cart
    * and the order history are where a cold session is asked to prove it is a
-   * person. Once per run; doing it again would only add loading. */
+   * person. Once per run (or per job, when the runs share a session); doing
+   * it again would only add loading. */
   async warmUp() {
-    if (this.warmedUp) return false;
-    this.warmedUp = true;
+    if (this.session.warmedUp) return false;
+    this.session.warmedUp = true;
     const home = this.profile.urls.home;
     if (!home) return false;
     this.metrics.warmups += 1;

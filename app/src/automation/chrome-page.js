@@ -14,8 +14,10 @@
  *
  * Chrome is a normal Chrome window on the desktop: its own profile per
  * supplier, its own downloads folder, and a navigation guard that keeps the
- * window on that supplier's hosts. Links elsewhere open in the system
- * browser, as they did in the Electron window. */
+ * main tab on that supplier's hosts. A page elsewhere opens in another tab of
+ * the same Chrome, never in the system browser (a sign-in with Google keeps
+ * its session that way); when that tab comes back to the supplier (the
+ * sign-in's callback), the address moves to the main tab and the tab closes. */
 
 const { EventEmitter } = require("node:events");
 const fs = require("node:fs");
@@ -192,6 +194,11 @@ class SupplierBrowser extends EventEmitter {
     this.traffic = createTrafficWatch();
     this.closed = false;
     this.pages = new Set();
+    /* The other tabs: page -> { id, title }. The main tab is id 0. */
+    this.tabsByPage = new Map();
+    this.nextTabId = 1;
+    /* Tabs this browser is opening itself (openTab), so adopt() leaves them. */
+    this.ownTabsPending = 0;
   }
 
   async start(bounds) {
@@ -204,6 +211,14 @@ class SupplierBrowser extends EventEmitter {
     if (bounds) await this.setWindowBounds(bounds).catch(() => {});
 
     this.guard = await this.context.newCDPSession(this.page);
+    // The page's own frame keeps this id across navigations; anything else
+    // that loads a document here is an iframe inside the page.
+    try {
+      const { frameTree } = await this.guard.send("Page.getFrameTree");
+      this.mainFrameId = frameTree.frame.id;
+    } catch {
+      this.mainFrameId = null;
+    }
     await this.guard.send("Fetch.enable", {
       patterns: [{ resourceType: "Document", requestStage: "Request" }],
     });
@@ -212,6 +227,10 @@ class SupplierBrowser extends EventEmitter {
     this.watchPage(this.page);
     this.context.on("page", (opened) => {
       if (opened === this.page) return;
+      if (this.ownTabsPending > 0) {
+        this.ownTabsPending -= 1;
+        return; // openTab registers it
+      }
       void this.adopt(opened);
     });
     this.context.on("request", (request) => this.traffic.request(request.url()));
@@ -245,9 +264,112 @@ class SupplierBrowser extends EventEmitter {
       if (link) {
         link.destroyed = true;
         this.finish();
+        return;
       }
+      if (this.tabsByPage.delete(page)) this.emit("tabs", this.tabs());
     });
     page.on("download", (download) => { void this.save(download); });
+    if (!link) {
+      // Another tab: keep its title for the tab bar.
+      const retitle = () => {
+        const tab = this.tabsByPage.get(page);
+        if (!tab) return;
+        void page.title().then((title) => {
+          tab.title = title;
+          this.emit("tabs", this.tabs());
+        }).catch(() => {});
+      };
+      page.on("load", retitle);
+      page.on("framenavigated", (frame) => { if (frame === page.mainFrame()) retitle(); });
+    }
+  }
+
+  /** Every tab, the main one first: [{ id, url, title, main }]. */
+  tabs() {
+    const list = [{ id: 0, url: this.page?.url() || "", title: this.link?.title || "", main: true }];
+    for (const [page, tab] of this.tabsByPage) list.push({ id: tab.id, url: page.url(), title: tab.title || "", main: false });
+    return list;
+  }
+
+  /** The page of a tab id (0 is the main tab). */
+  pageOf(id) {
+    if (!id) return this.page;
+    for (const [page, tab] of this.tabsByPage) if (tab.id === id) return page;
+    return null;
+  }
+
+  registerTab(page) {
+    if (this.tabsByPage.has(page)) return this.tabsByPage.get(page);
+    const tab = { id: this.nextTabId++, title: "" };
+    this.tabsByPage.set(page, tab);
+    this.watchPage(page);
+    this.emit("tabs", this.tabs());
+    return tab;
+  }
+
+  /** Open an address outside the supplier in another tab of this Chrome. The
+   * tab's own guard sends it back to the main tab when it reaches the
+   * supplier again. */
+  async openTab(url) {
+    if (this.closed) return null;
+    this.ownTabsPending += 1;
+    let page;
+    try {
+      page = await this.context.newPage();
+    } catch {
+      this.ownTabsPending = Math.max(0, this.ownTabsPending - 1);
+      return null;
+    }
+    const tab = this.registerTab(page);
+    await this.guardTab(page).catch(() => {});
+    this.emit("tab-opened", tab.id);
+    await page.goto(url, { waitUntil: "commit", timeout: NAVIGATION_TIMEOUT }).catch(() => {});
+    return tab.id;
+  }
+
+  /** A tab of ours: its page may go anywhere, but the moment it would load a
+   * supplier page again, that address goes to the main tab instead (sent once,
+   * from there) and the tab closes. */
+  async guardTab(page) {
+    const session = await this.context.newCDPSession(page);
+    let mainFrameId = null;
+    try {
+      mainFrameId = (await session.send("Page.getFrameTree")).frameTree.frame.id;
+    } catch {
+      /* no frame yet; every document then counts as the tab's own */
+    }
+    await session.send("Fetch.enable", { patterns: [{ resourceType: "Document", requestStage: "Request" }] });
+    session.on("Fetch.requestPaused", (event) => {
+      const url = event.request?.url || "";
+      const topLevel = !event.frameId || !mainFrameId || event.frameId === mainFrameId;
+      let back = false;
+      try {
+        back = topLevel && this.mayGo(url);
+      } catch {
+        back = false;
+      }
+      if (!back) {
+        void session.send("Fetch.continueRequest", { requestId: event.requestId }).catch(() => {});
+        return;
+      }
+      void session.send("Fetch.failRequest", { requestId: event.requestId, errorReason: "Aborted" }).catch(() => {});
+      void this.returnToMain(url, page);
+    });
+  }
+
+  async returnToMain(url, page) {
+    if (this.closed) return;
+    this.emit("tab-returned", url);
+    await this.link.loadURL(url).catch(() => {});
+    await page.close().catch(() => {});
+    await this.page.bringToFront().catch(() => {});
+  }
+
+  async closeTab(id) {
+    const page = id ? this.pageOf(id) : null;
+    if (!page) return false;
+    await page.close().catch(() => {});
+    return true;
   }
 
   async save(download) {
@@ -259,29 +381,32 @@ class SupplierBrowser extends EventEmitter {
     }
   }
 
-  /** A new tab or popup: a shop's "open in new tab" stays in its window, one
-   * page at a time; anything else opens in the system browser. */
+  /** A new tab or popup the page opened: a shop's "open in new tab" stays in
+   * its main tab, one page at a time; anything else (a checkpoint, a sign-in
+   * window, another site) stays open as a tab of this Chrome. A popup is not
+   * guarded: a sign-in popup finishes and closes itself. */
   async adopt(opened) {
     this.watchPage(opened);
     try {
       await opened.waitForLoadState("domcontentloaded", { timeout: 8000 });
       const url = opened.url();
-      // A checkpoint opens its own window: leave it where the person can
-      // finish it, and the shop's page carries on when they do.
-      if (this.challengeMayGo(url)) {
-        await opened.bringToFront().catch(() => {});
+      if (this.mayGo(url) && !this.challengeMayGo(url)) {
+        await this.link.loadURL(url);
+        await opened.close().catch(() => {});
         return;
       }
-      if (this.mayGo(url)) await this.link.loadURL(url);
-      else if (/^https?:/i.test(url)) this.openExternal(url);
+      this.registerTab(opened);
+      await opened.bringToFront().catch(() => {});
+      this.emit("tab-opened", this.tabsByPage.get(opened)?.id);
     } catch {
-      /* the popup closed or never loaded; nothing to move */
+      /* the popup closed or never loaded */
     }
-    await opened.close().catch(() => {});
   }
 
-  /** Every top-level request is checked against the supplier's hosts before
-   * Chrome sends it. Subresources are left alone: shops load their own CDNs. */
+  /** Every document request of the main tab is checked against the
+   * supplier's hosts before Chrome sends it. Subresources are left alone:
+   * shops load their own CDNs. A refused page opens in another tab of this
+   * Chrome (openTab); a refused iframe is only blocked. */
   async onDocument(event) {
     const url = event.request?.url || "";
     let allow = false;
@@ -295,8 +420,12 @@ class SupplierBrowser extends EventEmitter {
         await this.guard.send("Fetch.continueRequest", { requestId: event.requestId });
         return;
       }
-      if (/^https?:/i.test(url)) this.openExternal(url);
+      // Only the page itself going elsewhere is the person's to follow, in
+      // another tab here. An iframe (a shop's chat widget, an ad) stays
+      // blocked as before and opens nowhere: nobody asked for it.
+      const topLevel = !event.frameId || !this.mainFrameId || event.frameId === this.mainFrameId;
       await this.guard.send("Fetch.failRequest", { requestId: event.requestId, errorReason: "Aborted" });
+      if (topLevel && /^https?:/i.test(url)) void this.openTab(url);
     } catch {
       /* the page went away mid-decision */
     }
