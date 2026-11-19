@@ -5,7 +5,7 @@ const COPY = {
   en: {
     title: "Buy lab", supplier: "Supplier", paste: "Paste the list",
     placeholder: "One part per line: part number and quantity, e.g.\nGRM155R71C104KA88D 10\nRC0402FR-0710KL 100",
-    start: "Start purchase", stop: "Stop",
+    start: "Start purchase", demo: "Demo", stop: "Stop",
     hint: "The list runs through the supplier's own pages in the background. You are asked to step in only for a check, a sign-in, or the order confirmation.",
     confirmTitle: "Confirm the order", confirmText: "The cart is on the review page. Place the order?",
     confirm: "Place the order", live: "Open supplier page", external: "Open in browser",
@@ -28,7 +28,7 @@ const COPY = {
   zh: {
     title: "采购实验室", supplier: "供应商", paste: "粘贴清单",
     placeholder: "每行一个料号：型号 + 数量，例如\nGRM155R71C104KA88D 10\nRC0402FR-0710KL 100",
-    start: "开始采购", stop: "停止",
+    start: "开始采购", demo: "一键演示", stop: "停止",
     hint: "清单会在后台走供应商自己的页面。只有遇到安全验证、登录，或需要你确认下单时，才会请你出手。",
     confirmTitle: "确认下单", confirmText: "购物车已到确认页，现在下单吗？",
     confirm: "确认下单", live: "打开原始页面", external: "在浏览器中打开",
@@ -51,7 +51,7 @@ const COPY = {
   es: {
     title: "Laboratorio de compras", supplier: "Proveedor", paste: "Pega la lista",
     placeholder: "Una pieza por línea: número de pieza y cantidad, p. ej.\nGRM155R71C104KA88D 10\nRC0402FR-0710KL 100",
-    start: "Iniciar compra", stop: "Detener",
+    start: "Iniciar compra", demo: "Demostración", stop: "Detener",
     hint: "La lista recorre las páginas del proveedor en segundo plano. Solo se te pide intervenir por una comprobación, un inicio de sesión o la confirmación del pedido.",
     confirmTitle: "Confirmar el pedido", confirmText: "El carrito está en la página de revisión. ¿Realizar el pedido?",
     confirm: "Realizar el pedido", live: "Abrir la página del proveedor", external: "Abrir en el navegador",
@@ -90,6 +90,7 @@ const elements = {
   pasteLabel: $("[data-paste-label]"),
   list: $("[data-list]"),
   start: $("[data-start]"),
+  demo: $("[data-demo]"),
   stop: $("[data-stop]"),
   hint: $("[data-hint]"),
   confirmCard: $("[data-confirm-card]"),
@@ -117,6 +118,7 @@ elements.liveLabel.textContent = copy.live;
 elements.pasteLabel.textContent = copy.paste;
 elements.list.placeholder = copy.placeholder;
 elements.start.textContent = copy.start;
+elements.demo.textContent = copy.demo;
 elements.stop.textContent = copy.stop;
 elements.hint.textContent = copy.hint;
 elements.confirmTitle.textContent = copy.confirmTitle;
@@ -190,6 +192,7 @@ function render(state) {
   elements.status.textContent = statusText(state);
   elements.status.dataset.tone = tone(state);
   elements.start.disabled = Boolean(state.running);
+  elements.demo.disabled = Boolean(state.running);
   elements.stop.disabled = !state.running;
   elements.supplier.disabled = Boolean(state.running);
 
@@ -263,6 +266,16 @@ elements.start.addEventListener("click", async () => {
 });
 
 elements.stop.addEventListener("click", () => { void window.buyLab.stop(); });
+elements.demo.addEventListener("click", async () => {
+  // One click for a demo: a small DigiKey list, then the normal run.
+  elements.list.value = "RC0402FR-0710KL 10\nGRM155R71C104KA88D 10";
+  if (elements.supplier.value !== "digikey" && [...elements.supplier.options].some((option) => option.value === "digikey")) {
+    elements.supplier.value = "digikey";
+  }
+  const supplier = elements.supplier.value;
+  await window.buyLab.select(supplier);
+  await window.buyLab.start({ supplier, text: elements.list.value });
+});
 elements.confirm.addEventListener("click", () => { void window.buyLab.confirm(); });
 elements.live.addEventListener("click", () => { void window.buyLab.showLive(); });
 elements.external.addEventListener("click", () => { void window.buyLab.openExternal(); });

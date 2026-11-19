@@ -80,9 +80,10 @@ approve it.
 Each supplier has its own persistent profile under the app's data folder
 (`buy-lab/<id>/chrome`), separate from the automation windows, with the same
 navigation rule: the site's own hosts stay, everything else opens in the
-system browser. DigiKey, Mouser and LCSC have the tasks this flow needs
-(add to cart, cart, place order, orders, track); a site without them is not
-offered.
+system browser. DigiKey and LCSC have the tasks this flow needs (add to cart, cart, place
+order, orders, track). DigiKey takes the whole list through the cart's Bulk
+Add box; LCSC uploads a BOM file. Mouser is not offered: its DataDome
+refusals cannot be solved by a person, so it stays in the supplier windows.
 
 ```
 src/buy-lab-flow.js   the list → add to cart → cart → order → orders/track run

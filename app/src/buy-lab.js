@@ -21,7 +21,7 @@ const { BuyLabFlow } = require("./buy-lab-flow");
 const { LiveBrowser } = require("./live-browser");
 
 const BACKGROUND = "#0f1418";
-const LAB_SITES = ["digikey", "mouser", "lcsc"];
+const LAB_SITES = ["digikey", "lcsc"];
 
 /** the page's contents -> BuyLabWindow */
 const byContents = new WeakMap();
