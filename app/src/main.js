@@ -424,6 +424,17 @@ function registerSiteIpc() {
       return { ok: false, message: error.message };
     }
   });
+  // Buying on the BOM site hands its DigiKey / LCSC orders to the Buy lab,
+  // which runs them in the person's own Chrome (see buy-lab.js startFromSite).
+  ipcMain.handle("desktop:buy-lab-start", async (event, payload) => {
+    if (!fromSite(event)) return { ok: false, message: "Not allowed" };
+    try {
+      const lab = await openBuyLab();
+      return lab.startFromSite(payload && typeof payload === "object" ? payload : {});
+    } catch (error) {
+      return { ok: false, message: error.message };
+    }
+  });
   ipcMain.handle("desktop:update-status", (event) => (fromSite(event) ? updater?.status() ?? null : null));
   ipcMain.handle("desktop:update-check", async (event) => (fromSite(event) && updater ? updater.check() : null));
   ipcMain.handle("desktop:update-install", async (event) => (fromSite(event) && updater ? updater.install() : false));

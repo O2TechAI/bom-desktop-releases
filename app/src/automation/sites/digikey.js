@@ -121,6 +121,90 @@ const TARGETS = {
     title: T("Add the list to the cart", "把列表加进购物车", "Añadir la lista al carrito"),
     any: [{ css: "input#btnImportParts, button#btnImportParts" }],
   },
+  /* The cart's "Upload a File" box (2026-11-19, from the live page): a
+   * Dropzone whose hidden input takes the file, then a column-mapping dialog
+   * (`aside#dialog-mapper`) asks which column holds the part number and the
+   * quantity, and which row the parts start on. "Upload a List"
+   * (`#myListFileInput`) is DigiKey's list feature, not the cart. */
+  "cart.uploadFile": {
+    title: T("Upload a File", "上传文件", "Subir un archivo"),
+    hidden: true,
+    any: [{ css: "input.dz-hidden-input" }],
+  },
+  "cart.mapper": {
+    title: T("File mapping", "文件列映射", "Mapeo del archivo"),
+    any: [{ css: "aside#dialog-mapper.visible" }],
+  },
+  "cart.mapPartColumn": {
+    title: T("Part number column", "型号列", "Columna de la pieza"),
+    any: [{ css: "#dialog-mapper select[name=column0]" }],
+  },
+  "cart.mapQtyColumn": {
+    title: T("Quantity column", "数量列", "Columna de cantidad"),
+    any: [{ css: "#dialog-mapper select[name=column1]" }],
+  },
+  "cart.mapStartRow": {
+    title: T("First part row", "首行料号所在行", "Primera fila de piezas"),
+    any: [{ css: "#dialog-mapper input#StartRow" }],
+  },
+  "cart.mapAdd": {
+    title: T("Add to Current Cart", "加入当前购物车", "Añadir al carrito actual"),
+    any: [{ css: "#dialog-mapper span[data-button='addToCurrent']:not(.disabled)" }],
+  },
+  /* The shipping address form (2026-11-19, live: /ordering/guest/Address).
+   * Plain inputs by id; the state is DigiKey's own dropdown over a hidden
+   * <select>: its button opens a list of li[data-value=<two-letter code>]. */
+  "addr.form": {
+    title: T("Shipping address form", "收货地址表单", "Formulario de dirección"),
+    any: [{ css: "input#ShippingAddress_AddressLine1" }],
+  },
+  "addr.email": { title: T("Email", "邮箱", "Correo"), any: [{ css: "input#ShippingContactInfo_ShippingEmail" }] },
+  "addr.phone": { title: T("Telephone", "电话", "Teléfono"), any: [{ css: "input#ShippingContactInfo_ShippingPhone" }] },
+  "addr.firstName": { title: T("First name", "名", "Nombre"), any: [{ css: "input#ShippingAddress_FirstName" }] },
+  "addr.lastName": { title: T("Last name", "姓", "Apellido"), any: [{ css: "input#ShippingAddress_LastName" }] },
+  "addr.company": { title: T("Company", "公司", "Empresa"), any: [{ css: "input#ShippingAddress_CompanyName" }] },
+  "addr.line1": { title: T("Address line 1", "地址第 1 行", "Dirección, línea 1"), any: [{ css: "input#ShippingAddress_AddressLine1" }] },
+  "addr.line2": { title: T("Address line 2", "地址第 2 行", "Dirección, línea 2"), any: [{ css: "input#ShippingAddress_AddressLine2" }] },
+  "addr.city": { title: T("City", "城市", "Ciudad"), any: [{ css: "input#ShippingAddress_City" }] },
+  /* Required, and above the name: "Customer type" (select#CustomerType,
+   * values 10 Individual ... 13 Design/Research/Development ... 99 Other),
+   * the same kind of dropdown as the state. */
+  "addr.customerTypeOpen": { title: T("Customer type", "客户类型", "Tipo de cliente"), any: [{ css: "#divCompanyType .dk-dropdown__selected" }] },
+  "addr.customerTypeOption": {
+    title: T("The customer type", "所选客户类型", "El tipo de cliente"),
+    any: [{ css: ".dk-dropdown__options[data-dropdown-open='true'] li.single-option[data-value='{{customerType}}']" }],
+  },
+  "addr.stateOpen": { title: T("State", "州", "Estado"), any: [{ css: "#trState .dk-dropdown__selected" }] },
+  "addr.stateOption": {
+    title: T("The state", "所选的州", "El estado"),
+    // Only in the list that is open: the page has three of these dropdowns,
+    // and the closed ones count as visible too (country holds "MN", Mongolia).
+    any: [{ css: ".dk-dropdown__options[data-dropdown-open='true'] li.single-option[data-value='{{state}}']" }],
+  },
+  "addr.zip": { title: T("Postal code", "邮编", "Código postal"), any: [{ css: "input#ShippingAddress_ZipCodeNumeric5" }] },
+  "addr.continue": {
+    title: T("Continue to Shipping", "继续到配送", "Continuar al envío"),
+    any: [{ css: "#continueButton #primaryButton" }],
+  },
+  /* (2026-11-19, live) After Continue, DigiKey checks the address: a
+   * "Verify Shipping Address" dialog with its standard form of it (upper
+   * case, ZIP+4) chosen, the original as the other choice, and its own
+   * Continue to Shipping. */
+  "addr.verifyPopup": {
+    title: T("Verify Shipping Address", "核对收货地址", "Verificar la dirección"),
+    any: [{ css: "aside#AddressValidationPopup.visible" }],
+  },
+  "addr.verifyContinue": {
+    title: T("Continue to Shipping", "继续到配送", "Continuar al envío"),
+    any: [{ css: "#AddressValidationPopup__continueButton" }],
+  },
+  /* (2026-11-19, live: /ordering/guest/Ship) "Select Shipping Options":
+   * release option and ship method come chosen (Multiple Shipments, FedEx
+   * Ground); its button says Continue to Payment. */
+  "ship.continue": {
+    title: T("Continue to Payment", "继续到付款", "Continuar al pago"),
+    any: [{ css: "#continueButton #primaryButton" }],
+  },
   "cart.empty": {
     title: T("Empty cart", "空购物车", "Carrito vacío"),
     any: [{ role: "heading", name: /your (shopping )?cart is empty/i }],
@@ -174,6 +258,9 @@ const STATES = {
     match: { all: ["review.submit"] },
     enter: [{ do: "read", target: "review.total", as: "total", optional: true, timeout: 3000 }],
   },
+  // The address check dialog, over the address page (same address): above
+  // `shipping` so the dialog wins while it is open.
+  addressCheck: { title: T("Address check", "核对地址", "Verificación de dirección"), match: { all: ["addr.verifyPopup"] } },
   shipping: {
     title: T("Shipping", "收货地址", "Envío"),
     // The real page is /ordering/Address (no "checkout" in the address), and a
@@ -185,9 +272,13 @@ const STATES = {
     ],
     person: "checkout_details",
   },
+  // The ship method page between the address and payment (guest:
+  // /ordering/guest/Ship). Not the person's: DigiKey's chosen method stays.
+  shippingOptions: { title: T("Shipping options", "配送方式", "Opciones de envío"), match: { url: /\/ordering\/(guest\/)?ship(\/|\?|#|$)/i } },
   payment: {
     title: T("Payment", "付款", "Pago"),
-    match: [{ url: /\/ordering\/payment/i }, { url: /checkout/i, all: ["checkout.paymentPage"] }],
+    // A guest checkout's payment page is /ordering/guest/Payment.
+    match: [{ url: /\/ordering\/(guest\/)?payment/i }, { url: /checkout/i, all: ["checkout.paymentPage"] }],
     person: "checkout_details",
   },
   checkoutStep: {
@@ -200,6 +291,10 @@ const STATES = {
   orders: { title: T("Orders", "订单记录", "Pedidos"), match: [{ url: /\/orderhistory\/list/i }, { url: /orderhistory/i, all: ["orders.rows"] }] },
   product: { title: T("Product page", "商品页", "Página del producto"), match: { all: ["product.addToCart", "product.ofPart"] } },
   results: { title: T("Search results", "搜索结果", "Resultados"), match: { url: /\/products\/result/i, all: ["results.exact"] } },
+  // The home page Buy lab's Chrome opens on. Known by its address only, and
+  // last, so it never shadows a page above. Unknown, a walk from here waited
+  // out the whole recognition time (20 s) before setting off.
+  home: { title: T("Home page", "首页", "Página de inicio"), match: { url: /^https:\/\/www\.digikey\.com\/(en\/?)?(\?[^#]*)?(#.*)?$/i } },
 };
 
 /* Every click or address that moves between them. */
@@ -326,6 +421,76 @@ const TRANSITIONS = [
     ],
   },
   {
+    /* DigiKey's address check: keep the choice it made (its standard form
+     * of the same address) and continue. */
+    name: "acceptAddress",
+    title: T("Continue with the checked address", "确认地址并继续", "Continuar con la dirección verificada"),
+    from: ["addressCheck"],
+    to: ["shippingOptions", "shipping", "payment", "review", "checkoutStep", "signIn"],
+    steps: [{ do: "click", target: "addr.verifyContinue", navigates: true }],
+  },
+  {
+    /* Select Shipping Options: keep the release option and method DigiKey
+     * chose and go on to payment. The order total is shown and approved on
+     * the review page, as before. */
+    name: "chooseShipping",
+    title: T("Continue to Payment", "继续到付款", "Continuar al pago"),
+    from: ["shippingOptions"],
+    to: ["payment", "review", "checkoutStep", "signIn", "shippingOptions"],
+    steps: [{ do: "click", target: "ship.continue", navigates: true }],
+  },
+  {
+    /* The person's saved address (Buy lab's address book) into the
+     * shipping form, then Continue. Only when an operation names it: without
+     * an address the form stays the person's, as before. */
+    name: "fillAddress",
+    title: T("Fill in the saved address", "填写保存的收货地址", "Rellenar la dirección guardada"),
+    auto: false,
+    from: ["shipping"],
+    to: ["addressCheck", "shippingOptions", "shipping", "payment", "review", "checkoutStep", "signIn"],
+    steps: [
+      { do: "fill", target: "addr.email", value: "{{email}}" },
+      { do: "fill", target: "addr.phone", value: "{{phone}}" },
+      // Before the name and company: choosing it can change the fields below.
+      { do: "click", target: "addr.customerTypeOpen" },
+      { do: "click", target: "addr.customerTypeOption" },
+      { do: "fill", target: "addr.firstName", value: "{{firstName}}" },
+      { do: "fill", target: "addr.lastName", value: "{{lastName}}" },
+      { do: "fill", target: "addr.company", value: "{{company}}" },
+      { do: "fill", target: "addr.line1", value: "{{line1}}" },
+      { do: "fill", target: "addr.line2", value: "{{line2}}" },
+      { do: "fill", target: "addr.city", value: "{{city}}" },
+      { do: "click", target: "addr.stateOpen" },
+      { do: "click", target: "addr.stateOption" },
+      { do: "fill", target: "addr.zip", value: "{{zip}}" },
+      { do: "click", target: "addr.continue", navigates: true },
+    ],
+  },
+  {
+    /* The whole list as one file: "Upload a File", map its two columns,
+     * Add to Current Cart. Nothing is typed, so a long list costs no more
+     * than a short one. Still on the cart page. */
+    name: "uploadToCart",
+    title: T("Upload the list file", "上传清单文件", "Subir el archivo de la lista"),
+    auto: false,
+    from: ["cart"],
+    to: ["cart"],
+    steps: [
+      { do: "upload", target: "cart.uploadFile", filesParam: "file" },
+      { do: "waitFor", target: "cart.mapper", timeout: 20000 },
+      { do: "select", target: "cart.mapPartColumn", option: "{{partColumn}}" },
+      { do: "select", target: "cart.mapQtyColumn", option: "Quantity" },
+      // The file's first row is its header; the parts start on row 2.
+      { do: "fill", target: "cart.mapStartRow", value: "2" },
+      { do: "click", target: "cart.mapAdd" },
+      { do: "waitForHidden", target: "cart.mapper", timeout: 20000 },
+      { do: "wait", ms: 2500 },
+      { do: "handoff", message: "bulk_error", when: "cart.bulkError", untilGone: "cart.bulkError" },
+      { do: "waitForHidden", target: "cart.empty", timeout: 20000 },
+      { do: "waitFor", target: "cart.rows", timeout: 20000 },
+    ],
+  },
+  {
     name: "openOrder",
     title: T("Open the order", "打开该订单", "Abrir el pedido"),
     auto: false,
@@ -369,6 +534,11 @@ module.exports = {
       { do: "walk", to: "cart" },
       { do: "act", name: "bulkAddToList" },
     ],
+    // The list as a file (Buy lab's choice when a site has one).
+    bulkAddBom: [
+      { do: "walk", to: "cart" },
+      { do: "act", name: "uploadToCart" },
+    ],
     openCart: [
       { do: "walk", to: "cart" },
       {
@@ -396,6 +566,14 @@ module.exports = {
     // From the cart, so an order placed earlier is never taken for this one.
     placeOrder: [
       { do: "walk", to: "cart" },
+      { do: "walk", to: "confirmation" },
+    ],
+    // The same with a saved address: the run stops at the address form (a
+    // signed-in account may skip it), fills it in, and carries on.
+    placeOrderWithAddress: [
+      { do: "walk", to: "cart" },
+      { do: "walk", to: ["shipping", "payment", "review", "confirmation"] },
+      { do: "act", name: "fillAddress", when: "addr.form" },
       { do: "walk", to: "confirmation" },
     ],
     orders: [
@@ -433,9 +611,11 @@ module.exports = {
   taskParams: {
     bulkAdd: ["part", "quantity"],
     bulkAddList: ["lines"],
+    bulkAddBom: ["file", "partColumn"],
     removeFromCart: ["part"],
     checkout: [],
     placeOrder: [],
+    placeOrderWithAddress: ["email", "phone", "customerType", "firstName", "lastName", "company", "line1", "line2", "city", "state", "zip"],
     orders: [],
     track: ["order"],
   },

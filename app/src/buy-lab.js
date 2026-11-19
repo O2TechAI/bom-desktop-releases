@@ -17,7 +17,7 @@ const path = require("node:path");
 
 const { browserChoices } = require("./automation/browser");
 const { SITES } = require("./automation/sites");
-const { BuyLabFlow } = require("./buy-lab-flow");
+const { AddressBook, BuyLabFlow, siteAddress, siteOrderText } = require("./buy-lab-flow");
 const { LiveBrowser } = require("./live-browser");
 
 const BACKGROUND = "#0f1418";
@@ -48,6 +48,9 @@ class BuyLabWindow {
     this.lastFrame = new Map();
     this.loading = new Map();
     this.sites = SITES.filter((site) => LAB_SITES.includes(site.id));
+    this.addresses = new AddressBook(userDataDir);
+    /* The lists the BOM site handed over, by supplier, for the page's boxes. */
+    this.listTexts = new Map();
 
     this.window = new BaseWindow({
       width: 1280,
@@ -74,16 +77,18 @@ class BuyLabWindow {
     byContents.set(this.page.webContents, this);
     this.window.contentView.addChildView(this.page);
 
-    this.flowState = new BuyLabFlow({
-      sites: this.sites,
+    // One purchase flow per supplier, each driving that supplier's own
+    // Chrome: DigiKey and LCSC can run at the same time.
+    this.flows = new Map(this.sites.map((site) => [site.id, new BuyLabFlow({
+      sites: [site],
       getLive: (id) => this.lives.get(id),
-      onChange: (state) => this.publishFlow(state),
-      onChallenge: (open) => this.onChallenge(open),
-    });
+      onChange: (state) => this.publishFlow(site.id, state),
+      onChallenge: (open) => this.onChallenge(site.id, open),
+    })]));
 
     this.page.webContents.on("did-finish-load", () => {
       this.page.webContents.send("buy-lab:view", this.view);
-      this.publishFlow(this.flowState.state());
+      this.publish();
     });
     void this.page.webContents.loadURL(pageUrl);
 
@@ -124,8 +129,13 @@ class BuyLabWindow {
       openExternal: this.openExternal,
       choices: browserChoices(),
       onFrame: (frame) => this.onFrame(site.id, frame),
+      onTabs: (tabs) => this.onTabs(site.id, tabs),
     });
     this.lives.set(site.id, live);
+    // A page elsewhere (a sign-in with Google) opened in its own tab: that
+    // is where the person has something to do, so show it (unless they are
+    // busy on the other supplier's page).
+    live.browser.on("tab-opened", () => this.showFor(site.id));
     live.page.on("request", (request) => {
       if (request.isNavigationRequest()) this.setLoading(site.id, true);
     });
@@ -135,8 +145,8 @@ class BuyLabWindow {
   }
 
   /** Give the person Chrome itself for a security check, then take it back. */
-  onChallenge(open) {
-    const live = this.lives.get(this.flowState.supplier || this.active);
+  onChallenge(id, open) {
+    const live = this.lives.get(id);
     if (!live) return;
     if (open) void live.handToPerson?.();
     else void live.backFromPerson?.();
@@ -155,34 +165,80 @@ class BuyLabWindow {
     this.page.webContents.send("buy-lab:loading", { id, loading });
   }
 
+  /** The tabs of a supplier's Chrome, for the live view's tab bar. */
+  onTabs(id, tabs) {
+    if (this.closed || id !== this.active || this.page.webContents.isDestroyed()) return;
+    this.page.webContents.send("live:tabs", tabs);
+  }
+
   layout() {
     if (this.window.isDestroyed()) return;
     const { width, height } = this.window.getContentBounds();
     this.page.setBounds({ x: 0, y: 0, width, height });
   }
 
-  showView(name) {
+  /** The list, or the live page of one supplier (`id`, else the active one). */
+  showView(name, id = this.active) {
     if (this.closed) return;
     this.view = name === "live" ? "live" : "flow";
-    if (!this.page.webContents.isDestroyed()) this.page.webContents.send("buy-lab:view", this.view);
+    if (this.view === "live" && id && this.lives.has(id)) this.active = id;
+    if (!this.page.webContents.isDestroyed()) {
+      this.page.webContents.send("buy-lab:view", this.view);
+      this.publish();
+    }
     if (this.view === "live") {
-      const id = this.flowState.supplier || this.active;
+      const id = this.active;
       if (id && this.lives.has(id)) {
         this.active = id;
         const frame = this.lastFrame.get(id);
         if (frame && !this.page.webContents.isDestroyed()) this.page.webContents.send("live:frame", frame);
+        if (!this.page.webContents.isDestroyed()) this.page.webContents.send("live:tabs", this.lives.get(id).tabs());
         void this.lives.get(id).refresh();
       }
       this.page.webContents.focus();
     }
   }
 
-  publishFlow(state) {
+  /** Every supplier's flow, for the page: { sites, flows: { id: state }, active, view }. */
+  state() {
+    return {
+      sites: this.sites.map((site) => ({ id: site.id, name: site.name })),
+      flows: Object.fromEntries([...this.flows].map(([id, flow]) => [id, flow.state()])),
+      lists: Object.fromEntries(this.listTexts),
+      active: this.active,
+      view: this.view,
+    };
+  }
+
+  publish() {
+    if (this.closed || this.page.webContents.isDestroyed()) return;
+    this.page.webContents.send("buy-lab:flow", this.state());
+  }
+
+  publishFlow(id, state) {
     if (this.closed) return;
-    if (!this.page.webContents.isDestroyed()) this.page.webContents.send("buy-lab:flow", state);
+    this.publish();
     // A check is handed to Chrome's own window (onChallenge); the canvas is
-    // only for sign-ins and refusals that the person handles in the app.
-    if (state.status === "waiting" && !state.confirm && state.message !== "challenge") this.showView("live");
+    // only for sign-ins and refusals that the person handles in the app,
+    // shown for the supplier that is waiting.
+    if (state.status === "waiting" && !state.confirm && state.message !== "challenge") this.showFor(id);
+  }
+
+  /** Show a supplier's live page because it needs the person, without taking
+   * the screen from the other supplier's page while the person is on it: the
+   * waiting supplier's tab is marked instead (the page has the states). */
+  showFor(id) {
+    if (this.view === "live" && this.active && this.active !== id) {
+      this.publish();
+      return;
+    }
+    this.showView("live", id);
+  }
+
+  /** A purchase that could not start: shown on that supplier's panel. */
+  failStart(id, message) {
+    const flow = this.flows.get(id);
+    if (flow && !flow.running) flow.emit({ status: "failed", message });
   }
 
   select(id) {
@@ -193,20 +249,65 @@ class BuyLabWindow {
     return true;
   }
 
-  async startPurchase({ supplier, text }) {
+  /** The BOM site's Buying hands over its orders ({ orders: [{ supplier,
+   * lines: [{ part, quantity }] }], address, reference }): each supplier this
+   * lab has starts at once with its list and the site's ship-to address.
+   * Answers when they have started, not when they end; the person follows
+   * them here, and every stop that is theirs (a sign-in, payment, the order's
+   * yes) stays theirs. */
+  startFromSite(payload = {}) {
+    const orders = Array.isArray(payload.orders) ? payload.orders : [];
+    let address = null;
+    let addressNote = null;
+    try {
+      address = siteAddress(payload.address);
+    } catch (error) {
+      addressNote = error.message; // the forms stay the person's
+    }
+    const started = [];
+    const skipped = [];
+    for (const order of orders) {
+      const supplier = String(order?.supplier || "");
+      const text = siteOrderText(order);
+      const flow = this.flows.get(supplier);
+      if (!flow || !text || flow.running) {
+        skipped.push({ supplier, reason: !flow ? "unknown_supplier" : !text ? "no_lines" : "busy" });
+        continue;
+      }
+      started.push(supplier);
+      this.listTexts.set(supplier, text);
+      void this.startPurchase({ supplier, text, address }).catch((error) => this.failStart(supplier, error.message));
+    }
+    this.publish();
+    this.focus();
+    return { ok: started.length > 0, started, skipped, addressUsed: Boolean(address), addressNote };
+  }
+
+  async startPurchase({ supplier, text, addressId = "", address: given = null }) {
+    // A chosen address that is gone stops here, rather than run without it.
+    const address = given || (addressId ? this.addresses.find(addressId) : null);
+    if (addressId && !given && !address) throw new Error("That address is no longer in the address book");
+    const flow = this.flows.get(supplier);
+    if (!flow) throw new Error(`Unknown supplier ${supplier}`);
     await this.ensureSite(supplier);
     if (!this.lives.has(supplier)) throw new Error("The supplier page did not start");
-    this.active = supplier;
-    await this.flowState.start({ supplier, text });
+    if (!this.active) this.active = supplier;
+    await flow.start({ supplier, text, address });
     return true;
   }
 
-  confirm() {
-    return this.flowState.approve();
+  /** The person's yes to the order waiting on that supplier, and only it. */
+  confirm(id) {
+    return Boolean(this.flows.get(id)?.approve());
   }
 
-  stop() {
-    this.flowState.stop();
+  /** Stop one supplier's purchase, or every one without an id. */
+  stop(id = "") {
+    for (const [key, flow] of this.flows) {
+      if (!id || key === id) flow.stop();
+    }
+    // Stopped: nothing waits on that supplier page any more; back to the list.
+    if (!id || id === this.active) this.showView("flow");
     return true;
   }
 
@@ -246,7 +347,7 @@ class BuyLabWindow {
   async close() {
     if (this.closed) return;
     this.closed = true;
-    this.flowState.stop();
+    for (const flow of this.flows.values()) flow.stop();
     await Promise.all([...this.lives.values()].map((live) => live.close().catch(() => {})));
     this.lives.clear();
     if (!this.page.webContents.isDestroyed()) this.page.webContents.close();
@@ -263,26 +364,38 @@ function registerBuyLabIpc() {
     return owner;
   };
 
-  ipcMain.handle("buy-lab:state", (event) => {
-    const owner = ownerOf(event);
-    return owner ? owner.flowState.state() : null;
-  });
+  ipcMain.handle("buy-lab:state", (event) => ownerOf(event)?.state() ?? null);
   ipcMain.handle("buy-lab:start", (event, payload) => {
     const owner = ownerOf(event);
     if (!owner) return false;
-    const { supplier, text } = payload && typeof payload === "object" ? payload : {};
-    return owner.startPurchase({ supplier: String(supplier || ""), text: String(text || "") }).catch((error) => {
-      owner.publishFlow({ ...owner.flowState.state(), status: "failed", message: error.message });
+    const { supplier, text, addressId } = payload && typeof payload === "object" ? payload : {};
+    const id = String(supplier || "");
+    return owner.startPurchase({ supplier: id, text: String(text || ""), addressId: String(addressId || "") }).catch((error) => {
+      owner.failStart(id, error.message);
       return false;
     });
   });
-  ipcMain.handle("buy-lab:stop", (event) => ownerOf(event)?.stop() ?? false);
-  ipcMain.handle("buy-lab:confirm", (event) => ownerOf(event)?.confirm() ?? false);
+  ipcMain.handle("buy-lab:addresses", (event) => ownerOf(event)?.addresses.list() ?? []);
+  ipcMain.handle("buy-lab:save-address", (event, address) => {
+    const owner = ownerOf(event);
+    if (!owner) return { ok: false, message: "Not allowed" };
+    try {
+      return { ok: true, address: owner.addresses.save(address && typeof address === "object" ? address : {}) };
+    } catch (error) {
+      return { ok: false, message: error.message };
+    }
+  });
+  ipcMain.handle("buy-lab:delete-address", (event, id) => ownerOf(event)?.addresses.remove(String(id || "")) ?? false);
+  ipcMain.handle("buy-lab:stop", (event, id) => ownerOf(event)?.stop(String(id || "")) ?? false);
+  ipcMain.handle("buy-lab:confirm", (event, id) => ownerOf(event)?.confirm(String(id || "")) ?? false);
   ipcMain.handle("buy-lab:select", (event, id) => ownerOf(event)?.select(String(id)) ?? false);
-  ipcMain.handle("buy-lab:show-live", (event) => {
+  ipcMain.handle("buy-lab:show-live", async (event, id) => {
     const owner = ownerOf(event);
     if (!owner) return false;
-    owner.showView("live");
+    // A supplier whose Chrome hasn't started yet (LCSC before its first
+    // run) starts now, so its own page shows and not another supplier's.
+    if (id) await owner.ensureSite(String(id)).catch(() => null);
+    owner.showView("live", id ? String(id) : undefined);
     return true;
   });
   ipcMain.handle("buy-lab:show-flow", (event) => {
@@ -299,6 +412,18 @@ function registerBuyLabIpc() {
     return owner.input(payload && typeof payload === "object" ? payload : {});
   });
   ipcMain.handle("live:reload", (event) => ownerOf(event)?.reload() ?? false);
+  // The live view's tab bar: show another tab of the active supplier's
+  // Chrome, or close one (never the main tab, which the run drives).
+  ipcMain.handle("live:select-tab", (event, id) => {
+    const owner = ownerOf(event);
+    const live = owner?.lives.get(owner.active);
+    return live ? live.view(Number(id) || 0) : false;
+  });
+  ipcMain.handle("live:close-tab", (event, id) => {
+    const owner = ownerOf(event);
+    const live = owner?.lives.get(owner.active);
+    return live && Number(id) ? live.closeTab(Number(id)) : false;
+  });
 }
 
 

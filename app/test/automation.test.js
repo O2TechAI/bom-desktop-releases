@@ -29,7 +29,7 @@ const { fill, normalizeTarget } = require("../src/automation/targets");
 const { overlayThemeCss, rootBlock } = require("../src/automation/theme");
 const { MAX_HOSTS, createTrafficWatch } = require("../src/automation/traffic");
 
-const PARAMS = { part: "GRM155R71C104KA88D", quantity: "100", order: "88012345" };
+const PARAMS = { part: "GRM155R71C104KA88D", quantity: "100", order: "88012345", state: "OH", stateName: "Ohio", customerType: "13" };
 
 
 function fakeContents() {

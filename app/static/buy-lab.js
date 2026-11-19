@@ -22,8 +22,18 @@ const COPY = {
       "bulk-adding": "Adding the whole list to the cart",
       challenge: "The security check is open in Chrome: finish it there and this continues by itself.",
       blocked: "The supplier refused this browser (Access Denied); try again later or use its API.",
+      sign_in: "Sign in on the supplier page; this continues once you are in.",
+      checkout_details: "Fill in the address and how to pay on the supplier page, then continue.",
+      bulk_error: "The supplier didn't take some lines (packaging or quantity): choose an option on its page, or remove the line.",
+      lost: "The supplier page isn't one this app knows: open it and get to the next step yourself.",
+      "nothing-added": "No line went into the cart, so the purchase stopped there.",
     },
     empty: "Nothing yet", orderNumber: "Order", none: "—",
+    demoBoth: "Demo (DigiKey + LCSC)", stopAll: "Stop all", openPage: "Open its page",
+    address: "Ship to", addressNone: "Not filled in for me", addressManage: "Addresses",
+    addressNew: "New address", addressSave: "Save", addressDelete: "Delete", addressClose: "Close",
+    addressNote: "Kept on this computer only. DigiKey's address form is filled from it; payment stays yours.",
+    addressSaved: "Saved", addressFields: { label: "Name for this address", customerType: "Customer type (DigiKey)", firstName: "First name", lastName: "Last name", company: "Company", email: "Email", phone: "Telephone", line1: "Address line 1", line2: "Address line 2", city: "City", state: "State (two letters)", zip: "Postal code" },
   },
   zh: {
     title: "采购实验室", supplier: "供应商", paste: "粘贴清单",
@@ -45,8 +55,18 @@ const COPY = {
       "bulk-adding": "正在把整份清单加入购物车",
       challenge: "安全验证已切到 Chrome 窗口，请在那边完成，完成后会自动继续",
       blocked: "站点拒绝访问（Access Denied），请稍后再试或改用其 API",
+      sign_in: "请在供应商页面登录，登录后会自动继续",
+      checkout_details: "请在供应商页面填写收货地址和付款方式，然后继续",
+      bulk_error: "有料号没加进购物车（包装或数量不符）：请在供应商页面选择包装，或删除该行",
+      lost: "供应商页面不是本应用认识的页面：请打开它，手动走到下一步",
+      "nothing-added": "没有任何一行加入购物车，采购已在此停止",
     },
     empty: "还没有内容", orderNumber: "订单", none: "—",
+    demoBoth: "一键演示（DigiKey + LCSC）", stopAll: "全部停止", openPage: "打开它的页面",
+    address: "收货地址", addressNone: "不自动填写", addressManage: "地址簿",
+    addressNew: "新增地址", addressSave: "保存", addressDelete: "删除", addressClose: "关闭",
+    addressNote: "只保存在这台电脑上。用于自动填写 DigiKey 的收货地址；付款仍由你自己填写。",
+    addressSaved: "已保存", addressFields: { label: "这个地址的名称", customerType: "客户类型（DigiKey）", firstName: "名", lastName: "姓", company: "公司", email: "邮箱", phone: "电话", line1: "地址第 1 行", line2: "地址第 2 行", city: "城市", state: "州（两个字母）", zip: "邮编" },
   },
   es: {
     title: "Laboratorio de compras", supplier: "Proveedor", paste: "Pega la lista",
@@ -68,8 +88,18 @@ const COPY = {
       "bulk-adding": "Añadiendo la lista entera al carrito",
       challenge: "La comprobación está abierta en Chrome: complétala allí y esto seguirá solo.",
       blocked: "El proveedor rechazó este navegador (Access Denied); inténtalo más tarde o usa su API.",
+      sign_in: "Inicia sesión en la página del proveedor; esto sigue en cuanto entres.",
+      checkout_details: "Completa la dirección y la forma de pago en la página del proveedor y continúa.",
+      bulk_error: "El proveedor no aceptó algunas líneas (empaque o cantidad): elige una opción en su página o quita la línea.",
+      lost: "La página del proveedor no es una que esta app conozca: ábrela y avanza tú al siguiente paso.",
+      "nothing-added": "Ninguna línea entró al carrito, así que la compra se detuvo ahí.",
     },
     empty: "Nada todavía", orderNumber: "Pedido", none: "—",
+    demoBoth: "Demostración (DigiKey + LCSC)", stopAll: "Detener todo", openPage: "Abrir su página",
+    address: "Enviar a", addressNone: "No rellenar por mí", addressManage: "Direcciones",
+    addressNew: "Nueva dirección", addressSave: "Guardar", addressDelete: "Eliminar", addressClose: "Cerrar",
+    addressNote: "Solo en este equipo. Rellena el formulario de dirección de DigiKey; el pago sigue siendo tuyo.",
+    addressSaved: "Guardada", addressFields: { label: "Nombre de esta dirección", customerType: "Tipo de cliente (DigiKey)", firstName: "Nombre", lastName: "Apellido", company: "Empresa", email: "Correo", phone: "Teléfono", line1: "Dirección, línea 1", line2: "Dirección, línea 2", city: "Ciudad", state: "Estado (dos letras)", zip: "Código postal" },
   },
 };
 
@@ -77,63 +107,62 @@ const language = new URLSearchParams(window.location.search).get("lang") || "en"
 const copy = COPY[language] || COPY.en;
 document.documentElement.lang = language;
 
-const $ = (selector) => document.querySelector(selector);
+/* One click for a demo: a small list for each supplier, run at the same time.
+ * DigiKey takes its own cut-tape numbers (Bulk Add and the file upload match
+ * a bare MPN to its reel, which isn't sold by tens): RC0402FR-0710KL and
+ * GRM155R71C104KA88D. LCSC takes its own C-numbers. */
+const DEMO = {
+  digikey: "311-10.0KLRCT-ND 10\n490-3261-1-ND 10",
+  lcsc: "C1525 10\nC25804 10",
+};
+const ADDRESS_FIELDS = ["label", "customerType", "firstName", "lastName", "company", "email", "phone", "line1", "line2", "city", "state", "zip"];
+/* DigiKey's "Customer type" codes, as its form names them. */
+const CUSTOMER_TYPES = [
+  ["13", "Design/Research/Development"], ["10", "Individual"], ["11", "School/University"], ["12", "Government"],
+  ["14", "Repair"], ["15", "OEM - Original Equipment Manufacturer"], ["16", "Dealer/Retailer"], ["17", "Franchise Distributor"],
+  ["18", "Independent Distributor"], ["19", "Broker"], ["20", "Kitting"], ["21", "Consultant"],
+  ["22", "CM Contract Manufacturer"], ["23", "ODM - Original Design Manufacturer"], ["99", "Other"],
+];
+
+const $ = (selector, root = document) => root.querySelector(selector);
+const make = (tag, props = {}, ...children) => {
+  const element = Object.assign(document.createElement(tag), props);
+  element.append(...children);
+  return element;
+};
+
 const elements = {
   title: $("[data-title]"),
-  supplierLabel: $("[data-supplier-label]"),
-  supplier: $("[data-supplier]"),
-  status: $("[data-status]"),
-  external: $("[data-external]"),
-  externalLabel: $("[data-external-label]"),
-  live: $("[data-show-live]"),
-  liveLabel: $("[data-live-label]"),
-  pasteLabel: $("[data-paste-label]"),
-  list: $("[data-list]"),
-  start: $("[data-start]"),
+  addressLabel: $("[data-address-label]"),
+  address: $("[data-address]"),
+  addressManage: $("[data-address-manage]"),
+  addressForm: $("[data-address-form]"),
+  addressFields: $("[data-address-fields]"),
+  addressNote: $("[data-address-note]"),
+  addressSave: $("[data-address-save]"),
+  addressDelete: $("[data-address-delete]"),
+  addressNew: $("[data-address-new]"),
+  addressClose: $("[data-address-close]"),
+  addressMessage: $("[data-address-message]"),
   demo: $("[data-demo]"),
-  stop: $("[data-stop]"),
+  stopAll: $("[data-stop-all]"),
+  external: $("[data-external]"),
   hint: $("[data-hint]"),
-  confirmCard: $("[data-confirm-card]"),
-  confirmTitle: $("[data-confirm-title]"),
-  confirmText: $("[data-confirm-text]"),
-  confirm: $("[data-confirm]"),
-  linesTitle: $("[data-lines-title]"),
-  part: $("[data-col-part]"),
-  qty: $("[data-col-qty]"),
-  state: $("[data-col-state]"),
-  note: $("[data-col-note]"),
-  lines: $("[data-lines]"),
-  cartTitle: $("[data-cart-title]"),
-  cart: $("[data-cart]"),
-  ordersTitle: $("[data-orders-title]"),
-  orders: $("[data-orders]"),
-  trackingTitle: $("[data-tracking-title]"),
-  tracking: $("[data-tracking]"),
+  suppliers: $("[data-suppliers]"),
 };
 
 elements.title.textContent = copy.title;
-elements.supplierLabel.textContent = copy.supplier;
-elements.externalLabel.textContent = copy.external;
-elements.liveLabel.textContent = copy.live;
-elements.pasteLabel.textContent = copy.paste;
-elements.list.placeholder = copy.placeholder;
-elements.start.textContent = copy.start;
-elements.demo.textContent = copy.demo;
-elements.stop.textContent = copy.stop;
+elements.addressLabel.textContent = copy.address;
+elements.addressManage.textContent = copy.addressManage;
+elements.addressNote.textContent = copy.addressNote;
+elements.addressSave.textContent = copy.addressSave;
+elements.addressDelete.textContent = copy.addressDelete;
+elements.addressNew.textContent = copy.addressNew;
+elements.addressClose.textContent = copy.addressClose;
+elements.demo.textContent = copy.demoBoth;
+elements.stopAll.textContent = copy.stopAll;
+elements.external.textContent = copy.external;
 elements.hint.textContent = copy.hint;
-elements.confirmTitle.textContent = copy.confirmTitle;
-elements.confirmText.textContent = copy.confirmText;
-elements.confirm.textContent = copy.confirm;
-elements.linesTitle.textContent = copy.lines;
-elements.part.textContent = copy.part;
-elements.qty.textContent = copy.qty;
-elements.state.textContent = copy.state;
-elements.note.textContent = copy.note;
-elements.cartTitle.textContent = copy.cart;
-elements.ordersTitle.textContent = copy.orders;
-elements.trackingTitle.textContent = copy.tracking;
-
-let current = null;
 
 function statusText(state) {
   switch (state.status) {
@@ -154,136 +183,220 @@ function tone(state) {
 }
 
 function row(left, right) {
-  const line = document.createElement("div");
-  line.className = "list-row";
-  const a = document.createElement("span");
-  a.textContent = left;
-  const b = document.createElement("span");
-  b.textContent = right == null ? copy.none : String(right);
-  line.append(a, b);
-  return line;
+  return make("div", { className: "list-row" },
+    make("span", { textContent: left }),
+    make("span", { textContent: right == null ? copy.none : String(right) }));
 }
 
-function empty(target) {
-  target.replaceChildren();
-  const note = document.createElement("p");
-  note.className = "empty";
-  note.textContent = copy.empty;
-  target.append(note);
-}
-
-function render(state) {
-  current = state;
-  if (!state) return;
-
-  const wanted = state.sites.some((site) => site.id === elements.supplier.value)
-    ? elements.supplier.value
-    : state.sites[0]?.id || "";
-  if (!elements.supplier.options.length) {
-    for (const site of state.sites) {
-      const option = document.createElement("option");
-      option.value = site.id;
-      option.textContent = site.name;
-      elements.supplier.append(option);
-    }
+function fillList(target, items, toRow) {
+  if (Array.isArray(items) && items.length) {
+    target.replaceChildren(...items.map(toRow));
+  } else {
+    target.replaceChildren(make("p", { className: "empty", textContent: copy.empty }));
   }
-  if (wanted) elements.supplier.value = wanted;
+}
 
-  elements.status.textContent = statusText(state);
-  elements.status.dataset.tone = tone(state);
-  elements.start.disabled = Boolean(state.running);
-  elements.demo.disabled = Boolean(state.running);
-  elements.stop.disabled = !state.running;
-  elements.supplier.disabled = Boolean(state.running);
+/* ---- one panel per supplier ---- */
+
+const panels = new Map();
+
+function buildPanel(site) {
+  const panel = make("section", { className: "card panel" });
+  panel.dataset.panel = site.id;
+  const status = make("p", { className: "status" });
+  status.setAttribute("role", "status");
+  const openPage = make("button", { className: "quiet", type: "button", textContent: copy.openPage });
+  const list = make("textarea", { rows: 4, spellcheck: false, placeholder: copy.placeholder });
+  const start = make("button", { className: "primary", type: "button", textContent: copy.start });
+  const stop = make("button", { className: "quiet", type: "button", textContent: copy.stop });
+  const confirmText = make("p", { className: "card-body" });
+  const confirm = make("button", { className: "primary", type: "button", textContent: copy.confirm });
+  const confirmCard = make("div", { className: "confirm-box", hidden: true },
+    make("div", {}, make("h3", { className: "card-title", textContent: copy.confirmTitle }), confirmText), confirm);
+  const lines = make("tbody");
+  const head = make("tr", {}, make("th", { className: "n", textContent: "#" }), make("th", { textContent: copy.part }),
+    make("th", { textContent: copy.qty }), make("th", { textContent: copy.state }), make("th", { textContent: copy.note }));
+  const table = make("table", { className: "lines" }, make("thead", {}, head), lines);
+  const cart = make("div", { className: "list" });
+  const orders = make("div", { className: "list" });
+  const tracking = make("div", { className: "list" });
+  const block = (title, body) => make("div", { className: "mini" }, make("h3", { className: "card-title", textContent: title }), body);
+  panel.append(
+    make("div", { className: "panel-head" }, make("h2", { className: "card-title", textContent: site.name }), status, openPage),
+    list,
+    make("div", { className: "row" }, start, stop),
+    confirmCard,
+    table,
+    make("div", { className: "minis" }, block(copy.cart, cart), block(copy.orders, orders), block(copy.tracking, tracking)),
+  );
+
+  start.addEventListener("click", () => {
+    if (!list.value.trim()) { list.focus(); return; }
+    void startOne(site.id, list.value);
+  });
+  stop.addEventListener("click", () => { void window.buyLab.stop(site.id); });
+  confirm.addEventListener("click", () => { void window.buyLab.confirm(site.id); });
+  openPage.addEventListener("click", () => { void window.buyLab.showLive(site.id); });
+
+  const parts = { panel, status, list, start, stop, confirmCard, confirmText, confirm, lines, cart, orders, tracking };
+  panels.set(site.id, parts);
+  elements.suppliers.append(panel);
+  return parts;
+}
+
+function renderPanel(parts, state) {
+  parts.status.textContent = statusText(state);
+  parts.status.dataset.tone = tone(state);
+  parts.start.disabled = Boolean(state.running);
+  parts.stop.disabled = !state.running;
+  parts.list.disabled = Boolean(state.running);
 
   if (state.confirm) {
-    elements.confirmCard.hidden = false;
-    elements.confirmText.textContent = `${copy.confirmText} ${state.confirm.value || ""}`.trim();
-    elements.confirm.disabled = false;
+    parts.confirmCard.hidden = false;
+    parts.confirmText.textContent = `${copy.confirmText} ${state.confirm.value || ""}`.trim();
   } else {
-    elements.confirmCard.hidden = true;
+    parts.confirmCard.hidden = true;
   }
 
-  elements.lines.replaceChildren();
+  parts.lines.replaceChildren();
   for (const line of state.lines) {
-    const tr = document.createElement("tr");
-    const index = document.createElement("td");
-    index.className = "n";
-    index.textContent = String(line.index + 1);
-    const part = document.createElement("td");
-    part.textContent = line.mpn;
-    const qty = document.createElement("td");
-    qty.textContent = line.quantity;
-    const status = document.createElement("td");
-    const pill = document.createElement("span");
-    pill.className = "pill";
+    const pill = make("span", { className: "pill", textContent: copy[line.status] || line.status });
     pill.dataset.state = line.status;
-    pill.textContent = copy[line.status] || line.status;
-    status.append(pill);
-    const note = document.createElement("td");
-    note.textContent = line.error || "";
-    tr.append(index, part, qty, status, note);
-    elements.lines.append(tr);
+    parts.lines.append(make("tr", {},
+      make("td", { className: "n", textContent: String(line.index + 1) }),
+      make("td", { textContent: line.mpn }),
+      make("td", { textContent: line.quantity }),
+      make("td", {}, pill),
+      make("td", { textContent: line.error || "" })));
   }
   if (!state.lines.length) {
-    const tr = document.createElement("tr");
-    const td = document.createElement("td");
-    td.colSpan = 5;
-    td.className = "empty";
-    td.textContent = copy.empty;
-    tr.append(td);
-    elements.lines.append(tr);
+    parts.lines.append(make("tr", {}, make("td", { colSpan: 5, className: "empty", textContent: copy.empty })));
   }
-
-  if (Array.isArray(state.cart) && state.cart.length) {
-    elements.cart.replaceChildren(...state.cart.map((line) => row(line.part || line.mpn || copy.none, line.quantity || copy.none)));
-  } else {
-    empty(elements.cart);
-  }
-
-  if (Array.isArray(state.orders) && state.orders.length) {
-    elements.orders.replaceChildren(...state.orders.map((order) => row(order.number || copy.none, `${order.status || ""} ${order.total || ""}`.trim())));
-  } else {
-    empty(elements.orders);
-  }
-
-  if (Array.isArray(state.tracking) && state.tracking.length) {
-    elements.tracking.replaceChildren(...state.tracking.map((track) => row(track.order || copy.none, track.status || copy.none)));
-  } else {
-    empty(elements.tracking);
-  }
+  // A supplier's cart table can have spacer rows; only lines with a part show.
+  const cartLines = Array.isArray(state.cart) ? state.cart.filter((line) => String(line.part || line.mpn || "").trim()) : state.cart;
+  fillList(parts.cart, cartLines, (line) => row(line.part || line.mpn, line.quantity || copy.none));
+  fillList(parts.orders, state.orders, (order) => row(order.number || copy.none, `${order.status || ""} ${order.total || ""}`.trim()));
+  fillList(parts.tracking, state.tracking, (track) => row(track.order || copy.none, track.status || copy.none));
 }
 
-elements.start.addEventListener("click", async () => {
-  const text = elements.list.value;
-  const supplier = elements.supplier.value;
-  if (!text.trim()) {
-    elements.list.focus();
+let current = null;
+
+function render(state) {
+  if (!state || !state.flows) return;
+  current = state;
+  for (const site of state.sites) {
+    const parts = panels.get(site.id) || buildPanel(site);
+    // A list the BOM site handed over shows in the supplier's box.
+    const handed = state.lists?.[site.id];
+    if (handed && handed !== parts.handed) {
+      parts.handed = handed;
+      parts.list.value = handed;
+    }
+    renderPanel(parts, state.flows[site.id]);
+  }
+  const anyRunning = Object.values(state.flows).some((flow) => flow.running);
+  elements.stopAll.disabled = !anyRunning;
+  elements.demo.disabled = Object.values(state.flows).some((flow) => flow.running);
+}
+
+/* ---- starting purchases ---- */
+
+function addressId() {
+  return elements.address.value || "";
+}
+
+async function startOne(id, text) {
+  await window.buyLab.start({ supplier: id, text, addressId: addressId() });
+}
+
+elements.demo.addEventListener("click", async () => {
+  // Both suppliers at once, each in its own Chrome.
+  const runs = [];
+  for (const [id, text] of Object.entries(DEMO)) {
+    const parts = panels.get(id);
+    if (!parts) continue;
+    parts.list.value = text;
+    runs.push(startOne(id, text));
+  }
+  await Promise.all(runs);
+});
+elements.stopAll.addEventListener("click", () => { void window.buyLab.stop(); });
+elements.external.addEventListener("click", () => { void window.buyLab.openExternal(); });
+
+/* ---- the address book ---- */
+
+let addresses = [];
+let editing = "";
+
+for (const field of ADDRESS_FIELDS) {
+  let input;
+  if (field === "customerType") {
+    input = make("select", { name: field }, ...CUSTOMER_TYPES.map(([value, label]) => make("option", { value, textContent: label })));
+  } else {
+    input = make("input", { type: field === "email" ? "email" : field === "phone" ? "tel" : "text", name: field, autocomplete: "off" });
+    if (field === "state") { input.maxLength = 2; input.style.textTransform = "uppercase"; }
+  }
+  elements.addressFields.append(make("label", { className: `field field-${field}` }, make("span", { textContent: copy.addressFields[field] }), input));
+}
+const fieldInput = (field) => elements.addressFields.querySelector(`[name="${field}"]`);
+
+function renderAddresses(selected = elements.address.value) {
+  const options = [make("option", { value: "", textContent: copy.addressNone })];
+  for (const entry of addresses) options.push(make("option", { value: entry.id, textContent: entry.label || `${entry.firstName} ${entry.lastName}` }));
+  elements.address.replaceChildren(...options);
+  elements.address.value = addresses.some((entry) => entry.id === selected) ? selected : (addresses[0]?.id || "");
+}
+
+async function loadAddresses(selected) {
+  addresses = await window.buyLab.addresses().catch(() => []);
+  renderAddresses(selected);
+}
+
+function editAddress(id) {
+  const entry = addresses.find((item) => item.id === id) || null;
+  editing = entry ? entry.id : "";
+  for (const field of ADDRESS_FIELDS) fieldInput(field).value = entry ? entry[field] || "" : "";
+  if (!fieldInput("customerType").value) fieldInput("customerType").value = CUSTOMER_TYPES[0][0];
+  elements.addressDelete.disabled = !entry;
+  elements.addressMessage.textContent = "";
+}
+
+elements.addressManage.addEventListener("click", () => {
+  elements.addressForm.hidden = !elements.addressForm.hidden;
+  if (!elements.addressForm.hidden) editAddress(elements.address.value);
+});
+elements.addressClose.addEventListener("click", () => { elements.addressForm.hidden = true; });
+elements.addressNew.addEventListener("click", () => editAddress(""));
+elements.address.addEventListener("change", () => {
+  if (!elements.addressForm.hidden) editAddress(elements.address.value);
+});
+elements.addressSave.addEventListener("click", async () => {
+  const address = { id: editing };
+  for (const field of ADDRESS_FIELDS) address[field] = fieldInput(field).value;
+  const result = await window.buyLab.saveAddress(address);
+  if (!result?.ok) {
+    elements.addressMessage.textContent = result?.message || copy.failed;
+    elements.addressMessage.dataset.tone = "failed";
     return;
   }
-  await window.buyLab.select(supplier);
-  await window.buyLab.start({ supplier, text });
+  await loadAddresses(result.address.id);
+  editAddress(result.address.id);
+  elements.addressMessage.textContent = copy.addressSaved;
+  elements.addressMessage.dataset.tone = "";
+});
+elements.addressDelete.addEventListener("click", async () => {
+  if (!editing) return;
+  await window.buyLab.deleteAddress(editing);
+  await loadAddresses("");
+  editAddress(elements.address.value);
 });
 
-elements.stop.addEventListener("click", () => { void window.buyLab.stop(); });
-elements.demo.addEventListener("click", async () => {
-  // One click for a demo: a small DigiKey list, then the normal run.
-  elements.list.value = "RC0402FR-0710KL 10\nGRM155R71C104KA88D 10";
-  if (elements.supplier.value !== "digikey" && [...elements.supplier.options].some((option) => option.value === "digikey")) {
-    elements.supplier.value = "digikey";
-  }
-  const supplier = elements.supplier.value;
-  await window.buyLab.select(supplier);
-  await window.buyLab.start({ supplier, text: elements.list.value });
-});
-elements.confirm.addEventListener("click", () => { void window.buyLab.confirm(); });
-elements.live.addEventListener("click", () => { void window.buyLab.showLive(); });
-elements.external.addEventListener("click", () => { void window.buyLab.openExternal(); });
+void loadAddresses();
 
 window.buyLab.onFlow((state) => render(state));
 window.buyLab.state().then((state) => render(state)).catch(() => {});
 
-/* The live overlay: the supplier's Chrome on top of the list, shown when the
+/* The live overlay: a supplier's Chrome on top of the lists, shown when that
  * shop stops for the person or when they open it. live.js draws the frames
  * and forwards the input; here only the overlay's visibility changes. */
 const overlay = document.querySelector("[data-live]");

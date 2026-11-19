@@ -36,6 +36,9 @@ const CART_ROW = {
   hasText: "{{part}}",
 };
 
+/* The open dialog (an address form inside it). */
+const DIALOG = { any: [{ css: ".v-dialog--active" }] };
+
 /* UNCONFIRMED: check this on the first signed-in run and fix it here. */
 const ORDERS_URL = "https://www.lcsc.com/order";
 
@@ -66,6 +69,111 @@ module.exports = {
     title: T("Add the matched parts", "加入匹配的料号", "Añadir las piezas"),
     any: [{ role: "button", name: /^add to cart$/i }],
   },
+  /* (2026-11-19, live) /bom/options renders its column table only once the
+   * file is parsed; a Create BOM click before that does nothing. The table's
+   * recognised column header is the sign it is ready. */
+  "bom.columns": {
+    title: T("The file's columns", "文件的列", "Las columnas del archivo"),
+    any: [{ css: ".v-input__slot" }],
+    hasText: /LCSC Part Number/i,
+  },
+  /* The project page is ready once its match filters show ("Exact Matches (2)"). */
+  "bom.matches": {
+    title: T("Matched parts", "匹配结果", "Piezas encontradas"),
+    any: [{ role: "button", name: /^exact matches/i }],
+  },
+  /* (2026-11-19, live) Signed out, the project page lies under a white
+   * overlay with one button, "Log in to view all results or register now":
+   * Add to Cart is covered, so the person signs in first. */
+  /* (2026-11-20, live, signed in) Add to Cart on the project page opens a
+   * dialog: "Include" (the entire list, chosen) and a required "Add to"
+   * (the person's existing carts, or "<New Cart>"), then "Add". */
+  "bom.addDialog": {
+    title: T("Add to Cart dialog", "加入购物车对话框", "Diálogo de añadir al carrito"),
+    any: [{ css: ".v-dialog--active" }],
+    hasText: /add to cart/i,
+  },
+  "bom.addToField": {
+    title: T("Add to (which cart)", "加入到（哪个购物车）", "Añadir a (qué carrito)"),
+    any: [{ css: ".v-dialog--active .v-input.mt-2 .v-input__slot" }],
+  },
+  "bom.existingCart": {
+    title: T("An existing cart", "已有的购物车", "Un carrito existente"),
+    any: [{ css: ".v-menu__content.menuable__content__active [role=option]" }],
+    hasText: /^(?!\s*<new cart>)\S/i,
+  },
+  "bom.newCart": {
+    title: T("New cart", "新建购物车", "Carrito nuevo"),
+    any: [{ css: ".v-menu__content.menuable__content__active [role=option]" }],
+    hasText: /<new cart>/i,
+  },
+  "bom.addConfirm": {
+    title: T("Add", "加入", "Añadir"),
+    within: { any: [{ css: ".v-dialog--active" }] },
+    any: [{ role: "button", name: /^add$/i }],
+  },
+  "checkout.noAddress": {
+    title: T("No shipping address", "没有收货地址", "Sin dirección de envío"),
+    any: [{ text: /no shipping address found/i }],
+  },
+  /* (2026-11-20, live, signed in) "Add" beside Shipping Address opens "Add
+   * Shipping Address": Customer Type (Company / Individual, Individual
+   * chosen), then text fields with generated ids and their labels beside
+   * them, so they are known by their order in the dialog: first name, last
+   * name, phone, country (searchable), state (searchable), city, street,
+   * apt, postal code; then "Set As Default", "Sync My Shipping Address as the
+   * Bill Address", Cancel / Save. */
+  "checkout.addShipping": {
+    title: T("Add a shipping address", "添加收货地址", "Añadir dirección"),
+    any: [{ text: /^add$/i }],
+  },
+  "addr.dialog": {
+    title: T("Add Shipping Address", "添加收货地址", "Añadir dirección de envío"),
+    any: [{ css: ".v-dialog--active" }],
+    hasText: /add shipping address/i,
+  },
+  "addr.firstName": { title: T("First name", "名", "Nombre"), within: DIALOG, any: [{ css: "input[type=text]" }], nth: 0 },
+  "addr.lastName": { title: T("Last name", "姓", "Apellido"), within: DIALOG, any: [{ css: "input[type=text]" }], nth: 1 },
+  "addr.phone": { title: T("Phone number", "电话", "Teléfono"), within: DIALOG, any: [{ css: "input[type=text]" }], nth: 2 },
+  "addr.country": { title: T("Country/Region", "国家/地区", "País/Región"), within: DIALOG, any: [{ css: "input[type=text]" }], nth: 3 },
+  "addr.state": { title: T("State", "州", "Estado"), within: DIALOG, any: [{ css: "input[type=text]" }], nth: 4 },
+  "addr.city": { title: T("City", "城市", "Ciudad"), within: DIALOG, any: [{ css: "input[type=text]" }], nth: 5 },
+  "addr.line1": { title: T("Street address", "街道地址", "Dirección"), within: DIALOG, any: [{ css: "input[type=text]" }], nth: 6 },
+  "addr.line2": { title: T("Apt, Suite, Building", "门牌/楼层", "Apto., suite"), within: DIALOG, any: [{ css: "input[type=text]" }], nth: 7 },
+  "addr.zip": { title: T("Postal code", "邮编", "Código postal"), within: DIALOG, any: [{ css: "input[type=text]" }], nth: 8 },
+  "addr.countryUS": {
+    title: T("United States", "美国", "Estados Unidos"),
+    any: [{ css: ".v-menu__content.menuable__content__active [role=option]" }],
+    hasText: /^\s*united states\s*$/i,
+  },
+  "addr.stateOption": {
+    title: T("The state", "所选的州", "El estado"),
+    any: [{ css: ".v-menu__content.menuable__content__active [role=option]" }],
+    hasText: "{{stateName}}",
+  },
+  // The two checkboxes: their own box takes the click (their words do not).
+  "addr.syncBilling": {
+    title: T("Also the billing address", "同时作为账单地址", "También la de facturación"),
+    within: { any: [{ css: ".v-dialog--active .v-input--checkbox" }], hasText: /sync my shipping address/i },
+    any: [{ css: ".v-input--selection-controls__input" }],
+  },
+  "addr.setDefault": {
+    title: T("Set as default", "设为默认", "Predeterminada"),
+    within: { any: [{ css: ".v-dialog--active .v-input--checkbox" }], hasText: /^\s*set as default\s*$/i },
+    any: [{ css: ".v-input--selection-controls__input" }],
+  },
+  "addr.save": { title: T("Save", "保存", "Guardar"), within: DIALOG, any: [{ role: "button", name: /^save$/i }] },
+  "addr.cancel": { title: T("Cancel", "取消", "Cancelar"), within: DIALOG, any: [{ role: "button", name: /^cancel$/i }] },
+  /* Signed out, the header's account entry says "Sign In" (signed in, the
+   * person's name). */
+  "account.signInLink": {
+    title: T("Sign In", "登录", "Iniciar sesión"),
+    any: [{ text: /^sign in$/i }],
+  },
+  "bom.loginWall": {
+    title: T("Sign in to see the results", "登录后查看结果", "Inicia sesión para ver los resultados"),
+    any: [{ css: "button.noLoginBtnWrap" }, { role: "button", name: /^log in to view all results/i }],
+  },
   "cookies.accept": {
       title: T("Accept cookies", "接受 Cookie", "Aceptar cookies"),
       any: [{ role: "button", name: /^accept all cookies$/i }],
@@ -94,7 +202,9 @@ module.exports = {
     },
     "tour.skip": {
       title: T("Skip the tour", "跳过引导", "Saltar la guía"),
-      any: [{ role: "button", name: /^skip$/i }],
+      // (2026-11-20, live) The cart's first-visit tour ("Switch Cart 1/3",
+      // Next Step / Skip) over the whole page: its Skip is plain text.
+      any: [{ role: "button", name: /^skip$/i }, { text: /^skip$/i }],
     },
     "detail.ofPart": {
       title: T("The part's page", "该型号的页面", "La página de la pieza"),
@@ -175,6 +285,15 @@ module.exports = {
         match: { all: ["order.confirmation"] },
         enter: [{ do: "read", target: "order.number", as: "orderNumber", optional: true, timeout: 3000 }],
       },
+      // (2026-11-20, live) /checkout is one page with Submit Order on it. An
+      // account without a shipping address shows "No shipping address
+      // found" and no shipping method: the person adds one there first, and
+      // only then is it the review below (above it, so it wins).
+      checkoutAddress: {
+        title: T("Shipping address", "收货地址", "Dirección de envío"),
+        match: { url: /\/checkout/i, all: ["checkout.noAddress"] },
+        person: "checkout_details",
+      },
       review: {
         title: T("Review order", "确认订单", "Revisar el pedido"),
         match: { all: ["review.submit"] },
@@ -188,6 +307,11 @@ module.exports = {
       cart: { title: T("Cart", "购物车", "Carrito"), match: { url: /\/cart\/?(\?|$)/i } },
       orderDetail: { title: T("Order", "订单详情", "Pedido"), match: { url: /\/order\/(detail|[^/?]*\d{5,})/i } },
       orders: { title: T("Orders", "订单记录", "Pedidos"), match: [{ url: /\/order/i, all: ["orders.rows"] }] },
+      // Pages a run starts or ends on, known by address only and last so they
+      // never shadow a page above. Unknown, a walk from them waited out the
+      // whole recognition time (20 s) before setting off.
+      bomProject: { title: T("BOM project", "BOM 项目", "Proyecto BOM"), match: { url: /\/personalCenter\/myProject\/detail/i } },
+      home: { title: T("Home page", "首页", "Página de inicio"), match: { url: /^https:\/\/www\.lcsc\.com\/?(\?[^#]*)?(#.*)?$/i } },
     },
     transitions: [
       {
@@ -266,6 +390,40 @@ module.exports = {
         confirm: { message: "place_order", show: "total" },
         steps: [{ do: "click", target: "review.submit", navigates: true }],
       },
+      {
+        /* The person's saved address (the same one every supplier gets) into
+         * LCSC's Add Shipping Address, also as the billing address, then Save.
+         * Only when an operation names it: without an address the dialog
+         * stays the person's, as before. */
+        name: "fillAddress",
+        title: T("Add the saved address", "添加保存的地址", "Añadir la dirección guardada"),
+        auto: false,
+        from: ["checkoutAddress"],
+        to: ["review", "checkoutAddress"],
+        steps: [
+          { do: "click", target: "checkout.addShipping" },
+          { do: "waitFor", target: "addr.dialog", timeout: 15000 },
+          { do: "fill", target: "addr.firstName", value: "{{firstName}}" },
+          { do: "fill", target: "addr.lastName", value: "{{lastName}}" },
+          // LCSC takes only digits and "+" here.
+          { do: "fill", target: "addr.phone", value: "{{phoneDigits}}" },
+          { do: "click", target: "addr.country" },
+          { do: "type", value: "United States" },
+          { do: "click", target: "addr.countryUS" },
+          { do: "click", target: "addr.state" },
+          { do: "type", value: "{{stateName}}" },
+          { do: "click", target: "addr.stateOption" },
+          { do: "fill", target: "addr.city", value: "{{city}}" },
+          { do: "fill", target: "addr.line1", value: "{{line1}}" },
+          { do: "fill", target: "addr.line2", value: "{{line2}}" },
+          { do: "fill", target: "addr.zip", value: "{{zip}}" },
+          { do: "click", target: "addr.setDefault" },
+          { do: "click", target: "addr.syncBilling" },
+          { do: "click", target: "addr.save" },
+          { do: "waitForHidden", target: "addr.dialog", timeout: 20000 },
+          { do: "waitForHidden", target: "checkout.noAddress", timeout: 20000 },
+        ],
+      },
       // Only when an operation names them: they change the cart or open one order.
       {
         name: "removeLine",
@@ -293,16 +451,33 @@ module.exports = {
   tasks: {
     /* The BOM tool path: one upload instead of one product page per part. */
     bulkAddBom: [
+      // Signed in first: the cart, its dialog and the checkout need the
+      // account. Signed out, the sign-in page opens and the run waits for the
+      // person; it carries on by itself once they are in.
+      { do: "click", target: "cookies.accept", optional: true, timeout: 2500 },
+      { do: "goto", url: "{{signIn}}", when: "account.signInLink" },
+      { do: "handoff", message: "sign_in", when: "account.signInForm", whenTimeout: 8000, untilGone: "account.signInForm", timeout: 600000 },
       { do: "goto", url: "https://www.lcsc.com/bom" },
       { do: "click", target: "cookies.accept", optional: true, timeout: 2500 },
       { do: "upload", target: "bom.upload", filesParam: "file" },
-      { do: "waitForUrl", url: /\/bom\/options/ },
+      { do: "waitForUrl", pattern: /\/bom\/options/ },
+      { do: "waitFor", target: "bom.columns", timeout: 30000 },
       { do: "click", target: "bom.create" },
-      { do: "waitForUrl", url: /personalCenter\/myProject\/detail/ },
-      { do: "click", target: "bom.addToCart", optional: true },
-      { do: "handoff", message: "sign_in", when: "account.signInForm", untilGone: "account.signInForm", timeout: 600000 },
-      { do: "click", target: "bom.addToCart", optional: true },
-      { do: "wait", ms: 3000 },
+      { do: "waitForUrl", pattern: /personalCenter\/myProject\/detail/ },
+      { do: "waitFor", target: "bom.matches", timeout: 30000 },
+      // The overlay comes a moment after the matches: give it a few seconds.
+      { do: "handoff", message: "sign_in", when: "bom.loginWall", whenTimeout: 4000, untilGone: "bom.loginWall", timeout: 600000 },
+      // Signed in now: Add to Cart must work (skipping it reported a cart that
+      // was never filled), and its dialog must be answered: the entire list,
+      // into the person's existing cart, or a new one when they have none.
+      { do: "click", target: "bom.addToCart" },
+      { do: "waitFor", target: "bom.addDialog", timeout: 15000 },
+      { do: "click", target: "bom.addToField" },
+      { do: "click", target: "bom.existingCart", optional: true, timeout: 2000 },
+      { do: "click", target: "bom.newCart", when: "bom.newCart" },
+      { do: "click", target: "bom.addConfirm" },
+      { do: "waitForHidden", target: "bom.addDialog", timeout: 20000 },
+      { do: "wait", ms: 2000 },
     ],
     addToCart: [{ do: "walk", to: ["product", "results"] }, { do: "act", name: ["addToCartHere", "addToCart"] }],
     openCart: [
@@ -320,6 +495,14 @@ module.exports = {
     // From the cart, so an order placed earlier is never taken for this one.
     placeOrder: [
       { do: "walk", to: "cart" },
+      { do: "walk", to: "confirmation" },
+    ],
+    // The same with the saved address: added on the checkout page when the
+    // account has none, then on to the order (the person's yes).
+    placeOrderWithAddress: [
+      { do: "walk", to: "cart" },
+      { do: "walk", to: ["checkoutAddress", "review", "confirmation"] },
+      { do: "act", name: "fillAddress", when: "checkout.noAddress" },
       { do: "walk", to: "confirmation" },
     ],
     orders: [
@@ -356,6 +539,7 @@ module.exports = {
     removeFromCart: ["part"],
     checkout: [],
     placeOrder: [],
+    placeOrderWithAddress: ["firstName", "lastName", "phoneDigits", "line1", "line2", "city", "stateName", "zip"],
     orders: [],
     track: ["order"],
   },
