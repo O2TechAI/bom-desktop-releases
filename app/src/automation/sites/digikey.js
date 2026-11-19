@@ -209,6 +209,24 @@ const TARGETS = {
     title: T("Empty cart", "空购物车", "Carrito vacío"),
     any: [{ role: "heading", name: /your (shopping )?cart is empty/i }],
   },
+  /* (2026-11-20, live) "New Cart" above the cart opens #dialog-new-cart:
+   * "Create New Cart" saves the current cart (Resume Cart brings it back)
+   * and starts an empty one; "Empty Current Cart" would throw it away. A
+   * purchase starts from a cart of its own, so lines left from an earlier
+   * run, or the person's own, are never ordered with it, and nothing of
+   * theirs is deleted. */
+  "cart.newCart": {
+    title: T("New Cart", "新建购物车", "Carrito nuevo"),
+    any: [{ css: "a.newCartLink" }, { role: "link", name: /^new cart$/i }],
+  },
+  "cart.newCartDialog": {
+    title: T("Create New Cart dialog", "新建购物车对话框", "Diálogo de carrito nuevo"),
+    any: [{ css: "#dialog-new-cart.visible" }],
+  },
+  "cart.newCartCreate": {
+    title: T("Create New Cart (keeps the old one)", "新建购物车（保留旧的）", "Crear carrito nuevo (guarda el anterior)"),
+    any: [{ css: "#dialog-new-cart_create" }],
+  },
   /* From the live cart page (2026-11-16): Checkout is the visible
    * `span#primaryButtonRight` inside `#divPrimaryButton`; the
    * `a.cartcheckout` link is a hidden alternate layout. */
@@ -537,6 +555,11 @@ module.exports = {
     // The list as a file (Buy lab's choice when a site has one).
     bulkAddBom: [
       { do: "walk", to: "cart" },
+      // A cart with lines in it is saved and a new one started: only this
+      // purchase's list is in the cart that is checked out.
+      { do: "click", target: "cart.newCart", when: "cart.rows", whenTimeout: 5000 },
+      { do: "click", target: "cart.newCartCreate", when: "cart.newCartDialog", whenTimeout: 5000 },
+      { do: "waitFor", target: "cart.empty", optional: true, timeout: 20000 },
       { do: "act", name: "uploadToCart" },
     ],
     openCart: [
