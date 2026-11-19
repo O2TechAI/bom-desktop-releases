@@ -43,10 +43,12 @@ function paramsFor(profile, task, params) {
 
 
 class BuyLabFlow {
-  constructor({ sites, getLive, onChange }) {
+  constructor({ sites, getLive, onChange, onChallenge }) {
     this.sites = sites.filter((site) => REQUIRED_TASKS.every((task) => site.tasks[task]));
     this.getLive = getLive;
     this.onChange = onChange || (() => {});
+    this.onChallenge = onChallenge || (() => {});
+    this.challengeOpen = false;
     this.status = "idle";
     this.message = null;
     this.supplier = null;
@@ -137,14 +139,28 @@ class BuyLabFlow {
         ? "waiting-confirm"
         : snapshot.message || "waiting-person";
       this.confirm = snapshot.confirming || null;
+      // A security check is solved in Chrome itself, not on the canvas: hand
+      // the real window over for as long as the check is waiting.
+      if (!snapshot.confirming && snapshot.message === "challenge" && !this.challengeOpen) {
+        this.challengeOpen = true;
+        this.onChallenge(true);
+      }
       this.emit();
       return;
     }
     if (snapshot.status === "running") {
       this.status = "running";
       this.confirm = null;
+      if (this.challengeOpen) {
+        this.challengeOpen = false;
+        this.onChallenge(false);
+      }
       this.emit();
       return;
+    }
+    if (this.challengeOpen) {
+      this.challengeOpen = false;
+      this.onChallenge(false);
     }
     // The task itself finished; the run goes on to the next line.
     this.status = snapshot.status === "stopped" ? "stopped" : "running";

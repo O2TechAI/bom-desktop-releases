@@ -10,7 +10,7 @@ const { UNKNOWN, defineMachine, nextTransition, recognise } = require("../src/au
 const { ACTIONS, Runner } = require("../src/automation/runner");
 const { SITES, defineSite } = require("../src/automation/sites");
 const { COMMON_TARGETS } = require("../src/automation/sites/common");
-const { parseLines } = require("../src/buy-lab-flow");
+const { BuyLabFlow, parseLines } = require("../src/buy-lab-flow");
 const {
   browserChoices,
   launchBounds,
@@ -466,6 +466,26 @@ test("a pasted purchase list becomes parts with quantities", () => {
   assert.deepEqual(parseLines("LM358DR 0"), [{ mpn: "LM358DR", quantity: "1" }]);
   assert.deepEqual(parseLines("LM358DR abc"), [{ mpn: "LM358DR abc", quantity: "1" }]);
   assert.deepEqual(parseLines(" \n # only notes \n"), []);
+});
+
+
+test("a security check hands Chrome to the person, then takes it back", () => {
+  const seen = [];
+  const flow = new BuyLabFlow({
+    sites: [],
+    getLive: () => null,
+    onChange: () => {},
+    onChallenge: (open) => seen.push(open),
+  });
+  flow.observe({ status: "waiting", message: "challenge", confirming: null });
+  flow.observe({ status: "waiting", message: "challenge", confirming: null });
+  flow.observe({ status: "running" });
+  assert.deepEqual(seen, [true, false]);
+
+  // A run that ends while the check is open also gives the window back.
+  flow.observe({ status: "waiting", message: "challenge", confirming: null });
+  flow.observe({ status: "failed" });
+  assert.deepEqual(seen, [true, false, true, false]);
 });
 
 

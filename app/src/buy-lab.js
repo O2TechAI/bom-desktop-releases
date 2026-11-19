@@ -78,6 +78,7 @@ class BuyLabWindow {
       sites: this.sites,
       getLive: (id) => this.lives.get(id),
       onChange: (state) => this.publishFlow(state),
+      onChallenge: (open) => this.onChallenge(open),
     });
 
     this.page.webContents.on("did-finish-load", () => {
@@ -133,6 +134,14 @@ class BuyLabWindow {
     return live;
   }
 
+  /** Give the person Chrome itself for a security check, then take it back. */
+  onChallenge(open) {
+    const live = this.lives.get(this.flowState.supplier || this.active);
+    if (!live) return;
+    if (open) void live.handToPerson?.();
+    else void live.backFromPerson?.();
+  }
+
   onFrame(id, frame) {
     this.lastFrame.set(id, frame);
     if (this.closed || this.view !== "live" || id !== this.active) return;
@@ -171,7 +180,9 @@ class BuyLabWindow {
   publishFlow(state) {
     if (this.closed) return;
     if (!this.page.webContents.isDestroyed()) this.page.webContents.send("buy-lab:flow", state);
-    if (state.status === "waiting" && !state.confirm) this.showView("live");
+    // A check is handed to Chrome's own window (onChallenge); the canvas is
+    // only for sign-ins and refusals that the person handles in the app.
+    if (state.status === "waiting" && !state.confirm && state.message !== "challenge") this.showView("live");
   }
 
   select(id) {

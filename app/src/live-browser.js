@@ -92,6 +92,43 @@ class LiveBrowser {
     return true;
   }
 
+  /** Move Chrome's own window where the person can use it, and stop the
+   * stream while they do: a security check is solved in a normal browser, not
+   * through a forwarded picture. */
+  async handToPerson() {
+    if (!this.session || this.closed) return;
+    try {
+      await this.session.send("Page.stopScreencast");
+    } catch {
+      /* no stream */
+    }
+    try {
+      const { windowId } = await this.session.send("Browser.getWindowForTarget");
+      await this.session.send("Browser.setWindowBounds", {
+        windowId,
+        bounds: { left: 80, top: 60, width: 1280, height: 900, windowState: "normal" },
+      });
+      await this.session.send("Page.bringToFront");
+    } catch {
+      /* Chrome went away */
+    }
+  }
+
+  /** Take the window back to its off-screen place and stream again. */
+  async backFromPerson() {
+    if (!this.session || this.closed) return;
+    try {
+      const { windowId } = await this.session.send("Browser.getWindowForTarget");
+      await this.session.send("Browser.setWindowBounds", {
+        windowId,
+        bounds: { left: -32000, top: 0, width: 1280, height: 900 },
+      });
+    } catch {
+      /* Chrome went away */
+    }
+    await this.refresh();
+  }
+
   /** Page size in CSS pixels: the picture's own size. */
   size() {
     return this.frame && this.frame.width && this.frame.height
