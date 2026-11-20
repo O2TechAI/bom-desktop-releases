@@ -229,9 +229,101 @@ function paramsFor(profile, task, params) {
 }
 
 
+/* How far one purchase got. A stage that is done is not done again when the
+ * purchase continues after an interruption. */
+const STAGE = { NEW: 0, ADDED: 1, CART_CONFIRMED: 2, PLACED: 3 };
+
+function partKey(text) {
+  return String(text || "").replace(/[‎‏\s]/g, "").toUpperCase();
+}
+
+function amount(text) {
+  const match = String(text ?? "").replace(/,/g, "").match(/\d+(?:\.\d+)?/);
+  return match ? Number(match[0]) : null;
+}
+
+/** The cart against the list: each line found, missing, at another quantity
+ * or dearer than expected; every cart line the list doesn't have is extra.
+ * `expected` maps a part to the unit price BOM showed, where it is known. */
+function compareCart(lines, rows, expected = {}) {
+  const cartRows = (rows || []).filter((row) => partKey(row.part));
+  const used = new Set();
+  const checked = lines.map((line) => {
+    const index = cartRows.findIndex((row, at) => !used.has(at) && partKey(row.part) === partKey(line.mpn));
+    const row = index >= 0 ? cartRows[index] : null;
+    if (index >= 0) used.add(index);
+    const unitPrice = row ? amount(row.unitPrice) : null;
+    const expectedPrice = expected[partKey(line.mpn)] != null ? Number(expected[partKey(line.mpn)]) : null;
+    let issue = null;
+    if (!row) issue = "missing";
+    else if (amount(row.quantity) !== Number(line.quantity)) issue = "quantity";
+    else if (unitPrice != null && expectedPrice != null && unitPrice > expectedPrice + 1e-9) issue = "price";
+    return {
+      part: line.mpn, quantity: String(line.quantity), cartQuantity: row ? String(amount(row.quantity) ?? "") : null,
+      unitPrice: row?.unitPrice || null, extended: row?.extended || null, expectedPrice, issue,
+    };
+  });
+  const extra = cartRows.filter((_, at) => !used.has(at)).map((row) => ({
+    part: row.part, quantity: null, cartQuantity: String(amount(row.quantity) ?? ""), unitPrice: row.unitPrice || null,
+    extended: row.extended || null, expectedPrice: null, issue: "extra",
+  }));
+  const all = [...checked, ...extra];
+  const total = all.reduce((sum, line) => sum + (amount(line.extended) ?? 0), 0);
+  return { lines: all, total: total ? total.toFixed(2) : null, issues: all.filter((line) => line.issue).length };
+}
+
+/** The same cart as the one the person confirmed: same parts, same quantities. */
+function sameCart(a, b) {
+  const shape = (rows) => (rows || []).filter((row) => partKey(row.part))
+    .map((row) => `${partKey(row.part)}x${amount(row.quantity)}`).sort().join("|");
+  return shape(a) === shape(b);
+}
+
+/** Each supplier's purchase in progress, on this computer, so it can go on
+ * after the app was closed: `<userData>/buy-lab/runs/<supplier>.json`. */
+class RunStore {
+  constructor(userDataDir) {
+    this.dir = userDataDir ? path.join(userDataDir, "buy-lab", "runs") : null;
+  }
+
+  file(supplier) {
+    return this.dir ? path.join(this.dir, `${String(supplier).replace(/[^a-z0-9-]/gi, "")}.json`) : null;
+  }
+
+  load(supplier) {
+    try {
+      return JSON.parse(fs.readFileSync(this.file(supplier), "utf8"));
+    } catch {
+      return null;
+    }
+  }
+
+  save(supplier, record) {
+    if (!this.dir) return;
+    fs.mkdirSync(this.dir, { recursive: true });
+    fs.writeFileSync(this.file(supplier), JSON.stringify({ ...record, savedAt: new Date().toISOString() }, null, 2));
+  }
+
+  clear(supplier) {
+    try { fs.unlinkSync(this.file(supplier)); } catch { /* none */ }
+  }
+}
+
+
 class BuyLabFlow {
-  constructor({ sites, getLive, onChange, onChallenge }) {
+  constructor({ sites, getLive, onChange, onChallenge, store = null }) {
     this.sites = sites.filter((site) => REQUIRED_TASKS.every((task) => site.tasks[task]));
+    this.store = store;
+    this.progress = STAGE.NEW;
+    this.resumeKey = null;
+    this.text = "";
+    this.expected = {};
+    this.rehearsal = false;
+    this.rehearsalYes = false;
+    this.cartCheck = null;
+    this.confirmedCart = null;
+    this.placed = null;
+    this.decide = null;
     this.getLive = getLive;
     this.onChange = onChange || (() => {});
     this.onChallenge = onChallenge || (() => {});
@@ -266,6 +358,13 @@ class BuyLabFlow {
       orders: this.orders,
       tracking: this.tracking,
       running: this.running,
+      progress: this.progress,
+      cartCheck: this.cartCheck,
+      placed: this.placed,
+      rehearsal: this.rehearsal,
+      // Ended before its order went through, with something done: it can go on.
+      canResume: !this.running && this.progress > STAGE.NEW && this.progress < STAGE.PLACED
+        && ["failed", "stopped"].includes(this.status),
     };
   }
 
@@ -360,23 +459,67 @@ class BuyLabFlow {
    * over, told what happens: `cart(rows)` once the cart is read (its live
    * quote), `mayConfirm()` whether the buyer has approved what BOM must
    * approve first, `placed({ orderNumber })` after the person's yes went
-   * through, `ended(state)` when the run ends however it ends. Without it a
-   * purchase runs as it always has. */
-  async start({ supplier, text, address = null, link = null }) {
+   * through, `ended(state)` when the run ends however it ends, `resumed()`
+   * when the person continues it. Without it a purchase runs as it always has.
+   *
+   * `rehearsal`: everything up to the order's yes on the real site; the yes
+   * then stops there, Submit is never pressed, and the purchase is marked
+   * placed as a rehearsal so the after-purchase steps can be run. Not for a
+   * purchase BOM handed over: BOM would record an order that doesn't exist.
+   *
+   * `resumeKey`: the purchase this is. When this supplier's saved progress has
+   * the same key, the stages already done are not done again. `expected`:
+   * part -> the unit price BOM showed, for the cart check. */
+  async start({ supplier, text, address = null, link = null, rehearsal = false, resumeKey = null, expected = null }) {
     if (this.running) throw new Error("A purchase is already running");
     const lines = parseLines(text);
     if (!lines.length) throw new Error("Paste at least one line: part number and quantity");
     if (!this.sites.some((site) => site.id === supplier)) throw new Error(`Unknown supplier ${supplier}`);
     this.supplier = supplier;
+    this.text = text;
     this.address = address ? cleanAddress(address) : null;
-    this.stopRequested = false;
     this.link = link;
-    this.session = { warmedUp: false };
+    this.rehearsal = Boolean(rehearsal) && !link;
+    this.expected = Object.fromEntries(Object.entries(expected || {}).map(([part, price]) => [partKey(part), Number(price)]));
     this.lines = lines.map((line, index) => ({ ...line, index, status: "pending", error: null, price: null }));
     this.cart = null;
     this.orderNumber = null;
     this.orders = [];
     this.tracking = [];
+    this.placed = null;
+    this.cartCheck = null;
+    const saved = resumeKey ? this.store?.load(supplier) : null;
+    if (saved && saved.resumeKey === resumeKey && saved.progress > STAGE.NEW && saved.progress < STAGE.PLACED) {
+      // The same purchase, interrupted earlier: go on from where it got to.
+      this.progress = saved.progress;
+      this.confirmedCart = saved.confirmedCart || null;
+      for (const line of this.lines) line.status = "added";
+    } else {
+      this.progress = STAGE.NEW;
+      this.confirmedCart = null;
+    }
+    this.resumeKey = resumeKey || randomUUID();
+    await this.run();
+  }
+
+  /** Go on with the purchase that ended before its order: from the stage it got to. */
+  async resume() {
+    if (this.running) throw new Error("A purchase is already running");
+    if (!(this.progress > STAGE.NEW && this.progress < STAGE.PLACED)) throw new Error("There is nothing to continue");
+    this.link?.resumed?.();
+    await this.run();
+  }
+
+  save() {
+    this.store?.save(this.supplier, {
+      resumeKey: this.resumeKey, supplier: this.supplier, text: this.text, address: this.address,
+      rehearsal: this.rehearsal, progress: this.progress, confirmedCart: this.confirmedCart,
+    });
+  }
+
+  async run() {
+    this.stopRequested = false;
+    this.session = { warmedUp: false };
     this.confirm = null;
     this.message = null;
     this.status = "running";
@@ -384,91 +527,22 @@ class BuyLabFlow {
     this.emit();
     try {
       const site = this.sites.find((entry) => entry.id === this.supplier);
-      if (site?.tasks.bulkAddBom || site?.tasks.bulkAddPaa || site?.tasks.bulkAddList) {
-        // One page, one batch: a BOM file or the cart's own Bulk Add box.
-        this.emit({ message: "bulk-adding" });
-        for (const line of this.lines) line.status = "adding";
-        this.emit();
-        let snapshot;
-        if (site.tasks.bulkAddBom) {
-          const file = writeBomFile(this.supplier, this.lines);
-          try {
-            snapshot = await this.runTask("bulkAddBom", { file, partColumn: partColumnFor(this.lines) });
-          } finally {
-            try { fs.unlinkSync(file); } catch { /* already gone */ }
-          }
-        } else if (site.tasks.bulkAddPaa) {
-          snapshot = await this.runTask("bulkAddPaa", { lines: paaLines(this.lines) });
-        } else {
-          snapshot = await this.runTask("bulkAddList", { lines: bulkLines(this.lines) });
-        }
-        const failed = snapshot.steps.find((step) => step.status === "failed");
-        if (snapshot.status === "stopped") {
-          // The person stopped it: not a failure of the lines.
-          for (const line of this.lines) {
-            line.status = "stopped";
-            line.error = null;
-          }
-        } else if (snapshot.status !== "done") {
-          for (const line of this.lines) {
-            line.status = "failed";
-            line.error = failed?.error?.message || snapshot.status;
-          }
-        } else {
-          for (const line of this.lines) line.status = "added";
-        }
-        this.emit();
-        if (this.stopRequested) { this.emit({ status: "stopped", message: "stopped" }); return; }
-      } else {
-        for (const line of this.lines) {
-        this.emit({ message: "adding" });
-        line.status = "adding";
-        this.emit();
-        try {
-          const snapshot = await this.runTask("addToCart", { part: line.mpn, quantity: line.quantity });
-          const failed = snapshot.steps.find((step) => step.status === "failed");
-          if (snapshot.status !== "done") {
-            line.status = "failed";
-            line.error = failed?.error?.message || snapshot.status;
-          } else {
-            line.status = "added";
-          }
-        } catch (error) {
-          if (error?.code === "blocked") {
-            line.status = "blocked";
-            line.error = "";
-            this.emit({ status: "failed", message: "blocked" });
-            return;
-          }
-          line.status = "failed";
-          line.error = error.message;
-        }
-        this.emit();
-        if (this.stopRequested) { this.emit({ status: "stopped", message: "stopped" }); return; }
-        }
+      if (this.progress < STAGE.ADDED) {
+        if (!(await this.addLines(site))) return;
+        this.progress = STAGE.ADDED;
+        this.save();
       }
-
-      // Nothing in the cart from this list: going on would only check out
-      // whatever else is there, or walk an empty cart to the checkout.
-      if (!this.lines.some((line) => line.status === "added")) {
-        this.emit({ status: "failed", message: "nothing-added" });
-        return;
+      if (this.progress < STAGE.PLACED) {
+        // Every way to the checkout passes the cart check. A cart the person
+        // already confirmed, still the same, is not asked again; one that
+        // changed since (by hand in the supplier's page) is.
+        await this.checkCart();
+        this.progress = STAGE.CART_CONFIRMED;
+        this.save();
+        await this.placeOrder(site);
+        this.progress = STAGE.PLACED;
+        this.store?.clear(this.supplier);
       }
-
-      this.emit({ message: "reading-cart" });
-      const cart = finished(await this.runTask("openCart"));
-      this.cart = Array.isArray(cart.results?.cart) ? cart.results.cart : [];
-      if (this.link?.cart) await this.link.cart(this.cart).catch(() => {});
-
-      this.emit({ message: "placing-order" });
-      // A saved address fills the supplier's shipping form, where the site
-      // knows how; otherwise that form stays the person's.
-      const withAddress = Boolean(this.address && site?.tasks.placeOrderWithAddress);
-      const placed = finished(await (withAddress
-        ? this.runTask("placeOrderWithAddress", addressParams(this.address))
-        : this.runTask("placeOrder")));
-      this.orderNumber = placed.results?.orderNumber || null;
-      if (this.link?.placed) await this.link.placed({ orderNumber: this.orderNumber }).catch(() => {});
 
       this.emit({ message: "reading-orders" });
       const orders = finished(await this.runTask("orders"));
@@ -505,14 +579,163 @@ class BuyLabFlow {
       this.running = false;
       this.runner = null;
       this.confirm = null;
+      this.decide = null;
       this.emit();
-      if (this.link?.ended) void Promise.resolve(this.link.ended({ status: this.status, message: this.message })).catch(() => {});
+      if (this.link?.ended) {
+        void Promise.resolve(this.link.ended({ status: this.status, message: this.message, progress: this.progress })).catch(() => {});
+      }
     }
+  }
+
+  /** Stage 1: the list into the cart. False when the purchase ends here. */
+  async addLines(site) {
+    if (site?.tasks.bulkAddBom || site?.tasks.bulkAddPaa || site?.tasks.bulkAddList) {
+      // One page, one batch: a BOM file or the cart's own Bulk Add box.
+      this.emit({ message: "bulk-adding" });
+      for (const line of this.lines) line.status = "adding";
+      this.emit();
+      let snapshot;
+      if (site.tasks.bulkAddBom) {
+        const file = writeBomFile(this.supplier, this.lines);
+        try {
+          snapshot = await this.runTask("bulkAddBom", { file, partColumn: partColumnFor(this.lines) });
+        } finally {
+          try { fs.unlinkSync(file); } catch { /* already gone */ }
+        }
+      } else if (site.tasks.bulkAddPaa) {
+        snapshot = await this.runTask("bulkAddPaa", { lines: paaLines(this.lines) });
+      } else {
+        snapshot = await this.runTask("bulkAddList", { lines: bulkLines(this.lines) });
+      }
+      const failed = snapshot.steps.find((step) => step.status === "failed");
+      if (snapshot.status === "stopped") {
+        // The person stopped it: not a failure of the lines.
+        for (const line of this.lines) {
+          line.status = "stopped";
+          line.error = null;
+        }
+      } else if (snapshot.status !== "done") {
+        for (const line of this.lines) {
+          line.status = "failed";
+          line.error = failed?.error?.message || snapshot.status;
+        }
+      } else {
+        for (const line of this.lines) line.status = "added";
+      }
+      this.emit();
+      if (this.stopRequested) { this.emit({ status: "stopped", message: "stopped" }); return false; }
+    } else {
+      for (const line of this.lines) {
+        this.emit({ message: "adding" });
+        line.status = "adding";
+        this.emit();
+        try {
+          const snapshot = await this.runTask("addToCart", { part: line.mpn, quantity: line.quantity });
+          const failed = snapshot.steps.find((step) => step.status === "failed");
+          if (snapshot.status !== "done") {
+            line.status = "failed";
+            line.error = failed?.error?.message || snapshot.status;
+          } else {
+            line.status = "added";
+          }
+        } catch (error) {
+          if (error?.code === "blocked") {
+            line.status = "blocked";
+            line.error = "";
+            this.emit({ status: "failed", message: "blocked" });
+            return false;
+          }
+          line.status = "failed";
+          line.error = error.message;
+        }
+        this.emit();
+        if (this.stopRequested) { this.emit({ status: "stopped", message: "stopped" }); return false; }
+      }
+    }
+    // Nothing in the cart from this list: going on would only check out
+    // whatever else is there, or walk an empty cart to the checkout.
+    if (!this.lines.some((line) => line.status === "added")) {
+      this.emit({ status: "failed", message: "nothing-added" });
+      return false;
+    }
+    return true;
+  }
+
+  /** Stage 2: the person checks the cart against the list before anything is
+   * bought (2026-11-20: "在购买前展示购物车，让用户确认这个是他们想要买的产品").
+   * It always waits for their "correct"; "re-check" reads the cart again
+   * after they changed it in the supplier's page. Continuing a purchase whose
+   * cart was confirmed and has not changed since does not ask again. */
+  async checkCart() {
+    for (;;) {
+      this.emit({ status: "running", message: "reading-cart" });
+      const cart = finished(await this.runTask("openCart"));
+      this.cart = Array.isArray(cart.results?.cart) ? cart.results.cart : [];
+      if (this.link?.cart) await this.link.cart(this.cart).catch(() => {});
+      if (this.confirmedCart && sameCart(this.confirmedCart, this.cart)) {
+        this.cartCheck = null;
+        return;
+      }
+      this.cartCheck = compareCart(this.lines, this.cart, this.expected);
+      this.emit({ status: "waiting", message: "cart-check" });
+      const decision = await new Promise((resolve) => { this.decide = resolve; });
+      this.decide = null;
+      if (decision === "stop") throw stoppedError();
+      if (decision === "confirm") {
+        this.confirmedCart = this.cart;
+        this.cartCheck = null;
+        this.emit({ status: "running", message: "cart-confirmed" });
+        return;
+      }
+      // "recheck": read it again.
+    }
+  }
+
+  confirmCart() {
+    if (!this.decide) return false;
+    this.decide("confirm");
+    return true;
+  }
+
+  recheckCart() {
+    if (!this.decide) return false;
+    this.decide("recheck");
+    return true;
+  }
+
+  /** Stage 3: checkout up to the order's yes, which is the person's. */
+  async placeOrder(site) {
+    this.emit({ status: "running", message: "placing-order" });
+    this.rehearsalYes = false;
+    this.rehearsalTotal = null;
+    // A saved address fills the supplier's shipping form, where the site
+    // knows how; otherwise that form stays the person's.
+    const withAddress = Boolean(this.address && site?.tasks.placeOrderWithAddress);
+    let placed = null;
+    try {
+      placed = finished(await (withAddress
+        ? this.runTask("placeOrderWithAddress", addressParams(this.address))
+        : this.runTask("placeOrder")));
+    } catch (error) {
+      // A rehearsal's yes stops the run at the review page on purpose.
+      if (!(this.rehearsalYes && error?.code === "stopped")) throw error;
+    }
+    if (this.rehearsalYes) {
+      this.orderNumber = `REHEARSAL-${Date.now().toString(36).toUpperCase()}`;
+      this.placed = { orderNumber: this.orderNumber, total: this.rehearsalTotal, rehearsal: true, at: new Date().toISOString() };
+      this.emit({ status: "running", message: "rehearsal-placed" });
+      return;
+    }
+    this.orderNumber = placed?.results?.orderNumber || null;
+    this.placed = { orderNumber: this.orderNumber, total: this.lastTotal || null, rehearsal: false, at: new Date().toISOString() };
+    this.emit();
+    if (this.link?.placed) await this.link.placed({ orderNumber: this.orderNumber }).catch(() => {});
   }
 
   stop() {
     // Stop ends the purchase, not only the task running now.
     if (this.running) this.stopRequested = true;
+    this.decide?.("stop");
     this.runner?.stop();
     this.emit({ status: "stopped", message: "stopped" });
   }
@@ -522,6 +745,15 @@ class BuyLabFlow {
     if (this.link?.mayConfirm && !this.link.mayConfirm()) {
       this.emit({ message: "waiting-bom-approval" });
       return false;
+    }
+    this.lastTotal = this.confirm?.value || null;
+    if (this.rehearsal && this.confirm) {
+      // The rehearsal ends at the yes: Submit is never pressed.
+      this.rehearsalYes = true;
+      this.rehearsalTotal = this.lastTotal;
+      this.confirm = null;
+      this.runner?.stop();
+      return true;
     }
     const approved = Boolean(this.runner?.approve());
     if (approved) {
@@ -539,7 +771,10 @@ function finished(snapshot) {
   if (snapshot.status === "done") return snapshot;
   if (snapshot.status === "stopped") throw stoppedError();
   const failed = snapshot.steps.find((step) => step.status === "failed");
-  throw new Error(failed?.error?.message || `The ${snapshot.task || "step"} didn't finish`);
+  // Which thing on the page it was: "It isn't on the page (Secure Checkout)".
+  const what = failed?.targetTitle?.en || failed?.target || "";
+  const message = failed?.error?.message || `The ${snapshot.task || "step"} didn't finish`;
+  throw new Error(what && !message.includes(what) ? `${message} (${what})` : message);
 }
 
 
@@ -550,4 +785,4 @@ function stoppedError() {
 }
 
 
-module.exports = { AddressBook, BuyLabFlow, bulkLines, paaLines, parseLines, writeBomFile, cleanAddress, addressParams, siteAddress, siteOrderText, ADDRESS_FIELDS, CUSTOMER_TYPES, US_STATES, REQUIRED_TASKS };
+module.exports = { AddressBook, BuyLabFlow, RunStore, compareCart, sameCart, STAGE, bulkLines, paaLines, parseLines, writeBomFile, cleanAddress, addressParams, siteAddress, siteOrderText, ADDRESS_FIELDS, CUSTOMER_TYPES, US_STATES, REQUIRED_TASKS };

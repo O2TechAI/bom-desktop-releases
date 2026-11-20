@@ -82,14 +82,28 @@ test("a job starts one purchase, reports its cart and holds the yes until checko
 });
 
 
-test("a run that ends without an order says so once, and is not restarted by itself", async () => {
+test("an interrupted run tells BOM nothing, waits for Continue, and is not restarted by itself", async () => {
   const { link, lab, posts } = harness([[JOB]]);
   await link.tick();
+  const before = posts.length;
   await lab.link.ended({ status: "stopped", message: "stopped" });
-  // Before its cart was read: the pricing failed.
-  assert.deepEqual(posts.at(-1), { path: "cart", body: { purchase_request_id: "pr_1", seller: "digikey", failed: "stopped" } });
+  // Interrupted, not over: BOM keeps the job, nothing is reported.
+  assert.equal(posts.length, before);
   await link.tick();
   assert.equal(lab.started.length, 1);
+  // Continue makes the job this run's again; it still reports its cart.
+  lab.link.resumed();
+  const resumedAt = posts.length;
+  await lab.link.cart([{ part: "311-10.0KLRCT-ND", quantity: "10", unitPrice: "0.023" }]);
+  assert.ok(posts.slice(resumedAt).some((post) => post.path === "cart"));
+});
+
+
+test("a list that never went into the cart is reported, once", async () => {
+  const { link, lab, posts } = harness([[JOB]]);
+  await link.tick();
+  await lab.link.ended({ status: "failed", message: "nothing-added" });
+  assert.deepEqual(posts.at(-1), { path: "cart", body: { purchase_request_id: "pr_1", seller: "digikey", failed: "nothing-added" } });
 });
 
 

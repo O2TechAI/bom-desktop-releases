@@ -70,13 +70,17 @@ function happyShop(task, params) {
   return {};
 }
 
-function makeFlow({ reloads = [] } = {}) {
+function makeFlow({ reloads = [], autoConfirm = true } = {}) {
   const states = [];
   const live = { browser: { link: { id: "link" } }, reload: async () => { reloads.push(Date.now()); } };
+  // The person says the cart is right whenever the cart check asks.
   const flow = new BuyLabFlow({
     sites: LAB_SITES,
     getLive: () => live,
-    onChange: (state) => states.push(state),
+    onChange: (state) => {
+      states.push(state);
+      if (state.message === "cart-check" && autoConfirm) setImmediate(() => flow.confirmCart());
+    },
   });
   return { flow, states, live };
 }
@@ -122,7 +126,7 @@ test("the demo's DigiKey purchase runs every task in order, with the same values
 
   // What the window is told, in order (repeats collapsed).
   const messages = states.map((state) => state.message).filter((message, index, all) => message !== all[index - 1]);
-  assert.deepEqual(messages, [null, "bulk-adding", "reading-cart", "placing-order", "reading-orders", "tracking", null]);
+  assert.deepEqual(messages, [null, "bulk-adding", "reading-cart", "cart-check", "cart-confirmed", "placing-order", "reading-orders", "tracking", null]);
   assert.equal(states.at(-1).status, "done");
 });
 
@@ -200,11 +204,12 @@ test("the page has words for every wait a supplier can ask for, in every languag
 });
 
 
-test("the demo fills both suppliers: DigiKey's cut-tape numbers and LCSC's C-numbers", () => {
+test("the demo fills every supplier: DigiKey's cut-tape numbers, LCSC's C-numbers, Mouser's own numbers", () => {
   const page = fs.readFileSync(require.resolve("../static/buy-lab.js"), "utf8");
   const demo = page.slice(page.indexOf("const DEMO"), page.indexOf("};", page.indexOf("const DEMO")));
   assert.match(demo, /digikey: "311-10\.0KLRCT-ND 10\\n490-3261-1-ND 10"/);
   assert.match(demo, /lcsc: "C1525 10\\nC25804 10"/);
+  assert.match(demo, /mouser: "603-RC0603FR-0710KL 10\\n595-SN74LVC1G08DBVR 10"/);
   // The demo button starts every supplier in DEMO, not one.
   assert.match(page, /for \(const \[id, text\] of Object\.entries\(DEMO\)\)/);
 });

@@ -13,6 +13,10 @@ contextBridge.exposeInMainWorld("buyLab", {
   // Per supplier: stop(id) (every supplier without one), confirm(id), showLive(id).
   stop: (id = "") => ipcRenderer.invoke("buy-lab:stop", String(id)),
   confirm: (id) => ipcRenderer.invoke("buy-lab:confirm", String(id)),
+  // The cart check before checkout, and going on after an interruption.
+  confirmCart: (id) => ipcRenderer.invoke("buy-lab:confirm-cart", String(id)),
+  recheckCart: (id) => ipcRenderer.invoke("buy-lab:recheck-cart", String(id)),
+  resume: (id) => ipcRenderer.invoke("buy-lab:resume", String(id)),
   select: (id) => ipcRenderer.invoke("buy-lab:select", String(id)),
   showLive: (id = "") => ipcRenderer.invoke("buy-lab:show-live", String(id)),
   showFlow: () => ipcRenderer.invoke("buy-lab:show-flow"),

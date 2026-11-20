@@ -45,7 +45,10 @@ const HOME = {
 
 function flowFor(id) {
   const site = SITES.find((entry) => entry.id === id);
-  return new BuyLabFlow({ sites: [site], getLive: () => ({ browser: { link: {} } }), onChange: () => {} });
+  const flow = new BuyLabFlow({ sites: [site], getLive: () => ({ browser: { link: {} } }), onChange: (state) => {
+    if (state.message === "cart-check") setImmediate(() => flow.confirmCart());
+  } });
+  return flow;
 }
 
 

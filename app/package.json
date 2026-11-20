@@ -2,7 +2,7 @@
   "name": "bom-desktop",
   "productName": "O2 BOM",
   "private": true,
-  "version": "0.0.20",
+  "version": "0.0.21",
   "description": "O2 BOM desktop app: a secure Electron shell around the hosted BOM web app.",
   "author": "O2 Tech AI",
   "type": "commonjs",
@@ -11,7 +11,7 @@
     "node": ">=22.12.0"
   },
   "bomDesktop": {
-    "origin": "https://bom.o2tech.ai"
+    "origin": "https://test2.yuxianglin.xyz"
   },
   "scripts": {
     "assets": "node scripts/copy-assets.mjs",

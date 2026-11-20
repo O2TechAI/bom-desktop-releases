@@ -25,7 +25,7 @@ Node 22.12 or newer.
 
 ```bash
 npm ci
-npm start                                   # opens https://bom.o2tech.ai
+npm start                                   # opens https://test2.yuxianglin.xyz
 npm start -- --bom-url=http://127.0.0.1:5186   # a local site (unpacked runs only)
 npm test                                    # unit tests
 ```
