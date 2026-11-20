@@ -571,6 +571,15 @@ function install(theme) {
     parts.pointer.removeAttribute("data-on");
   }
 
+  /* A last-resort activation: the page's own click. For a button a sticky
+   * header covers, the protocol click would land on the header instead. */
+  function activate(handle) {
+    const target = element(handle);
+    if (!target) return false;
+    target.click();
+    return true;
+  }
+
   function readyState() {
     return { readyState: document.readyState, url: location.href, title: document.title };
   }
@@ -578,7 +587,7 @@ function install(theme) {
   const api = Object.freeze({
     version: 1,
     find, reveal, hit, info, focusAndSelect, valueOf, setValue, selectOption, read, extract, outline, present,
-    pointTo, highlight, press, hide, readyState, element,
+    pointTo, highlight, press, activate, hide, readyState, element,
   });
   Object.defineProperty(globalThis, "__o2a", { value: api });
   return api.version;
