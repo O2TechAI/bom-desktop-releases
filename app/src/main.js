@@ -25,11 +25,13 @@ const { SupplierWindow, registerAutomationIpc } = require("./automation/window")
 const { BuyLabWindow, registerBuyLabIpc } = require("./buy-lab");
 const packageJson = require("../package.json");
 const { MIN_SIZE, loadWindowState, saveWindowState } = require("./window-state");
+const { validGround, readGround, writeGround, FALLBACK } = require("./ground");
 
 
 const STATIC_DIR = path.join(__dirname, "..", "static");
 /* The --page token (#ecf0f3), painted before the site's first frame. */
-const PAGE_GROUND = "#ecf0f3";
+/* The site chooses its own ground per theme; start from the last one. */
+let pageGround = FALLBACK;
 const NET_ERROR_ABORTED = -3;
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -62,6 +64,8 @@ if (!app.isPackaged && process.env.BOM_DESKTOP_USER_DATA) {
 if (!app.isPackaged && process.env.BOM_DESKTOP_DOWNLOADS) {
   app.setPath("downloads", process.env.BOM_DESKTOP_DOWNLOADS);
 }
+
+pageGround = readGround(app.getPath("userData"));
 
 const { origin, rejected } = resolveOrigin({
   builtIn: pkg.bomDesktop?.origin,
@@ -225,7 +229,7 @@ function hardenContents(contents) {
       return {
         action: "allow",
         overrideBrowserWindowOptions: {
-          backgroundColor: PAGE_GROUND,
+          backgroundColor: pageGround,
           autoHideMenuBar: process.platform !== "darwin",
           webPreferences: webPreferences(),
         },
@@ -295,10 +299,13 @@ function createMainWindow() {
     minHeight: MIN_SIZE.height,
     show: false,
     title: "O2 BOM",
-    backgroundColor: PAGE_GROUND,
+    backgroundColor: pageGround,
     autoHideMenuBar: process.platform !== "darwin",
     webPreferences: webPreferences(),
   });
+  mainWindow.webContents.on("did-finish-load", () => { void followGround(); });
+  const groundTimer = setInterval(() => { void followGround(); }, 2500);
+  mainWindow.on("closed", () => clearInterval(groundTimer));
   mainWindow.once("ready-to-show", () => {
     if (state.maximized) mainWindow.maximize();
     mainWindow.show();
@@ -404,6 +411,26 @@ function fromSite(event) {
  * window (only a supplier the app knows), and Settings → Version reads,
  * checks and installs updates. Only the site itself, in its top frame, may
  * ask. */
+/* The site paints its ground from --page; keep the window behind it equal,
+ * so a theme change (or the next launch) never flashes the wrong colour. */
+async function followGround() {
+  if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) return;
+  try {
+    const color = await mainWindow.webContents.executeJavaScript(
+      '(() => { const style = getComputedStyle(document.documentElement); return (style.getPropertyValue("--page") || "").trim(); })()',
+      true,
+    );
+    const next = validGround(color);
+    if (!next || next === pageGround) return;
+    pageGround = next;
+    mainWindow.setBackgroundColor(next);
+    writeGround(app.getPath("userData"), next);
+  } catch {
+    /* between documents */
+  }
+}
+
+
 function registerSiteIpc() {
   ipcMain.handle("desktop:open-supplier", async (event, id) => {
     if (!fromSite(event)) return { ok: false, message: "Not allowed" };

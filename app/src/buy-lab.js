@@ -20,7 +20,8 @@ const { SITES } = require("./automation/sites");
 const { AddressBook, BuyLabFlow, siteAddress, siteOrderText } = require("./buy-lab-flow");
 const { LiveBrowser } = require("./live-browser");
 
-const BACKGROUND = "#0f1418";
+/* Behind the flow page (its own ground); the live overlay paints dark. */
+const BACKGROUND = "#ecf0f3";
 const LAB_SITES = ["digikey", "lcsc"];
 
 /** the page's contents -> BuyLabWindow */
