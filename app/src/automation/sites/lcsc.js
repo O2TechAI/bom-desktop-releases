@@ -403,8 +403,16 @@ module.exports = {
         name: "checkout",
         title: T("Check out", "去结算", "Pagar"),
         from: ["cart"],
-        to: ["signIn", "checkoutStep", "review", "challenge"],
-        steps: [{ do: "click", target: "checkout.start", navigates: true }],
+        to: ["signIn", "checkoutAddress", "checkoutStep", "review", "challenge"],
+        steps: [
+          { do: "click", target: "checkout.start", navigates: true },
+          // (2026-11-20, live) The checkout says "No shipping address found"
+          // for a second or two while it loads the saved addresses: judged
+          // then, the page looked like the person's address step. An account
+          // with no address still shows it after this wait.
+          { do: "waitFor", target: "review.submit", optional: true, timeout: 15000 },
+          { do: "waitForHidden", target: "checkout.noAddress", optional: true, timeout: 4000 },
+        ],
       },
       {
         name: "continue",
