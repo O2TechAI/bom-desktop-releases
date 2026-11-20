@@ -11,7 +11,7 @@
     "node": ">=22.12.0"
   },
   "bomDesktop": {
-    "origin": "https://bom.o2tech.ai"
+    "origin": "https://test2.yuxianglin.xyz"
   },
   "scripts": {
     "assets": "node scripts/copy-assets.mjs",

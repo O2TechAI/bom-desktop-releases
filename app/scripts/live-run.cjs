@@ -35,7 +35,7 @@ const params = Object.fromEntries(rest.map((pair) => {
   return [pair.slice(0, at), pair.slice(at + 1)];
 }));
 
-const BOM_URL = process.env.BOM_DESKTOP_URL || "https://bom.o2tech.ai";
+const BOM_URL = process.env.BOM_DESKTOP_URL || "https://test2.yuxianglin.xyz";
 
 /* Runs in the page: every control inside the elements a CSS selector picks,
  * to write row-scoped targets from. */

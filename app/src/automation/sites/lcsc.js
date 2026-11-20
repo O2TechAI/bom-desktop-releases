@@ -39,8 +39,9 @@ const CART_ROW = {
 /* The open dialog (an address form inside it). */
 const DIALOG = { any: [{ css: ".v-dialog--active" }] };
 
-/* UNCONFIRMED: check this on the first signed-in run and fix it here. */
-const ORDERS_URL = "https://www.lcsc.com/order";
+/* (2026-11-20, live, signed in) "My Orders" in the account menu; the old
+ * /order sent the run back to the home page. */
+const ORDERS_URL = "https://www.lcsc.com/personalCenter/order/list";
 
 module.exports = {
   id: "lcsc",
@@ -127,6 +128,12 @@ module.exports = {
     title: T("The newest cart", "最新的购物车", "El carrito más reciente"),
     any: [{ css: ".menuable__content__active .selectCartItem .text-truncate" }],
   },
+  /* (2026-11-20, live) My Orders is a table: Order No., Your PO No., Order
+   * Date, Order Status, Order Value, then the row's actions. */
+  "orders.number": { title: T("Order number", "订单号", "Número de pedido"), any: [{ css: "td:nth-child(1)" }] },
+  "orders.date": { title: T("Date", "日期", "Fecha"), any: [{ css: "td:nth-child(3)" }] },
+  "orders.status": { title: T("Status", "状态", "Estado"), any: [{ css: "td:nth-child(4)" }] },
+  "orders.total": { title: T("Total", "总额", "Total"), any: [{ css: "td:nth-child(5)" }] },
   "checkout.noAddress": {
     title: T("No shipping address", "没有收货地址", "Sin dirección de envío"),
     any: [{ text: /no shipping address found/i }],

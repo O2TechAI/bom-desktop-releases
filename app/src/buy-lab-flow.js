@@ -771,7 +771,10 @@ function finished(snapshot) {
   if (snapshot.status === "done") return snapshot;
   if (snapshot.status === "stopped") throw stoppedError();
   const failed = snapshot.steps.find((step) => step.status === "failed");
-  throw new Error(failed?.error?.message || `The ${snapshot.task || "step"} didn't finish`);
+  // Which thing on the page it was: "It isn't on the page (Secure Checkout)".
+  const what = failed?.targetTitle?.en || failed?.target || "";
+  const message = failed?.error?.message || `The ${snapshot.task || "step"} didn't finish`;
+  throw new Error(what && !message.includes(what) ? `${message} (${what})` : message);
 }
 
 
