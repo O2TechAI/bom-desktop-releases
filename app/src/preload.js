@@ -22,7 +22,7 @@ contextBridge.exposeInMainWorld("o2Desktop", Object.freeze({
   // [{ part, quantity }] }], address, reference }) -> { ok, started, skipped,
   // addressUsed, addressNote }.
   buyLab: Object.freeze({
-    suppliers: Object.freeze(["digikey", "lcsc"]),
+    suppliers: Object.freeze(["digikey", "lcsc", "mouser"]),
     start: (payload) => ipcRenderer.invoke("desktop:buy-lab-start", payload),
   }),
   updates: Object.freeze({

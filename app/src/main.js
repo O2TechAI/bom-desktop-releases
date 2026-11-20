@@ -389,7 +389,7 @@ async function openBuyLab() {
     return buyLabWindow;
   }
   if (buyLabOpening) return buyLabOpening;
-  buyLabOpening = BuyLabWindow.create({
+  buyLabOpening = useAccountLanguage().then(() => BuyLabWindow.create({
     language,
     pageUrl: localUrl("buy-lab.html", { lang: language }),
     pagePreload: path.join(__dirname, "buy-lab-preload.js"),
@@ -398,7 +398,7 @@ async function openBuyLab() {
     openExternal: (url) => void openExternal(url),
     downloadsPath: app.getPath("downloads"),
     onClosed: () => { buyLabWindow = null; },
-  }).then(
+  })).then(
     (opened) => {
       buyLabWindow = opened;
       buyLabOpening = null;
@@ -410,6 +410,24 @@ async function openBuyLab() {
     },
   );
   return buyLabOpening;
+}
+
+
+/* The Buy lab speaks the language the person chose in BOM (their account's
+ * `language`), not the computer's (2026-11-20: a Chinese Windows showed a
+ * Chinese Buy lab to someone using BOM in English). No choice, or BOM not
+ * reachable: the computer's language, as before. */
+async function useAccountLanguage() {
+  try {
+    const response = await session.fromPartition(PARTITION).fetch(`${origin}/api/v1/auth/me`, { credentials: "include" });
+    if (!response.ok) return;
+    const chosen = (await response.json())?.user?.language;
+    if (!chosen) return;
+    language = languageFor(chosen);
+    t = translator(chosen);
+  } catch {
+    // keep the computer's language
+  }
 }
 
 
