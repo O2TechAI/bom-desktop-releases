@@ -327,7 +327,7 @@ function renderCartCheck(parts, check) {
     return tr;
   }));
   const verdict = check.issues ? copy.cartIssues.replace("{n}", String(check.issues)) : copy.cartAllGood;
-  parts.cartSummary.textContent = check.total ? `${verdict} · ${copy.cartTotal}: ${check.total}` : verdict;
+  parts.cartSummary.textContent = check.total ? `${verdict} · ${copy.cartTotal}: $${check.total}` : verdict;
   parts.cartSummary.dataset.tone = check.issues ? "waiting" : "";
 }
 
