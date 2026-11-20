@@ -17,7 +17,7 @@ const path = require("node:path");
 
 const { browserChoices } = require("./automation/browser");
 const { SITES } = require("./automation/sites");
-const { AddressBook, BuyLabFlow, siteAddress, siteOrderText } = require("./buy-lab-flow");
+const { AddressBook, BuyLabFlow, RunStore, siteAddress, siteOrderText } = require("./buy-lab-flow");
 const { LiveBrowser } = require("./live-browser");
 
 /* Behind the flow page (its own ground); the live overlay paints dark. */
@@ -50,6 +50,7 @@ class BuyLabWindow {
     this.loading = new Map();
     this.sites = SITES.filter((site) => LAB_SITES.includes(site.id));
     this.addresses = new AddressBook(userDataDir);
+    this.runs = new RunStore(userDataDir);
     /* The lists the BOM site handed over, by supplier, for the page's boxes. */
     this.listTexts = new Map();
 
@@ -85,6 +86,7 @@ class BuyLabWindow {
       getLive: (id) => this.lives.get(id),
       onChange: (state) => this.publishFlow(site.id, state),
       onChallenge: (open) => this.onChallenge(site.id, open),
+      store: this.runs,
     })]));
 
     this.page.webContents.on("did-finish-load", () => {
@@ -208,6 +210,12 @@ class BuyLabWindow {
       lists: Object.fromEntries(this.listTexts),
       active: this.active,
       view: this.view,
+      // A purchase that was interrupted, saved on this computer: it can go on
+      // even after the app was closed.
+      saved: Object.fromEntries(this.sites.map((site) => {
+        const record = this.runs.load(site.id);
+        return [site.id, record ? { progress: record.progress, savedAt: record.savedAt, rehearsal: Boolean(record.rehearsal) } : null];
+      })),
     };
   }
 
@@ -300,7 +308,10 @@ class BuyLabWindow {
     }
     this.listTexts.set(supplier, text);
     // The link keeps one job per supplier at a time (buy-service-link.js).
-    void this.startPurchase({ supplier, text, address, link }).catch((error) => {
+    const expected = Object.fromEntries((job.lines || []).filter((line) => line.unit_price != null)
+      .map((line) => [line.sku || line.mpn, line.unit_price]));
+    const resumeKey = `${job.purchase_request_id}:${supplier}`;
+    void this.startPurchase({ supplier, text, address, link, resumeKey, expected }).catch((error) => {
       this.failStart(supplier, error.message);
       link?.ended?.({ status: "failed", message: error.message });
     });
@@ -308,7 +319,7 @@ class BuyLabWindow {
     return true;
   }
 
-  async startPurchase({ supplier, text, addressId = "", address: given = null, link = null }) {
+  async startPurchase({ supplier, text, addressId = "", address: given = null, link = null, rehearsal = false, resumeKey = null, expected = null }) {
     // A chosen address that is gone stops here, rather than run without it.
     const address = given || (addressId ? this.addresses.find(addressId) : null);
     if (addressId && !given && !address) throw new Error("That address is no longer in the address book");
@@ -317,7 +328,35 @@ class BuyLabWindow {
     await this.ensureSite(supplier);
     if (!this.lives.has(supplier)) throw new Error("The supplier page did not start");
     if (!this.active) this.active = supplier;
-    await flow.start({ supplier, text, address, link });
+    await flow.start({ supplier, text, address, link, rehearsal, resumeKey, expected });
+    return true;
+  }
+
+  /** The cart check: the person says the cart is right, or asks to read it again. */
+  confirmCart(id) {
+    return Boolean(this.flows.get(id)?.confirmCart());
+  }
+
+  recheckCart(id) {
+    return Boolean(this.flows.get(id)?.recheckCart());
+  }
+
+  /** Go on with that supplier's interrupted purchase: the one in this window,
+   * or the one saved on this computer before the app was closed. */
+  async resume(id) {
+    const flow = this.flows.get(id);
+    if (!flow || flow.running) return false;
+    await this.ensureSite(id);
+    if (flow.state().canResume) {
+      void flow.resume().catch((error) => this.failStart(id, error.message));
+      return true;
+    }
+    const saved = this.runs.load(id);
+    if (!saved?.text) return false;
+    this.listTexts.set(id, saved.text);
+    void this.startPurchase({ supplier: id, text: saved.text, address: saved.address, rehearsal: saved.rehearsal, resumeKey: saved.resumeKey })
+      .catch((error) => this.failStart(id, error.message));
+    this.publish();
     return true;
   }
 
@@ -393,9 +432,9 @@ function registerBuyLabIpc() {
   ipcMain.handle("buy-lab:start", (event, payload) => {
     const owner = ownerOf(event);
     if (!owner) return false;
-    const { supplier, text, addressId } = payload && typeof payload === "object" ? payload : {};
+    const { supplier, text, addressId, rehearsal } = payload && typeof payload === "object" ? payload : {};
     const id = String(supplier || "");
-    return owner.startPurchase({ supplier: id, text: String(text || ""), addressId: String(addressId || "") }).catch((error) => {
+    return owner.startPurchase({ supplier: id, text: String(text || ""), addressId: String(addressId || ""), rehearsal: rehearsal === true }).catch((error) => {
       owner.failStart(id, error.message);
       return false;
     });
@@ -413,6 +452,9 @@ function registerBuyLabIpc() {
   ipcMain.handle("buy-lab:delete-address", (event, id) => ownerOf(event)?.addresses.remove(String(id || "")) ?? false);
   ipcMain.handle("buy-lab:stop", (event, id) => ownerOf(event)?.stop(String(id || "")) ?? false);
   ipcMain.handle("buy-lab:confirm", (event, id) => ownerOf(event)?.confirm(String(id || "")) ?? false);
+  ipcMain.handle("buy-lab:confirm-cart", (event, id) => ownerOf(event)?.confirmCart(String(id || "")) ?? false);
+  ipcMain.handle("buy-lab:recheck-cart", (event, id) => ownerOf(event)?.recheckCart(String(id || "")) ?? false);
+  ipcMain.handle("buy-lab:resume", async (event, id) => (await ownerOf(event)?.resume(String(id || ""))) ?? false);
   ipcMain.handle("buy-lab:select", (event, id) => ownerOf(event)?.select(String(id)) ?? false);
   ipcMain.handle("buy-lab:show-live", async (event, id) => {
     const owner = ownerOf(event);

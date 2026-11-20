@@ -501,7 +501,10 @@ test("a supplier with a bulk list adds the whole list in one call", async () => 
     machine: { states: {}, transitions: [] },
   };
   const calls = [];
-  const flow = new BuyLabFlow({ sites: [site], getLive: () => ({}), onChange: () => {} });
+  // The person says the cart is right when the cart check asks.
+  const flow = new BuyLabFlow({ sites: [site], getLive: () => ({}), onChange: (state) => {
+    if (state.message === "cart-check") setImmediate(() => flow.confirmCart());
+  } });
   flow.runTask = async (task, params) => {
     calls.push({ task, params });
     return { status: "done", steps: [], results: {} };
@@ -524,7 +527,10 @@ test("a supplier with a BOM tool uploads one CSV file", async () => {
   };
   const calls = [];
   let content = null;
-  const flow = new BuyLabFlow({ sites: [site], getLive: () => ({}), onChange: () => {} });
+  // The person says the cart is right when the cart check asks.
+  const flow = new BuyLabFlow({ sites: [site], getLive: () => ({}), onChange: (state) => {
+    if (state.message === "cart-check") setImmediate(() => flow.confirmCart());
+  } });
   flow.runTask = async (task, params) => {
     calls.push({ task, params });
     if (task === "bulkAddBom") content = fs.readFileSync(params.file, "utf8");

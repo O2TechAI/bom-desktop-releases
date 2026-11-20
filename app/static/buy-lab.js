@@ -28,9 +28,19 @@ const COPY = {
       bulk_error: "The supplier didn't take some lines (packaging or quantity): choose an option on its page, or remove the line.",
       lost: "The supplier page isn't one this app knows: open it and get to the next step yourself.",
       "nothing-added": "No line went into the cart, so the purchase stopped there.",
+      "cart-check": "Check the cart: is this what you want to buy?",
+      "cart-confirmed": "Cart confirmed: going to checkout",
+      "rehearsal-placed": "Rehearsal: stopped at the order's yes, nothing was ordered",
     },
     empty: "Nothing yet", orderNumber: "Order", none: "—",
-    demoBoth: "Demo (DigiKey + LCSC)", stopAll: "Stop all", openPage: "Open its page",
+    demoBoth: "Demo (DigiKey + LCSC + Mouser)", stopAll: "Stop all", openPage: "Open its page",
+    cartCheckTitle: "Check the cart", cartCheckText: "Compare it with your list before anything is bought.",
+    cartOk: "Correct, go to checkout", cartRecheck: "Re-check", cartList: "Your list", cartCart: "In the cart",
+    cartUnit: "Unit price", cartLine: "Line total", cartTotal: "Cart total", cartAllGood: "Every line matches your list.",
+    cartIssues: "{n} to look at", issues: { missing: "Not in the cart", quantity: "Other quantity", price: "Dearer than BOM", extra: "Not on your list" },
+    resume: "Continue", resumeSaved: "Continue the interrupted purchase",
+    rehearsal: "Rehearsal (no order)", rehearsalHint: "Runs to the order's yes, then stops: nothing is bought.",
+    placedTitle: "Order placed", rehearsalTitle: "Rehearsal: not ordered", placedNumber: "Order number",
     address: "Ship to", addressNone: "Not filled in for me", addressManage: "Addresses",
     addressNew: "New address", addressSave: "Save", addressDelete: "Delete", addressClose: "Close",
     addressNote: "Kept on this computer only. DigiKey's address form is filled from it; payment stays yours.",
@@ -62,9 +72,19 @@ const COPY = {
       bulk_error: "有料号没加进购物车（包装或数量不符）：请在供应商页面选择包装，或删除该行",
       lost: "供应商页面不是本应用认识的页面：请打开它，手动走到下一步",
       "nothing-added": "没有任何一行加入购物车，采购已在此停止",
+      "cart-check": "请核对购物车：这是你要买的吗？",
+      "cart-confirmed": "购物车已确认，正在进入结账",
+      "rehearsal-placed": "演练：停在确认下单这一步，没有下单",
     },
     empty: "还没有内容", orderNumber: "订单", none: "—",
-    demoBoth: "一键演示（DigiKey + LCSC）", stopAll: "全部停止", openPage: "打开它的页面",
+    demoBoth: "一键演示（DigiKey + LCSC + Mouser）", stopAll: "全部停止", openPage: "打开它的页面",
+    cartCheckTitle: "核对购物车", cartCheckText: "下单前，和你的清单对一下。",
+    cartOk: "没问题，去结账", cartRecheck: "重新读取", cartList: "你的清单", cartCart: "购物车里",
+    cartUnit: "单价", cartLine: "小计", cartTotal: "购物车合计", cartAllGood: "每一行都和清单对得上。",
+    cartIssues: "有 {n} 处要看", issues: { missing: "购物车里没有", quantity: "数量不同", price: "比 BOM 贵", extra: "清单里没有" },
+    resume: "继续", resumeSaved: "继续上次中断的采购",
+    rehearsal: "演练（不下单）", rehearsalHint: "走到确认下单就停，不会买任何东西。",
+    placedTitle: "已下单", rehearsalTitle: "演练：未下单", placedNumber: "订单号",
     address: "收货地址", addressNone: "不自动填写", addressManage: "地址簿",
     addressNew: "新增地址", addressSave: "保存", addressDelete: "删除", addressClose: "关闭",
     addressNote: "只保存在这台电脑上。用于自动填写 DigiKey 的收货地址；付款仍由你自己填写。",
@@ -96,9 +116,19 @@ const COPY = {
       bulk_error: "El proveedor no aceptó algunas líneas (empaque o cantidad): elige una opción en su página o quita la línea.",
       lost: "La página del proveedor no es una que esta app conozca: ábrela y avanza tú al siguiente paso.",
       "nothing-added": "Ninguna línea entró al carrito, así que la compra se detuvo ahí.",
+      "cart-check": "Revisa el carrito: ¿es lo que quieres comprar?",
+      "cart-confirmed": "Carrito confirmado: yendo al pago",
+      "rehearsal-placed": "Ensayo: se detuvo en la confirmación del pedido, no se pidió nada",
     },
     empty: "Nada todavía", orderNumber: "Pedido", none: "—",
-    demoBoth: "Demostración (DigiKey + LCSC)", stopAll: "Detener todo", openPage: "Abrir su página",
+    demoBoth: "Demostración (DigiKey + LCSC + Mouser)", stopAll: "Detener todo", openPage: "Abrir su página",
+    cartCheckTitle: "Revisa el carrito", cartCheckText: "Compáralo con tu lista antes de comprar nada.",
+    cartOk: "Correcto, ir al pago", cartRecheck: "Volver a leer", cartList: "Tu lista", cartCart: "En el carrito",
+    cartUnit: "Precio unitario", cartLine: "Total de la línea", cartTotal: "Total del carrito", cartAllGood: "Todas las líneas coinciden con tu lista.",
+    cartIssues: "{n} por revisar", issues: { missing: "No está en el carrito", quantity: "Otra cantidad", price: "Más caro que en BOM", extra: "No está en tu lista" },
+    resume: "Continuar", resumeSaved: "Continuar la compra interrumpida",
+    rehearsal: "Ensayo (sin pedido)", rehearsalHint: "Llega a la confirmación del pedido y se detiene: no se compra nada.",
+    placedTitle: "Pedido realizado", rehearsalTitle: "Ensayo: sin pedido", placedNumber: "Número de pedido",
     address: "Enviar a", addressNone: "No rellenar por mí", addressManage: "Direcciones",
     addressNew: "Nueva dirección", addressSave: "Guardar", addressDelete: "Eliminar", addressClose: "Cerrar",
     addressNote: "Solo en este equipo. Rellena el formulario de dirección de DigiKey; el pago sigue siendo tuyo.",
@@ -113,10 +143,13 @@ document.documentElement.lang = language;
 /* One click for a demo: a small list for each supplier, run at the same time.
  * DigiKey takes its own cut-tape numbers (Bulk Add and the file upload match
  * a bare MPN to its reel, which isn't sold by tens): RC0402FR-0710KL and
- * GRM155R71C104KA88D. LCSC takes its own C-numbers. */
+ * GRM155R71C104KA88D. LCSC takes its own C-numbers. Mouser takes its own
+ * numbers in its Price & Availability list (both checked on mouser.com,
+ * 2026-11-20): a 10 kΩ 0603 resistor and a single AND gate. */
 const DEMO = {
   digikey: "311-10.0KLRCT-ND 10\n490-3261-1-ND 10",
   lcsc: "C1525 10\nC25804 10",
+  mouser: "603-RC0603FR-0710KL 10\n595-SN74LVC1G08DBVR 10",
 };
 const ADDRESS_FIELDS = ["label", "customerType", "firstName", "lastName", "company", "email", "phone", "line1", "line2", "city", "state", "zip"];
 /* DigiKey's "Customer type" codes, as its form names them. */
@@ -148,6 +181,9 @@ const elements = {
   addressClose: $("[data-address-close]"),
   addressMessage: $("[data-address-message]"),
   demo: $("[data-demo]"),
+  rehearsal: $("[data-rehearsal]"),
+  rehearsalLabel: $("[data-rehearsal-label]"),
+  rehearsalText: $("[data-rehearsal-text]"),
   stopAll: $("[data-stop-all]"),
   external: $("[data-external]"),
   hint: $("[data-hint]"),
@@ -163,6 +199,8 @@ elements.addressDelete.textContent = copy.addressDelete;
 elements.addressNew.textContent = copy.addressNew;
 elements.addressClose.textContent = copy.addressClose;
 elements.demo.textContent = copy.demoBoth;
+elements.rehearsalText.textContent = copy.rehearsal;
+elements.rehearsalLabel.title = copy.rehearsalHint;
 elements.stopAll.textContent = copy.stopAll;
 elements.external.textContent = copy.external;
 elements.hint.textContent = copy.hint;
@@ -216,6 +254,24 @@ function buildPanel(site) {
   const confirm = make("button", { className: "primary", type: "button", textContent: copy.confirm });
   const confirmCard = make("div", { className: "confirm-box", hidden: true },
     make("div", {}, make("h3", { className: "card-title", textContent: copy.confirmTitle }), confirmText), confirm);
+  const resume = make("button", { className: "primary", type: "button", textContent: copy.resume, hidden: true });
+  const cartRows = make("tbody");
+  const cartSummary = make("p", { className: "card-body" });
+  const cartOk = make("button", { className: "primary", type: "button", textContent: copy.cartOk });
+  const cartRecheck = make("button", { className: "quiet", type: "button", textContent: copy.cartRecheck });
+  const cartStop = make("button", { className: "quiet", type: "button", textContent: copy.stop });
+  const cartHead = make("tr", {}, make("th", { textContent: copy.part }), make("th", { textContent: copy.cartList }),
+    make("th", { textContent: copy.cartCart }), make("th", { textContent: copy.cartUnit }), make("th", { textContent: copy.cartLine }),
+    make("th", { textContent: copy.note }));
+  const cartCheckCard = make("div", { className: "cart-check", hidden: true },
+    make("h3", { className: "card-title", textContent: copy.cartCheckTitle }),
+    make("p", { className: "card-body", textContent: copy.cartCheckText }),
+    make("table", { className: "lines" }, make("thead", {}, cartHead), cartRows),
+    cartSummary,
+    make("div", { className: "row" }, cartOk, cartRecheck, cartStop));
+  const placedTitle = make("h3", { className: "card-title" });
+  const placedBody = make("p", { className: "card-body" });
+  const placedCard = make("div", { className: "placed-box", hidden: true }, placedTitle, placedBody);
   const lines = make("tbody");
   const head = make("tr", {}, make("th", { className: "n", textContent: "#" }), make("th", { textContent: copy.part }),
     make("th", { textContent: copy.qty }), make("th", { textContent: copy.state }), make("th", { textContent: copy.note }));
@@ -227,8 +283,10 @@ function buildPanel(site) {
   panel.append(
     make("div", { className: "panel-head" }, make("h2", { className: "card-title", textContent: site.name }), status, openPage),
     list,
-    make("div", { className: "row" }, start, stop),
+    make("div", { className: "row" }, start, stop, resume),
+    cartCheckCard,
     confirmCard,
+    placedCard,
     table,
     make("div", { className: "minis" }, block(copy.cart, cart), block(copy.orders, orders), block(copy.tracking, tracking)),
   );
@@ -239,18 +297,59 @@ function buildPanel(site) {
   });
   stop.addEventListener("click", () => { void window.buyLab.stop(site.id); });
   confirm.addEventListener("click", () => { void window.buyLab.confirm(site.id); });
+  cartOk.addEventListener("click", () => { void window.buyLab.confirmCart(site.id); });
+  cartRecheck.addEventListener("click", () => { void window.buyLab.recheckCart(site.id); });
+  cartStop.addEventListener("click", () => { void window.buyLab.stop(site.id); });
+  resume.addEventListener("click", () => { void window.buyLab.resume(site.id); });
   openPage.addEventListener("click", () => { void window.buyLab.showLive(site.id); });
 
-  const parts = { panel, status, list, start, stop, confirmCard, confirmText, confirm, lines, cart, orders, tracking };
+  const parts = { panel, status, list, start, stop, resume, cartCheckCard, cartRows, cartSummary, placedCard, placedTitle, placedBody,
+    confirmCard, confirmText, confirm, lines, cart, orders, tracking };
   panels.set(site.id, parts);
   elements.suppliers.append(panel);
   return parts;
 }
 
-function renderPanel(parts, state) {
+function renderCartCheck(parts, check) {
+  parts.cartCheckCard.hidden = !check;
+  if (!check) return;
+  parts.cartRows.replaceChildren(...check.lines.map((line) => {
+    const note = line.issue ? make("span", { className: "pill", textContent: copy.issues[line.issue] || line.issue }) : "";
+    if (note) note.dataset.state = "failed";
+    const tr = make("tr", {},
+      make("td", { textContent: line.part }),
+      make("td", { textContent: line.quantity ?? copy.none }),
+      make("td", { textContent: line.cartQuantity ?? copy.none }),
+      make("td", { textContent: line.unitPrice || copy.none }),
+      make("td", { textContent: line.extended || copy.none }),
+      make("td", {}, note));
+    if (line.issue) tr.dataset.issue = line.issue;
+    return tr;
+  }));
+  const verdict = check.issues ? copy.cartIssues.replace("{n}", String(check.issues)) : copy.cartAllGood;
+  parts.cartSummary.textContent = check.total ? `${verdict} · ${copy.cartTotal}: ${check.total}` : verdict;
+  parts.cartSummary.dataset.tone = check.issues ? "waiting" : "";
+}
+
+function renderPlaced(parts, placed) {
+  parts.placedCard.hidden = !placed;
+  if (!placed) return;
+  parts.placedCard.dataset.rehearsal = placed.rehearsal ? "true" : "false";
+  parts.placedTitle.textContent = placed.rehearsal ? copy.rehearsalTitle : copy.placedTitle;
+  const when = placed.at ? new Date(placed.at).toLocaleString(language) : "";
+  parts.placedBody.textContent = [`${copy.placedNumber}: ${placed.orderNumber || copy.none}`, placed.total, when].filter(Boolean).join(" · ");
+}
+
+function renderPanel(parts, state, saved) {
   parts.status.textContent = statusText(state);
   parts.status.dataset.tone = tone(state);
   parts.start.disabled = Boolean(state.running);
+  // Continue: this window's interrupted purchase, or one saved before the app closed.
+  const savedRun = !state.running && !state.lines.length && saved;
+  parts.resume.hidden = !(state.canResume || savedRun);
+  parts.resume.textContent = state.canResume ? copy.resume : copy.resumeSaved;
+  renderCartCheck(parts, state.cartCheck);
+  renderPlaced(parts, state.placed);
   parts.stop.disabled = !state.running;
   parts.list.disabled = Boolean(state.running);
 
@@ -295,7 +394,7 @@ function render(state) {
       parts.handed = handed;
       parts.list.value = handed;
     }
-    renderPanel(parts, state.flows[site.id]);
+    renderPanel(parts, state.flows[site.id], state.saved?.[site.id]);
   }
   const anyRunning = Object.values(state.flows).some((flow) => flow.running);
   elements.stopAll.disabled = !anyRunning;
@@ -309,7 +408,7 @@ function addressId() {
 }
 
 async function startOne(id, text) {
-  await window.buyLab.start({ supplier: id, text, addressId: addressId() });
+  await window.buyLab.start({ supplier: id, text, addressId: addressId(), rehearsal: Boolean(elements.rehearsal?.checked) });
 }
 
 elements.demo.addEventListener("click", async () => {

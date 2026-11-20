@@ -339,6 +339,26 @@ table.lines td.n { width: 40px; color: var(--muted, #5b6b76); }
 
 .panel .row { margin-top: 0; }
 
+/* The cart check before checkout, and what was placed. */
+.cart-check {
+  border: 1px solid var(--line, #d9dfd9);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin: 12px 0;
+}
+.cart-check .card-title { margin: 0 0 4px; }
+.cart-check tr[data-issue] td { color: var(--danger, #a33a2b); }
+.cart-check p[data-tone="waiting"] { font-weight: 600; }
+.placed-box {
+  border: 1px solid var(--line, #d9dfd9);
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin: 12px 0;
+}
+.placed-box .card-title { margin: 0 0 4px; }
+.placed-box[data-rehearsal="true"] { border-style: dashed; }
+.rehearsal { display: inline-flex; align-items: center; gap: 6px; margin-left: 12px; font-size: 13px; }
+
 .confirm-box {
   display: flex;
   align-items: center;

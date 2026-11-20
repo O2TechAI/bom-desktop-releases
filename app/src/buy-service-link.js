@@ -164,16 +164,25 @@ class ServiceLink {
           supplier_order_number: orderNumber ? String(orderNumber).slice(0, 64) : null,
         });
       },
+      // Ended without an order. Only a list that never went into the cart is
+      // over (BOM learns its lines can't be had here); anything else was
+      // interrupted (stopped, a page it didn't know, the app closing) and
+      // waits for the person's Continue in the Buy lab, or for the buyer to
+      // cancel it in BOM. It is not started again by itself.
       ended: async ({ status, message }) => {
         this.running.delete(key);
         if (run.placed || run.stopped) return;
         this.ended.add(key);
-        const why = String(message || status || "The Buy lab stopped").slice(0, 500);
-        if (!run.cartSent) {
+        if (message === "nothing-added" && !run.cartSent) {
+          const why = String(message || status || "The Buy lab stopped").slice(0, 500);
           await this.post("cart", { purchase_request_id: run.job.purchase_request_id, seller: run.job.seller, failed: why });
-        } else {
-          await this.post("order", { purchase_request_id: run.job.purchase_request_id, seller: run.job.seller, failed: why });
         }
+      },
+      // The person pressed Continue: the job is this run's again.
+      resumed: () => {
+        this.ended.delete(key);
+        run.stopped = false;
+        this.running.set(key, run);
       },
     };
   }
