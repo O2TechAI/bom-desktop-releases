@@ -35,7 +35,8 @@ class BuyLabWindow {
     return window;
   }
 
-  constructor({ language, pageUrl, pagePreload, partition, userDataDir, downloadsPath, openExternal, onClosed }) {
+  constructor({ language, pageUrl, pagePreload, partition, userDataDir, downloadsPath, openExternal, onClosed, serviceStatus = null }) {
+    this.serviceStatus = serviceStatus;
     this.language = language;
     this.openExternal = openExternal;
     this.downloadsPath = downloadsPath;
@@ -210,6 +211,8 @@ class BuyLabWindow {
       lists: Object.fromEntries(this.listTexts),
       active: this.active,
       view: this.view,
+      // BOM's purchasing service, as its last call answered.
+      service: this.serviceStatus?.() || null,
       // A purchase that was interrupted, saved on this computer: it can go on
       // even after the app was closed.
       saved: Object.fromEntries(this.sites.map((site) => {

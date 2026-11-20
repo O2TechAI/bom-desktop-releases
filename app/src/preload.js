@@ -11,6 +11,9 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 const versionArg = process.argv.find((arg) => arg.startsWith("--bom-desktop-version="));
+// Every supplier the Buy lab has a profile for (main.js BUY_LAB_SUPPLIERS).
+const suppliersArg = process.argv.find((arg) => arg.startsWith("--bom-desktop-suppliers="));
+const suppliers = suppliersArg ? suppliersArg.slice("--bom-desktop-suppliers=".length).split(",").filter(Boolean) : [];
 
 contextBridge.exposeInMainWorld("o2Desktop", Object.freeze({
   platform: process.platform,
@@ -22,7 +25,7 @@ contextBridge.exposeInMainWorld("o2Desktop", Object.freeze({
   // [{ part, quantity }] }], address, reference }) -> { ok, started, skipped,
   // addressUsed, addressNote }.
   buyLab: Object.freeze({
-    suppliers: Object.freeze(["digikey", "lcsc", "mouser"]),
+    suppliers: Object.freeze(suppliers),
     start: (payload) => ipcRenderer.invoke("desktop:buy-lab-start", payload),
   }),
   updates: Object.freeze({

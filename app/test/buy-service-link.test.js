@@ -121,3 +121,35 @@ test("one supplier runs one job at a time", async () => {
   await link.tick();
   assert.deepEqual(lab.started.map((job) => job.purchase_request_id), ["pr_1"]);
 });
+
+
+test("nothing decides beforehand whether the service is there: its answer is reported, once per change", async () => {
+  const answers = [404, 404, 401, 200];
+  const statuses = [];
+  const logs = [];
+  const link = new ServiceLink({
+    fetch: async () => {
+      const status = answers.shift();
+      return { ok: status === 200, status, json: async () => ({ jobs: [] }) };
+    },
+    origin: "https://bom.test", openBuyLab: async () => ({}), version: "9.9.9",
+    log: (message) => logs.push(message), onStatus: (status) => statuses.push(status),
+  });
+  for (let i = 0; i < 4; i += 1) await link.tick();
+  assert.deepEqual(statuses.map((status) => [status.state, status.http ?? null]), [["error", 404], ["error", 401], ["ok", null]]);
+  assert.equal(logs.length, 2, "the same failure is logged once, not every round");
+  assert.deepEqual(link.status, { state: "ok" });
+});
+
+
+test("the suppliers Buying may hand over are the Buy lab's own profiles, not a list kept by hand", () => {
+  const fs = require("node:fs");
+  const main = fs.readFileSync(require.resolve("../src/main.js"), "utf8");
+  const preload = fs.readFileSync(require.resolve("../src/preload.js"), "utf8");
+  assert.match(main, /BUY_LAB_SUPPLIERS = SITES\.filter\(\(site\) => REQUIRED_TASKS\.every/);
+  assert.match(preload, /suppliers: Object\.freeze\(suppliers\)/);
+  assert.doesNotMatch(preload, /Object\.freeze\(\["digikey"/);
+  const { SITES } = require("../src/automation/sites");
+  const { REQUIRED_TASKS } = require("../src/buy-lab-flow");
+  assert.deepEqual(SITES.filter((site) => REQUIRED_TASKS.every((task) => site.tasks[task])).map((site) => site.id).sort(), ["digikey", "lcsc", "mouser"]);
+});

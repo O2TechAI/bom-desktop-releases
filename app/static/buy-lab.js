@@ -41,6 +41,9 @@ const COPY = {
     resume: "Continue", resumeSaved: "Continue the interrupted purchase",
     rehearsal: "Rehearsal (no order)", rehearsalHint: "Runs to the order's yes, then stops: nothing is bought.",
     placedTitle: "Order placed", rehearsalTitle: "Rehearsal: not ordered", placedNumber: "Order number",
+    serviceSignIn: "BOM's purchasing service: sign in to BOM in this app to receive purchases from Buying.",
+    serviceMissing: "BOM's purchasing service isn't on this site (404): purchases from Buying can't reach the Buy lab.",
+    serviceError: "BOM's purchasing service didn't answer:",
     address: "Ship to", addressNone: "Not filled in for me", addressManage: "Addresses",
     addressNew: "New address", addressSave: "Save", addressDelete: "Delete", addressClose: "Close",
     addressNote: "Kept on this computer only. DigiKey's address form is filled from it; payment stays yours.",
@@ -85,6 +88,9 @@ const COPY = {
     resume: "继续", resumeSaved: "继续上次中断的采购",
     rehearsal: "演练（不下单）", rehearsalHint: "走到确认下单就停，不会买任何东西。",
     placedTitle: "已下单", rehearsalTitle: "演练：未下单", placedNumber: "订单号",
+    serviceSignIn: "BOM 采购服务：请先在本 app 里登录 BOM，才能接收 Buying 发来的采购。",
+    serviceMissing: "这个网站上没有 BOM 采购服务（404）：Buying 的采购到不了 Buy lab。",
+    serviceError: "BOM 采购服务没有响应：",
     address: "收货地址", addressNone: "不自动填写", addressManage: "地址簿",
     addressNew: "新增地址", addressSave: "保存", addressDelete: "删除", addressClose: "关闭",
     addressNote: "只保存在这台电脑上。用于自动填写 DigiKey 的收货地址；付款仍由你自己填写。",
@@ -129,6 +135,9 @@ const COPY = {
     resume: "Continuar", resumeSaved: "Continuar la compra interrumpida",
     rehearsal: "Ensayo (sin pedido)", rehearsalHint: "Llega a la confirmación del pedido y se detiene: no se compra nada.",
     placedTitle: "Pedido realizado", rehearsalTitle: "Ensayo: sin pedido", placedNumber: "Número de pedido",
+    serviceSignIn: "Servicio de compras de BOM: inicia sesión en BOM en esta app para recibir compras desde Buying.",
+    serviceMissing: "Este sitio no tiene el servicio de compras de BOM (404): las compras de Buying no llegan al Buy lab.",
+    serviceError: "El servicio de compras de BOM no respondió:",
     address: "Enviar a", addressNone: "No rellenar por mí", addressManage: "Direcciones",
     addressNew: "Nueva dirección", addressSave: "Guardar", addressDelete: "Eliminar", addressClose: "Cerrar",
     addressNote: "Solo en este equipo. Rellena el formulario de dirección de DigiKey; el pago sigue siendo tuyo.",
@@ -182,6 +191,7 @@ const elements = {
   addressMessage: $("[data-address-message]"),
   demo: $("[data-demo]"),
   rehearsal: $("[data-rehearsal]"),
+  service: $("[data-service]"),
   rehearsalLabel: $("[data-rehearsal-label]"),
   rehearsalText: $("[data-rehearsal-text]"),
   stopAll: $("[data-stop-all]"),
@@ -381,6 +391,18 @@ function renderPanel(parts, state, saved) {
   fillList(parts.tracking, state.tracking, (track) => row(track.order || copy.none, track.status || copy.none));
 }
 
+/* What BOM's purchasing service last answered: nothing is shown while it
+ * works; anything else is said, never hidden. */
+function renderService(service) {
+  if (!elements.service) return;
+  const failed = service && service.state === "error";
+  elements.service.hidden = !failed;
+  if (!failed) return;
+  elements.service.textContent = service.http === 401 ? copy.serviceSignIn
+    : service.http === 404 ? copy.serviceMissing
+    : `${copy.serviceError} ${service.message || ""}`.trim();
+}
+
 let current = null;
 
 function render(state) {
@@ -396,6 +418,7 @@ function render(state) {
     }
     renderPanel(parts, state.flows[site.id], state.saved?.[site.id]);
   }
+  renderService(state.service);
   const anyRunning = Object.values(state.flows).some((flow) => flow.running);
   elements.stopAll.disabled = !anyRunning;
   elements.demo.disabled = Object.values(state.flows).some((flow) => flow.running);
