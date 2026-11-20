@@ -58,7 +58,11 @@ class ServiceLink {
    * @param {() => Promise<object>} options.openBuyLab
    * @param {string} options.version
    */
-  constructor({ fetch, origin, openBuyLab, version, log = () => {} }) {
+  constructor({ fetch, origin, openBuyLab, version, log = () => {}, onStatus = () => {} }) {
+    this.onStatus = onStatus;
+    // How the last call to the service went, for the Buy lab to show:
+    // { state: "ok" } or { state: "error", http, message }.
+    this.status = { state: "unknown" };
     this.fetch = fetch;
     this.origin = origin;
     this.openBuyLab = openBuyLab;
@@ -105,11 +109,16 @@ class ServiceLink {
     this.busy = true;
     try {
       const answer = await this.post("heartbeat", { app_version: this.version });
+      this.setStatus({ state: "ok" });
       this.jobs = Array.isArray(answer.jobs) ? answer.jobs : [];
       await this.follow();
     } catch (error) {
-      // Not signed in to BOM (401), or a BOM without the service (404): idle.
-      if (error.status !== 401 && error.status !== 404) this.log(`buy service: ${error.message}`);
+      // Nothing decides beforehand whether the service is there: the call is
+      // made, and what it answered is shown (not signed in to BOM, a site
+      // without the service, the service failing, no network).
+      if (this.setStatus({ state: "error", http: error.status || null, message: String(error.message || error).slice(0, 200) })) {
+        this.log(`buy service: ${error.message}`);
+      }
     } finally {
       this.busy = false;
     }
@@ -145,6 +154,13 @@ class ServiceLink {
         lab.showFor?.(job.seller);
       }
     }
+  }
+
+  setStatus(status) {
+    const changed = JSON.stringify(status) !== JSON.stringify(this.status);
+    this.status = status;
+    if (changed) this.onStatus(status);
+    return changed;
   }
 
   /** What the flow tells the service, for one job. */

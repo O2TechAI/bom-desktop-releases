@@ -339,6 +339,16 @@ table.lines td.n { width: 40px; color: var(--muted, #5b6b76); }
 
 .panel .row { margin-top: 0; }
 
+/* BOM's purchasing service, when its last call failed. */
+.service-note {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--warn-bg, #fff4e5);
+  color: var(--warn-fg, #7a4b00);
+  font-size: 13px;
+}
+
 /* The cart check before checkout, and what was placed. */
 .cart-check {
   border: 1px solid var(--line, #d9dfd9);

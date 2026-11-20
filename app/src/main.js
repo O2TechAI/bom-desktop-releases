@@ -19,6 +19,12 @@ const { buildMenuTemplate } = require("./menu");
 const { classifyNavigation, mayNavigate, mayUsePermission } = require("./policy");
 const { startUpdater } = require("./updater");
 const { SITES, defineSite } = require("./automation/sites");
+const { REQUIRED_TASKS } = require("./buy-lab-flow");
+
+/* The suppliers the Buy lab can buy from: every site profile with the tasks a
+ * purchase needs, not a list kept by hand (2026-11-20: a supplier missing from
+ * a fixed list was greyed out on the site although the Buy lab could buy there). */
+const BUY_LAB_SUPPLIERS = SITES.filter((site) => REQUIRED_TASKS.every((task) => site.tasks[task])).map((site) => site.id);
 const { browserChoices, profileDir } = require("./automation/browser");
 const { localFixture } = require("./automation/supplier-session");
 const { SupplierWindow, registerAutomationIpc } = require("./automation/window");
@@ -128,7 +134,7 @@ function webPreferences() {
     webviewTag: false,
     navigateOnDragDrop: false,
     spellcheck: true,
-    additionalArguments: [`--bom-desktop-version=${app.getVersion()}`],
+    additionalArguments: [`--bom-desktop-version=${app.getVersion()}`, `--bom-desktop-suppliers=${BUY_LAB_SUPPLIERS.join(",")}`],
   };
 }
 
@@ -394,6 +400,7 @@ async function openBuyLab() {
     pageUrl: localUrl("buy-lab.html", { lang: language }),
     pagePreload: path.join(__dirname, "buy-lab-preload.js"),
     partition: PARTITION,
+    serviceStatus: () => serviceLink?.status || null,
     userDataDir: app.getPath("userData"),
     openExternal: (url) => void openExternal(url),
     downloadsPath: app.getPath("downloads"),
@@ -605,6 +612,7 @@ if (!app.requestSingleInstanceLock()) {
       openBuyLab,
       version: app.getVersion(),
       log: (message) => console.warn(message),
+      onStatus: () => buyLabWindow?.publish?.(),
     });
     serviceLink.start();
   });
