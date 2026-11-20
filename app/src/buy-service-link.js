@@ -87,6 +87,7 @@ class ServiceLink {
   async post(path, body) {
     const response = await this.fetch(`${this.origin}${BASE}/${path}`, {
       method: "POST",
+      credentials: "include", // the BOM session cookie: who this desktop works for
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     });
