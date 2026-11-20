@@ -242,6 +242,7 @@ class BuyLabFlow {
     this.lines = [];
     this.confirm = null;
     this.cart = null;
+    this.link = null;
     this.orderNumber = null;
     this.orders = [];
     this.tracking = [];
@@ -355,7 +356,13 @@ class BuyLabFlow {
     this.emit();
   }
 
-  async start({ supplier, text, address = null }) {
+  /* `link`: a purchase the Buy lab service (BOM's purchasing service) handed
+   * over, told what happens: `cart(rows)` once the cart is read (its live
+   * quote), `mayConfirm()` whether the buyer has approved what BOM must
+   * approve first, `placed({ orderNumber })` after the person's yes went
+   * through, `ended(state)` when the run ends however it ends. Without it a
+   * purchase runs as it always has. */
+  async start({ supplier, text, address = null, link = null }) {
     if (this.running) throw new Error("A purchase is already running");
     const lines = parseLines(text);
     if (!lines.length) throw new Error("Paste at least one line: part number and quantity");
@@ -363,6 +370,7 @@ class BuyLabFlow {
     this.supplier = supplier;
     this.address = address ? cleanAddress(address) : null;
     this.stopRequested = false;
+    this.link = link;
     this.session = { warmedUp: false };
     this.lines = lines.map((line, index) => ({ ...line, index, status: "pending", error: null, price: null }));
     this.cart = null;
@@ -450,6 +458,7 @@ class BuyLabFlow {
       this.emit({ message: "reading-cart" });
       const cart = finished(await this.runTask("openCart"));
       this.cart = Array.isArray(cart.results?.cart) ? cart.results.cart : [];
+      if (this.link?.cart) await this.link.cart(this.cart).catch(() => {});
 
       this.emit({ message: "placing-order" });
       // A saved address fills the supplier's shipping form, where the site
@@ -459,6 +468,7 @@ class BuyLabFlow {
         ? this.runTask("placeOrderWithAddress", addressParams(this.address))
         : this.runTask("placeOrder")));
       this.orderNumber = placed.results?.orderNumber || null;
+      if (this.link?.placed) await this.link.placed({ orderNumber: this.orderNumber }).catch(() => {});
 
       this.emit({ message: "reading-orders" });
       const orders = finished(await this.runTask("orders"));
@@ -496,6 +506,7 @@ class BuyLabFlow {
       this.runner = null;
       this.confirm = null;
       this.emit();
+      if (this.link?.ended) void Promise.resolve(this.link.ended({ status: this.status, message: this.message })).catch(() => {});
     }
   }
 
@@ -507,6 +518,11 @@ class BuyLabFlow {
   }
 
   approve() {
+    // A price BOM's buyer has not approved yet: the yes waits for theirs.
+    if (this.link?.mayConfirm && !this.link.mayConfirm()) {
+      this.emit({ message: "waiting-bom-approval" });
+      return false;
+    }
     const approved = Boolean(this.runner?.approve());
     if (approved) {
       this.confirm = null;
