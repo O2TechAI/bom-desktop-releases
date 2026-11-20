@@ -284,7 +284,31 @@ class BuyLabWindow {
     return { ok: started.length > 0, started, skipped, addressUsed: Boolean(address), addressNote };
   }
 
-  async startPurchase({ supplier, text, addressId = "", address: given = null }) {
+  /** A purchase the Buy lab service handed this desktop (buy-service-link.js):
+   * one supplier's lines of one BOM purchase request, shipped to its address.
+   * Started only when that supplier's purchase is free; false otherwise. */
+  startFromService(job, link) {
+    const supplier = String(job?.seller || "");
+    const flow = this.flows.get(supplier);
+    const text = siteOrderText({ supplier, lines: (job?.lines || []).map((line) => ({ part: line.sku || line.mpn, quantity: line.quantity })) });
+    if (!flow || flow.running || !text) return false;
+    let address = null;
+    try {
+      address = siteAddress(job.ship_to);
+    } catch {
+      address = null; // the supplier's form stays the person's
+    }
+    this.listTexts.set(supplier, text);
+    // The link keeps one job per supplier at a time (buy-service-link.js).
+    void this.startPurchase({ supplier, text, address, link }).catch((error) => {
+      this.failStart(supplier, error.message);
+      link?.ended?.({ status: "failed", message: error.message });
+    });
+    this.publish();
+    return true;
+  }
+
+  async startPurchase({ supplier, text, addressId = "", address: given = null, link = null }) {
     // A chosen address that is gone stops here, rather than run without it.
     const address = given || (addressId ? this.addresses.find(addressId) : null);
     if (addressId && !given && !address) throw new Error("That address is no longer in the address book");
@@ -293,7 +317,7 @@ class BuyLabWindow {
     await this.ensureSite(supplier);
     if (!this.lives.has(supplier)) throw new Error("The supplier page did not start");
     if (!this.active) this.active = supplier;
-    await flow.start({ supplier, text, address });
+    await flow.start({ supplier, text, address, link });
     return true;
   }
 

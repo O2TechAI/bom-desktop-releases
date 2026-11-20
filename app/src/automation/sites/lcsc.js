@@ -248,6 +248,16 @@ module.exports = {
       title: T("Quantity", "数量", "Cantidad"),
       any: [{ css: "input[id^='qty-field-']" }, { css: "input" }],
     },
+    /* (2026-11-20, live) Each cart line shows "$0.0025" in .unitPriceWrap and
+     * its total in .extPriceWrap: the live quote the Buy lab service compares. */
+    "cart.unitPrice": {
+      title: T("Unit price", "单价", "Precio unitario"),
+      any: [{ css: ".unitPriceWrap" }],
+    },
+    "cart.extended": {
+      title: T("Extended price", "小计", "Precio total"),
+      any: [{ css: ".extPriceWrap" }],
+    },
     "cart.row": {
       title: T("The part's cart line", "该型号的购物车行", "La línea de la pieza"),
       ...CART_ROW,
@@ -510,7 +520,7 @@ module.exports = {
     addToCart: [{ do: "walk", to: ["product", "results"] }, { do: "act", name: ["addToCartHere", "addToCart"] }],
     openCart: [
       { do: "walk", to: "cart" },
-      { do: "extract", target: "cart.rows", fields: { part: { target: "cart.part" }, quantity: { target: "cart.quantity", read: "value" } }, as: "cart", optional: true, timeout: 5000 },
+      { do: "extract", target: "cart.rows", fields: { part: { target: "cart.part" }, quantity: { target: "cart.quantity", read: "value" }, unitPrice: { target: "cart.unitPrice" }, extended: { target: "cart.extended" } }, as: "cart", optional: true, timeout: 5000 },
     ],
     removeFromCart: [
       { do: "walk", to: "cart" },
