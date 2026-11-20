@@ -11,7 +11,9 @@ const { ACTIONS, Runner } = require("../src/automation/runner");
 const { SITES, defineSite } = require("../src/automation/sites");
 const { COMMON_TARGETS } = require("../src/automation/sites/common");
 const { BuyLabFlow, bulkLines, parseLines } = require("../src/buy-lab-flow");
+const { FALLBACK, readGround, validGround, writeGround } = require("../src/ground");
 const fs = require("node:fs");
+const os = require("node:os");
 const {
   browserChoices,
   launchBounds,
@@ -535,6 +537,19 @@ test("a supplier with a BOM tool uploads one CSV file", async () => {
   assert.match(content, /C1525,10/);
   assert.match(content, /C25804,50/);
   assert.deepEqual(flow.lines.map((line) => line.status), ["added", "added"]);
+});
+
+
+test("the window ground follows the site's theme and is remembered", () => {
+  assert.equal(validGround("#AABBCC"), "#aabbcc");
+  assert.equal(validGround(" rgb(1, 2, 3) "), null);
+  assert.equal(validGround(""), null);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bom-ground-"));
+  assert.equal(readGround(dir), FALLBACK);
+  assert.equal(writeGround(dir, "#16191b"), true);
+  assert.equal(readGround(dir), "#16191b");
+  assert.equal(writeGround(dir, "not a colour"), false);
+  fs.rmSync(dir, { recursive: true, force: true });
 });
 
 
