@@ -125,6 +125,53 @@ const TARGETS = {
     title: T("Confirm", "确认", "Confirmar"),
     any: [{ css: "[data-testid='DeleteCartItemConfirmButton']" }, { role: "button", name: /^confirm$/i }],
   },
+  /* (2026-11-20, live) "New Cart" above the cart table (`button#newCart`)
+   * opens #CreateNewCartModal: "Create New Cart" starts an empty cart. Signed
+   * out, Mouser says the current items are deleted (signed in it can save
+   * them to the account first); that cart is the Buy lab's own Mouser
+   * profile's. A purchase starts from a cart of its own, so lines left from
+   * an earlier run are never ordered with it. */
+  /* (2026-11-20, live) Mouser's pages carry a holiday notice, "Any order
+   * received after the close of business on Wednesday…", which the common
+   * words ("order received") took for an order confirmation: the cart was
+   * recognised as a placed order. Only the buyer's own order counts here. */
+  "order.confirmation": {
+    title: T("Order confirmation", "订单确认", "Confirmación del pedido"),
+    any: [{ text: /thank you for your order|your order (number )?(has been |was |is )?(placed|submitted|received)/i }],
+  },
+  /* (2026-11-20, live) OneTrust's banner ("Cookie Settings" / "Accept
+   * Cookies"), with a dark backdrop over the whole page, can appear a while
+   * after the cart has opened and covers Checkout. The settings panel offers
+   * "Reject All": the fewest cookies, and the page is free. */
+  "cookies.settings": {
+    title: T("Cookie settings", "Cookie 设置", "Configuración de cookies"),
+    any: [{ css: "#onetrust-pc-btn-handler" }],
+  },
+  "cookies.reject": {
+    title: T("Reject cookies", "拒绝 Cookie", "Rechazar cookies"),
+    any: [{ css: "#onetrust-pc-sdk button.ot-pc-refuse-all-handler" }, { css: "#onetrust-reject-all-handler" }],
+  },
+  "cookies.saveChoices": {
+    title: T("Confirm my choices", "确认我的选择", "Confirmar mis opciones"),
+    any: [{ css: "#onetrust-pc-sdk button.save-preference-btn-handler" }],
+  },
+  "cookies.backdrop": {
+    title: T("Cookie banner backdrop", "Cookie 横幅遮罩", "Fondo del aviso de cookies"),
+    any: [{ css: ".onetrust-pc-dark-filter" }],
+  },
+  "cart.newCart": {
+    title: T("New Cart", "新建购物车", "Carrito nuevo"),
+    any: [{ css: "button#newCart" }, { role: "button", name: /^new cart$/i }],
+  },
+  "cart.newCartDialog": {
+    title: T("Create New Cart dialog", "新建购物车对话框", "Diálogo de carrito nuevo"),
+    any: [{ css: "#CreateNewCartModal .modal-body" }],
+  },
+  "cart.newCartCreate": {
+    title: T("Create New Cart", "新建购物车", "Crear carrito nuevo"),
+    within: { any: [{ css: "#CreateNewCartModal" }] },
+    any: [{ css: "button.m-btn-primary" }, { role: "button", name: /^create new cart$/i }],
+  },
   "cart.notice": {
     title: T("Continue Checkout", "继续结账", "Continuar con el pago"),
     any: [{ css: "#btnSaveNContinue" }],
@@ -164,9 +211,10 @@ const TARGETS = {
 const STATES = {
   challenge: { title: T("Security check", "安全验证", "Verificación de seguridad"), match: [{ all: ["challenge"] }, { all: ["challenge.page"] }], person: "challenge", quiet: true },
   signIn: { title: T("Sign in", "登录", "Inicio de sesión"), match: { all: ["account.signInForm"] }, person: "sign_in" },
+  // Never the cart: its holiday banner says "Any order received after…".
   confirmation: {
     title: T("Order placed", "下单成功", "Pedido hecho"),
-    match: { all: ["order.confirmation"] },
+    match: { url: /^(?!.*\/cart\/?(\?|#|$))/i, all: ["order.confirmation"] },
     enter: [{ do: "read", target: "order.number", as: "orderNumber", optional: true, timeout: 3000 }],
   },
   review: {
@@ -220,7 +268,15 @@ const TRANSITIONS = [
     title: T("Check out", "结账", "Pagar"),
     from: ["cart"],
     to: ["cartNotice", "signIn", "shipping", "payment", "checkoutStep", "review"],
-    steps: [{ do: "click", target: "checkout.start", navigates: true }],
+    steps: [
+      // The cookie banner can come up after the cart opened and cover
+      // Checkout: its settings, then "Reject All" (or the default choices).
+      { do: "click", target: "cookies.settings", when: "cookies.settings", whenTimeout: 1500 },
+      { do: "click", target: "cookies.reject", optional: true, timeout: 3000 },
+      { do: "click", target: "cookies.saveChoices", optional: true, timeout: 1500 },
+      { do: "waitForHidden", target: "cookies.backdrop", optional: true, timeout: 5000 },
+      { do: "click", target: "checkout.start", navigates: true },
+    ],
   },
   {
     name: "continueNotice",
@@ -306,6 +362,13 @@ module.exports = {
       { do: "handoff", message: "sign_in", until: "account.signedIn" },
     ],
     bulkAddPaa: [
+      // A cart with lines in it is replaced by a new one first: only this
+      // purchase's list is in the cart that is checked out.
+      { do: "goto", url: "https://www.mouser.com/Cart/" },
+      { do: "click", target: "cookies.accept", optional: true, timeout: 2500 },
+      { do: "click", target: "cart.newCart", when: "cart.rows", whenTimeout: 5000 },
+      { do: "click", target: "cart.newCartCreate", when: "cart.newCartDialog", whenTimeout: 5000 },
+      { do: "waitForHidden", target: "cart.rows", optional: true, timeout: 20000 },
       { do: "goto", url: "https://www.mouser.com/price-availability/" },
       { do: "wait", ms: 4000 },
       { do: "fill", target: "paa.text", value: "{{lines}}", js: true },
