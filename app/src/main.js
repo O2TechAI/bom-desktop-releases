@@ -23,6 +23,7 @@ const { browserChoices, profileDir } = require("./automation/browser");
 const { localFixture } = require("./automation/supplier-session");
 const { SupplierWindow, registerAutomationIpc } = require("./automation/window");
 const { BuyLabWindow, registerBuyLabIpc } = require("./buy-lab");
+const { ServiceLink } = require("./buy-service-link");
 const packageJson = require("../package.json");
 const { MIN_SIZE, loadWindowState, saveWindowState } = require("./window-state");
 
@@ -222,6 +223,15 @@ function hardenContents(contents) {
     divert(event.url, contents);
   });
   contents.setWindowOpenHandler(({ url }) => {
+    // BOM's "check out" to-do for an order the Buy lab service holds: the
+    // order is in this app's Buy lab, not on a page.
+    const order = checkoutOrder(url);
+    if (order) {
+      void (async () => {
+        if (!(await serviceLink?.openOrder(order))) await openBuyLab();
+      })().catch((error) => dialog.showErrorBox("O2 BOM", error.message));
+      return { action: "deny" };
+    }
     if (classifyNavigation(url, origin).kind === "app") {
       return {
         action: "allow",
@@ -357,8 +367,22 @@ function openSupplier(id) {
 }
 
 
+/* The Buy lab service's checkout page for one supplier order, on this BOM. */
+function checkoutOrder(url) {
+  try {
+    const parsed = new URL(url);
+    const match = parsed.pathname.match(/^\/api\/v1\/buy-lab-service\/checkout\/(so_[A-Za-z0-9]+)$/);
+    return parsed.origin === origin && match ? match[1] : null;
+  } catch {
+    return null;
+  }
+}
+
+
 /** Buy lab: a pasted list, a purchase and its tracking, with a live picture
  * of the supplier's own Chrome when the shop stops for the person. */
+let serviceLink = null;
+
 async function openBuyLab() {
   if (buyLabWindow) {
     buyLabWindow.focus();
@@ -535,10 +559,17 @@ if (!app.requestSingleInstanceLock()) {
       packaged: app.isPackaged,
       t,
       openInBrowser: () => void openExternal(`${origin}/`),
-      openBuyLab: () => { void openBuyLab().catch((error) => dialog.showErrorBox("O2 BOM", error.message)); },
+      // Opening a window from inside the menu click races the native menu
+      // closing on Windows and trips a Chromium CHECK (0x80000003), so both
+      // window entries run on the next tick.
+      openBuyLab: () => {
+        setImmediate(() => { void openBuyLab().catch((error) => dialog.showErrorBox("O2 BOM", error.message)); });
+      },
       suppliers: suppliers.map((site) => ({ id: site.id, name: site.name })),
       openSupplier: (id) => {
-        void openSupplier(id).catch((error) => dialog.showErrorBox("O2 BOM", error.message));
+        setImmediate(() => {
+          void openSupplier(id).catch((error) => dialog.showErrorBox("O2 BOM", error.message));
+        });
       },
     })));
     const fake = !app.isPackaged && process.env.BOM_DESKTOP_FAKE_UPDATE;
@@ -548,5 +579,15 @@ if (!app.requestSingleInstanceLock()) {
     });
     updater.onChange(sendUpdateStatus);
     createMainWindow();
+    // BOM's purchasing service for DigiKey and LCSC buys here: ask it for
+    // this person's work with the site's own session (buy-service-link.js).
+    serviceLink = new ServiceLink({
+      fetch: (url, init) => ses.fetch(url, init),
+      origin,
+      openBuyLab,
+      version: app.getVersion(),
+      log: (message) => console.warn(message),
+    });
+    serviceLink.start();
   });
 }
