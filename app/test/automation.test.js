@@ -10,7 +10,7 @@ const { UNKNOWN, defineMachine, nextTransition, recognise } = require("../src/au
 const { ACTIONS, Runner } = require("../src/automation/runner");
 const { SITES, defineSite } = require("../src/automation/sites");
 const { COMMON_TARGETS } = require("../src/automation/sites/common");
-const { BuyLabFlow, bulkLines, parseLines } = require("../src/buy-lab-flow");
+const { BuyLabFlow, bulkLines, paaLines, parseLines } = require("../src/buy-lab-flow");
 const { FALLBACK, readGround, validGround, writeGround } = require("../src/ground");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -550,6 +550,29 @@ test("the window ground follows the site's theme and is remembered", () => {
   assert.equal(readGround(dir), "#16191b");
   assert.equal(writeGround(dir, "not a colour"), false);
   fs.rmSync(dir, { recursive: true, force: true });
+});
+
+
+test("a supplier with a pasted-list tool adds the whole list there", async () => {
+  assert.equal(paaLines([{ mpn: "A", quantity: "2" }, { mpn: "B", quantity: "3" }]), "A | 2\nB | 3");
+  const site = {
+    id: "mouser",
+    name: "Mouser",
+    tasks: { addToCart: [], openCart: [], placeOrder: [], orders: [], track: [], bulkAddPaa: [] },
+    taskParams: { bulkAddPaa: ["lines"] },
+    machine: { states: {}, transitions: [] },
+  };
+  const calls = [];
+  const flow = new BuyLabFlow({ sites: [site], getLive: () => ({}), onChange: () => {} });
+  flow.runTask = async (task, params) => {
+    calls.push({ task, params });
+    return { status: "done", steps: [], results: {} };
+  };
+  await flow.start({ supplier: "mouser", text: "A 2\nB 3" });
+  const bulk = calls.filter((call) => call.task === "bulkAddPaa");
+  assert.equal(bulk.length, 1);
+  assert.deepEqual(bulk[0].params, { lines: "A | 2\nB | 3" });
+  assert.deepEqual(flow.lines.map((line) => line.status), ["added", "added"]);
 });
 
 

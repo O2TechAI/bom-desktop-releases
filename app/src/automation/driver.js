@@ -274,7 +274,7 @@ class Driver {
   }
 
   /** Wait until the element can take a click: visible, still, enabled, uncovered. */
-  async actionable(target, { timeout, params, enabled = true } = {}) {
+  async actionable(target, { timeout, params, enabled = true, ignoreCover = false } = {}) {
     const spec = normalizeTarget(target, params);
     let previous = null;
     return this.poll(async () => {
@@ -284,7 +284,7 @@ class Driver {
       const rect = await this.page("reveal", found.handle);
       if (!samePlace(rect, previous)) { previous = rect; return { done: false, reason: "moving" }; }
       const point = center(rect);
-      const hit = await this.page("hit", found.handle, point.x, point.y);
+      const hit = ignoreCover ? { ok: true } : await this.page("hit", found.handle, point.x, point.y);
       if (!hit.ok) {
         // Often a sticky header over something near the window's edge: bring
         // it to the middle and look again before calling it covered.
@@ -408,6 +408,17 @@ class Driver {
     return found;
   }
 
+  /** Click through the page's own DOM (`js: true` on a click step): for a
+   * button a sticky header covers, where a coordinate click would hit the
+   * header instead. */
+  async clickJs(target, { timeout, params } = {}) {
+    const found = await this.actionable(target, { timeout, params, ignoreCover: true });
+    await this.page("highlight", found.handle);
+    const pressed = await this.page("activate", found.handle);
+    if (!pressed) throw new AutomationError("not_found", "The element could not be clicked");
+    return found;
+  }
+
   async hover(target, { timeout, params } = {}) {
     const found = await this.actionable(target, { timeout, params, enabled: false });
     await this.page("highlight", found.handle);
@@ -447,6 +458,15 @@ class Driver {
   }
 
   /** Replace a field's value: click it, select what is there, type. */
+  /** Set a field's value through the page runtime, even when a cookie
+   * dialog covers it (`js: true` on a fill step). */
+  async fillJs(target, value, { timeout, params } = {}) {
+    const found = await this.actionable(target, { timeout, params, ignoreCover: true });
+    await this.page("highlight", found.handle);
+    await this.page("setValue", found.handle, String(value ?? ""));
+    return this.page("valueOf", found.handle);
+  }
+
   async fill(target, value, { timeout, params } = {}) {
     const found = await this.click(target, { timeout, params });
     const text = String(value ?? "");

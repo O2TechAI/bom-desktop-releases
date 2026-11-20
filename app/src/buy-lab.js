@@ -22,7 +22,7 @@ const { LiveBrowser } = require("./live-browser");
 
 /* Behind the flow page (its own ground); the live overlay paints dark. */
 const BACKGROUND = "#ecf0f3";
-const LAB_SITES = ["digikey", "lcsc"];
+const LAB_SITES = ["digikey", "mouser", "lcsc"];
 
 /** the page's contents -> BuyLabWindow */
 const byContents = new WeakMap();

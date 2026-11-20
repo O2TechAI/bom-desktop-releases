@@ -136,6 +136,29 @@ const TARGETS = {
       { css: "a[href*='logout' i]" },
     ],
   },
+  /* The Price & Availability Assistant: paste a list, check availability,
+   * select all and buy. Its buttons sit under a sticky header, so the steps
+   * use the page's own click (js). */
+  "paa.open": {
+    title: T("Copy & paste a list", "粘贴清单", "Pegar una lista"),
+    any: [{ role: "button", name: /copy ?& ?paste/i }],
+  },
+  "paa.text": {
+    title: T("Parts and quantities", "型号和数量", "Piezas y cantidades"),
+    any: [{ css: "#CopyPasteTextInput" }],
+  },
+  "paa.check": {
+    title: T("Check availability", "检查库存", "Comprobar disponibilidad"),
+    any: [{ css: "#ImportMyData" }],
+  },
+  "paa.selectAll": {
+    title: T("Select all", "全选", "Seleccionar todo"),
+    any: [{ role: "button", name: /^select all$/i }],
+  },
+  "paa.buy": {
+    title: T("Buy the selected items", "购买所选", "Comprar los seleccionados"),
+    any: [{ css: "#btnBuySelectedItemsTop" }],
+  },
 };
 
 const STATES = {
@@ -282,6 +305,16 @@ module.exports = {
       { do: "goto", url: "{{signIn}}" },
       { do: "handoff", message: "sign_in", until: "account.signedIn" },
     ],
+    bulkAddPaa: [
+      { do: "goto", url: "https://www.mouser.com/price-availability/" },
+      { do: "wait", ms: 4000 },
+      { do: "fill", target: "paa.text", value: "{{lines}}", js: true },
+      { do: "click", target: "paa.check", js: true },
+      { do: "waitForUrl", pattern: /price-availability\/Edit/ },
+      { do: "click", target: "paa.selectAll", js: true },
+      { do: "click", target: "paa.buy", js: true },
+      { do: "waitForUrl", pattern: /\/cart/ },
+    ],
     addToCart: [{ do: "walk", to: "product" }, { do: "act", name: "addToCart" }],
     openCart: [
       { do: "walk", to: "cart" },
@@ -319,7 +352,7 @@ module.exports = {
       },
     ],
   },
-  taskParams: { removeFromCart: ["part"], checkout: [], placeOrder: [], orders: [], track: ["order"] },
+  taskParams: { bulkAddPaa: ["lines"], removeFromCart: ["part"], checkout: [], placeOrder: [], orders: [], track: ["order"] },
   taskDefaults: {
     addToCart: { part: "GRM155R71C104KA88D", quantity: "10" },
     removeFromCart: { part: "GRM155R71C104KA88D" },

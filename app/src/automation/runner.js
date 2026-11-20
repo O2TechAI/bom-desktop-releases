@@ -343,12 +343,16 @@ class Runner {
       case "waitForHidden": return driver.waitFor(target, { ...options, state: "hidden" }).then(() => true);
       case "click": {
         const before = driver.contents.getURL();
-        await driver.click(target, options);
+        if (step.js) await driver.clickJs(target, options);
+        else await driver.click(target, options);
         if (step.navigates) await driver.settle(before);
         return true;
       }
       case "hover": return driver.hover(target, options).then(() => true);
-      case "fill": return driver.fill(target, fill(step.value ?? "", this.params), options);
+      case "fill": {
+        const value = fill(step.value ?? "", this.params);
+        return step.js ? driver.fillJs(target, value, options) : driver.fill(target, value, options);
+      }
       case "type": return driver.type(fill(step.value ?? "", this.params));
       case "press": return driver.press(step.key);
       case "select": return driver.select(target, step.option instanceof RegExp ? step.option : fill(step.option, this.params), options);

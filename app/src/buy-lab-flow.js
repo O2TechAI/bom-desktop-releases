@@ -213,6 +213,11 @@ class AddressBook {
 const byContents = new WeakMap();
 
 
+/** "part | quantity" lines for Mouser's Copy & Paste box. */
+function paaLines(lines) {
+  return lines.map((line) => `${line.mpn} | ${line.quantity}`).join("\n");
+}
+
 /** "quantity, part" lines for the cart's own Bulk Add box. */
 function bulkLines(lines) {
   return lines.map((line) => `${line.quantity}, ${line.mpn}`).join("\n");
@@ -371,7 +376,7 @@ class BuyLabFlow {
     this.emit();
     try {
       const site = this.sites.find((entry) => entry.id === this.supplier);
-      if (site?.tasks.bulkAddBom || site?.tasks.bulkAddList) {
+      if (site?.tasks.bulkAddBom || site?.tasks.bulkAddPaa || site?.tasks.bulkAddList) {
         // One page, one batch: a BOM file or the cart's own Bulk Add box.
         this.emit({ message: "bulk-adding" });
         for (const line of this.lines) line.status = "adding";
@@ -384,6 +389,8 @@ class BuyLabFlow {
           } finally {
             try { fs.unlinkSync(file); } catch { /* already gone */ }
           }
+        } else if (site.tasks.bulkAddPaa) {
+          snapshot = await this.runTask("bulkAddPaa", { lines: paaLines(this.lines) });
         } else {
           snapshot = await this.runTask("bulkAddList", { lines: bulkLines(this.lines) });
         }
@@ -527,4 +534,4 @@ function stoppedError() {
 }
 
 
-module.exports = { AddressBook, BuyLabFlow, bulkLines, parseLines, writeBomFile, cleanAddress, addressParams, siteAddress, siteOrderText, ADDRESS_FIELDS, CUSTOMER_TYPES, US_STATES, REQUIRED_TASKS };
+module.exports = { AddressBook, BuyLabFlow, bulkLines, paaLines, parseLines, writeBomFile, cleanAddress, addressParams, siteAddress, siteOrderText, ADDRESS_FIELDS, CUSTOMER_TYPES, US_STATES, REQUIRED_TASKS };
