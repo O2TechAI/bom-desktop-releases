@@ -156,10 +156,11 @@ class BuyLabWindow {
       onTabs: (tabs) => this.onTabs(site.id, tabs),
     });
     this.lives.set(site.id, live);
-    // A page elsewhere (a sign-in with Google) opened in its own tab: that
-    // is where the person has something to do, so show it (unless they are
-    // busy on the other supplier's page).
-    live.browser.on("tab-opened", () => this.showFor(site.id));
+    // A page elsewhere (a sign-in with Google) opened in its own tab: shown
+    // in front only when the purchase is waiting for the person; a tab the
+    // shop opens while the app works stays out of sight (2026-11-21: the lab
+    // jumped up mid-run).
+    live.browser.on("tab-opened", () => this.showFor(site.id, { quiet: !this.needsPerson(site.id) }));
     live.page.on("request", (request) => {
       if (request.isNavigationRequest()) this.setLoading(site.id, true);
     });
@@ -260,7 +261,11 @@ class BuyLabWindow {
     // A check is handed to Chrome's own window (onChallenge); the canvas is
     // only for sign-ins and refusals that the person handles in the app,
     // shown for the supplier that is waiting.
-    if (state.status === "waiting" && !state.confirm && state.message !== "challenge") this.showFor(id);
+    // The cart check is announced on BOM's Placing tab ("Check the cart", Deal
+    // with it opens it here): the lab does not come forward for it by itself.
+    if (state.status === "waiting" && !state.confirm && state.message !== "challenge") {
+      this.showFor(id, { quiet: state.message === "cart-check" });
+    }
     // The order's yes, where the person pays (2026-11-21: "付款的时候再提示"):
     // the lab comes forward with this seller's lines and the yes beside its
     // checkout page, once per wait.
@@ -271,6 +276,15 @@ class BuyLabWindow {
     } else {
       this.payPrompted.delete(id);
     }
+  }
+
+  /** Whether this seller's purchase waits for the person in the lab itself:
+   * a sign-in or a refusal, not the cart check (BOM asks for that) or a
+   * security check (Chrome's own window). */
+  needsPerson(id) {
+    const state = this.flows.get(id)?.state?.();
+    return Boolean(state && state.status === "waiting" && !state.confirm
+      && !["cart-check", "challenge"].includes(state.message));
   }
 
   /** The payment: two cards (the lines with Place the order, and the
