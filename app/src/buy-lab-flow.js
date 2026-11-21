@@ -233,6 +233,20 @@ function paramsFor(profile, task, params) {
  * purchase continues after an interruption. */
 const STAGE = { NEW: 0, ADDED: 1, CART_CONFIRMED: 2, PLACED: 3 };
 
+/* The app works on its own without the person between these: no change at all
+ * for this long while it is the app's turn means it is stuck; it lets go and
+ * the person takes over (2026-11-21: 机器操作的环节不能让人干预, with a timeout). */
+const STALL_MS = 3 * 60 * 1000;
+
+/** Which part of the purchase a run message belongs to, for BOM's Placing tab. */
+function phaseOf(message) {
+  if (["adding", "bulk-adding", "reloading-blocked"].includes(message)) return "cart";
+  if (message === "reading-cart") return "reading";
+  if (["placing-order", "cart-confirmed"].includes(message)) return "checkout";
+  if (["reading-orders", "tracking"].includes(message)) return "after";
+  return message || "";
+}
+
 function partKey(text) {
   return String(text || "").replace(/[‎‏\s]/g, "").toUpperCase();
 }
@@ -341,6 +355,13 @@ class BuyLabFlow {
     this.runner = null;
     this.running = false;
     this.stopRequested = false;
+    // Stop asked once while the app works: it finishes the line (the step) it
+    // is on and then stops; asked again, it stops at once.
+    this.softStop = false;
+    this.stalled = false;
+    this.lastChangeAt = 0;
+    this.phase = "";
+    this.phaseSince = null;
     /* Shared by every task of one purchase: the shop is warmed up once. */
     this.session = { warmedUp: false };
   }
@@ -362,14 +383,50 @@ class BuyLabFlow {
       cartCheck: this.cartCheck,
       placed: this.placed,
       rehearsal: this.rehearsal,
+      // The app has the supplier page now (adding, reading the cart, filling the
+      // checkout): the person's clicks and keys are held back until it is theirs.
+      driving: this.driving(),
+      phase: this.phase,
+      phaseSince: this.phaseSince,
+      done: this.lines.filter((line) => ["added", "failed", "blocked"].includes(line.status)).length,
+      total: this.lines.length,
+      softStop: this.softStop,
+      totalCheck: this.totalCheck(),
       // Ended before its order went through, with something done: it can go on.
       canResume: !this.running && this.progress > STAGE.NEW && this.progress < STAGE.PLACED
         && ["failed", "stopped"].includes(this.status),
     };
   }
 
+  /** The app has the page: running, not waiting on the person. */
+  driving() {
+    return Boolean(this.running && this.status === "running" && !this.decide && !this.confirm);
+  }
+
+  /** At the order's yes: the review page's total against the cart the person
+   * confirmed, so a cart changed since (in another browser, say) shows. */
+  totalCheck() {
+    if (!this.confirm || !this.confirmedCart) return null;
+    const cart = this.confirmedCart.reduce((sum, row) => sum + (amount(row.extended) ?? 0), 0);
+    const review = amount(this.confirm.value);
+    if (!cart || review == null) return null;
+    // The review page adds shipping and tax: only a goods total above it is wrong.
+    return { cart: cart.toFixed(2), review: review.toFixed(2), lower: review + 0.005 < cart };
+  }
+
   emit(patch = {}) {
     Object.assign(this, patch);
+    this.lastChangeAt = Date.now();
+    const phase = phaseOf(this.message);
+    if (this.running && phase && phase !== this.phase) {
+      this.phase = phase;
+      this.phaseSince = new Date().toISOString();
+    }
+    const said = `${this.phase}|${this.status}|${this.driving()}|${this.softStop}|${this.lines.filter((line) => line.status === "added").length}`;
+    if (said !== this.lastSaid) {
+      this.lastSaid = said;
+      if (this.link?.changed) this.link.changed();
+    }
     this.onChange(this.state());
   }
 
@@ -420,6 +477,7 @@ class BuyLabFlow {
   /** Publish the run's state; a hand-off or a confirmation asks the window to
    * show the person what to do. */
   observe(snapshot) {
+    this.lastChangeAt = Date.now();
     if (snapshot.status === "waiting") {
       this.status = "waiting";
       this.message = snapshot.confirming
@@ -519,6 +577,18 @@ class BuyLabFlow {
 
   async run() {
     this.stopRequested = false;
+    this.softStop = false;
+    this.stalled = false;
+    this.phase = "";
+    this.phaseSince = null;
+    this.lastChangeAt = Date.now();
+    const watchdog = setInterval(() => {
+      if (!this.driving() || Date.now() - this.lastChangeAt < STALL_MS) return;
+      // Stuck on the app's own turn: let go, so the page is the person's.
+      this.stalled = true;
+      this.stopRequested = true;
+      this.runner?.stop();
+    }, 15_000);
     this.session = { warmedUp: false };
     this.confirm = null;
     this.message = null;
@@ -568,7 +638,7 @@ class BuyLabFlow {
       this.emit({ status: "done", message: null });
     } catch (error) {
       if (error?.code === "stopped") {
-        this.emit({ status: "stopped", message: "stopped" });
+        this.emit({ status: "stopped", message: this.stalled ? "stalled" : "stopped" });
         return;
       }
       if (error?.code === "blocked") {
@@ -576,10 +646,14 @@ class BuyLabFlow {
       }
       this.emit({ status: "failed", message: error?.code === "blocked" ? "blocked" : error.message });
     } finally {
+      clearInterval(watchdog);
       this.running = false;
       this.runner = null;
       this.confirm = null;
       this.decide = null;
+      this.softStop = false;
+      this.phase = "";
+      this.phaseSince = null;
       this.emit();
       if (this.link?.ended) {
         void Promise.resolve(this.link.ended({ status: this.status, message: this.message, progress: this.progress })).catch(() => {});
@@ -732,7 +806,17 @@ class BuyLabFlow {
     if (this.link?.placed) await this.link.placed({ orderNumber: this.orderNumber }).catch(() => {});
   }
 
-  stop() {
+  /** Stop the purchase. While the app works, the first Stop (`soft`) lets it
+   * finish the line or step it is on, so nothing is left half done in the
+   * cart; a second Stop, or a hard one, stops at once. Waiting on the
+   * person, it stops at once. */
+  stop({ soft = false } = {}) {
+    if (soft && this.driving() && !this.softStop) {
+      this.softStop = true;
+      this.stopRequested = true;
+      this.emit({ message: this.message });
+      return;
+    }
     // Stop ends the purchase, not only the task running now.
     if (this.running) this.stopRequested = true;
     this.decide?.("stop");

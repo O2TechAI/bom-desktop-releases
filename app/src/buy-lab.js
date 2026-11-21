@@ -504,13 +504,18 @@ class BuyLabWindow {
     return Boolean(this.flows.get(id)?.approve());
   }
 
-  /** Stop one supplier's purchase, or every one without an id. */
-  stop(id = "") {
+  /** Stop one supplier's purchase, or every one without an id. `soft`: while
+   * the app works, finish the line it is on first (a second Stop is at once). */
+  stop(id = "", { soft = false } = {}) {
+    let finishing = false;
     for (const [key, flow] of this.flows) {
-      if (!id || key === id) flow.stop();
+      if (!id || key === id) {
+        flow.stop({ soft });
+        if (flow.running && flow.softStop) finishing = true;
+      }
     }
     // Stopped: nothing waits on that supplier page any more; back to the list.
-    if (!id || id === this.active) this.showView("flow");
+    if (!finishing && (!id || id === this.active)) this.showView("flow");
     return true;
   }
 
@@ -522,7 +527,28 @@ class BuyLabWindow {
   async input(event) {
     const live = this.lives.get(this.active);
     if (!live) return false;
+    // The app's turn on this page (adding, reading the cart, filling the
+    // checkout): the person's clicks and keys are held back, so nothing they
+    // do lands between the app's own steps (2026-11-21).
+    if (this.flows.get(this.active)?.driving()) return false;
     return live.input(event);
+  }
+
+  /** What each supplier's run is doing, for BOM: step, who has the page, lines done. */
+  activity(seller) {
+    const flow = this.flows.get(seller);
+    if (!flow) return null;
+    const state = flow.state();
+    if (!state.running) return null;
+    return {
+      step: state.status === "waiting" ? (state.confirm ? "confirm" : state.cartCheck ? "cart-check" : state.message || "person")
+        : state.phase || "working",
+      driver: state.driving ? "app" : state.status === "waiting" ? "person" : "none",
+      done: state.phase === "cart" ? state.done : null,
+      total: state.phase === "cart" ? state.total : null,
+      since: state.phaseSince,
+      message: state.softStop ? "stopping" : state.message,
+    };
   }
 
   openActiveExternal() {
@@ -590,7 +616,7 @@ function registerBuyLabIpc() {
     }
   });
   ipcMain.handle("buy-lab:delete-address", (event, id) => ownerOf(event)?.addresses.remove(String(id || "")) ?? false);
-  ipcMain.handle("buy-lab:stop", (event, id) => ownerOf(event)?.stop(String(id || "")) ?? false);
+  ipcMain.handle("buy-lab:stop", (event, id, options) => ownerOf(event)?.stop(String(id || ""), { soft: Boolean(options?.soft) }) ?? false);
   ipcMain.handle("buy-lab:confirm", (event, id) => ownerOf(event)?.confirm(String(id || "")) ?? false);
   ipcMain.handle("buy-lab:confirm-cart", (event, id) => ownerOf(event)?.confirmCart(String(id || "")) ?? false);
   ipcMain.handle("buy-lab:recheck-cart", (event, id) => ownerOf(event)?.recheckCart(String(id || "")) ?? false);

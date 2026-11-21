@@ -11,7 +11,7 @@ contextBridge.exposeInMainWorld("buyLab", {
   state: () => ipcRenderer.invoke("buy-lab:state"),
   start: (payload) => ipcRenderer.invoke("buy-lab:start", payload),
   // Per supplier: stop(id) (every supplier without one), confirm(id), showLive(id).
-  stop: (id = "") => ipcRenderer.invoke("buy-lab:stop", String(id)),
+  stop: (id = "", options = {}) => ipcRenderer.invoke("buy-lab:stop", String(id), { soft: Boolean(options?.soft) }),
   confirm: (id) => ipcRenderer.invoke("buy-lab:confirm", String(id)),
   // The cart check before checkout, and going on after an interruption.
   confirmCart: (id) => ipcRenderer.invoke("buy-lab:confirm-cart", String(id)),

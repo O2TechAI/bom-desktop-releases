@@ -108,7 +108,7 @@ class ServiceLink {
     if (this.busy) return;
     this.busy = true;
     try {
-      const answer = await this.post("heartbeat", { app_version: this.version });
+      const answer = await this.post("heartbeat", { app_version: this.version, activity: this.activity() });
       this.setStatus({ state: "ok" });
       this.jobs = Array.isArray(answer.jobs) ? answer.jobs : [];
       await this.follow();
@@ -132,7 +132,8 @@ class ServiceLink {
         this.running.delete(key);
         run.stopped = true;
         try {
-          (await this.openBuyLab({ quiet: true })).stop(run.job.seller);
+          // Finish the line in hand first, so the cart isn't left half changed.
+          (await this.openBuyLab({ quiet: true })).stop(run.job.seller, { soft: true });
         } catch { /* the Buy lab is closed */ }
       }
     }
@@ -149,12 +150,35 @@ class ServiceLink {
       if ([...this.running.values()].some((other) => other.job.seller === job.seller)) continue;
       // Out of sight: BOM's Placing tab follows it (2026-11-21).
       const lab = await this.openBuyLab({ quiet: true });
+      this.lab = lab;
       const fresh = { job, phase: job.phase, cartSent: job.phase !== "price", placed: false, stopped: false };
       if (lab.startFromService(job, this.linkFor(key, fresh))) {
         this.running.set(key, fresh);
         lab.showFor?.(job.seller, { quiet: true });
       }
     }
+  }
+
+  /** What each of BOM's runs is doing right now, for its Orders page: the step,
+   * who has the supplier page (the app or the person), lines done of total.
+   * BOM locks a seller the app is working on (2026-11-21). */
+  activity() {
+    const out = [];
+    for (const run of this.running.values()) {
+      const now = this.lab?.activity?.(run.job.seller);
+      if (!now) continue;
+      out.push({ purchase_request_id: run.job.purchase_request_id, seller: run.job.seller, ...now });
+    }
+    return out.slice(0, 20);
+  }
+
+  /** A run changed step or who drives: tell BOM soon, not at the next tick. */
+  nudge() {
+    if (this.nudgeTimer) return;
+    this.nudgeTimer = setTimeout(() => {
+      this.nudgeTimer = null;
+      void this.tick();
+    }, 2000);
   }
 
   setStatus(status) {
@@ -174,6 +198,7 @@ class ServiceLink {
         void this.tick();
       },
       mayConfirm: () => run.phase === "checkout",
+      changed: () => this.nudge(),
       placed: async ({ orderNumber }) => {
         run.placed = true;
         await this.post("order", {
