@@ -272,15 +272,15 @@ function buildPanel(site) {
   const cartRows = make("tbody");
   const cartSummary = make("p", { className: "card-body" });
   const cartOk = make("button", { className: "primary", type: "button", textContent: copy.cartOk });
-  const cartRecheck = make("button", { className: "quiet", type: "button", textContent: copy.cartRecheck });
-  const cartStop = make("button", { className: "quiet", type: "button", textContent: copy.stop });
+  const cartRecheck = make("button", { className: "quiet cart-extra", type: "button", textContent: copy.cartRecheck });
+  const cartStop = make("button", { className: "quiet cart-extra", type: "button", textContent: copy.stop });
   const cartHead = make("tr", {}, make("th", { textContent: copy.part }), make("th", { textContent: copy.cartList }),
     make("th", { textContent: copy.cartCart }), make("th", { textContent: copy.cartUnit }), make("th", { textContent: copy.cartLine }),
     make("th", { textContent: copy.note }));
   const cartCheckCard = make("div", { className: "cart-check", hidden: true },
-    make("h3", { className: "card-title", textContent: copy.cartCheckTitle }),
-    make("p", { className: "card-body", textContent: copy.cartCheckText }),
-    make("table", { className: "lines" }, make("thead", {}, cartHead), cartRows),
+    make("h3", { className: "card-title cart-detail", textContent: copy.cartCheckTitle }),
+    make("p", { className: "card-body cart-detail", textContent: copy.cartCheckText }),
+    make("table", { className: "lines cart-detail" }, make("thead", {}, cartHead), cartRows),
     cartSummary,
     make("div", { className: "row" }, cartOk, cartRecheck, cartStop));
   const placedTitle = make("h3", { className: "card-title" });
@@ -297,7 +297,7 @@ function buildPanel(site) {
   panel.append(
     make("div", { className: "panel-head" }, make("h2", { className: "card-title", textContent: site.name }), status, openPage),
     list,
-    make("div", { className: "row" }, start, stop, resume),
+    make("div", { className: "row run-row" }, start, stop, resume),
     cartCheckCard,
     confirmCard,
     placedCard,
