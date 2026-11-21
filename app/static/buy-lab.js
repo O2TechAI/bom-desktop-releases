@@ -8,7 +8,7 @@ const COPY = {
     start: "Start purchase", demo: "Demo", stop: "Stop",
     hint: "The list runs through the supplier's own pages in the background. You are asked to step in only for a check, a sign-in, or the order confirmation.",
     confirmTitle: "Confirm the order", confirmText: "The cart is on the review page. Place the order?",
-    confirm: "Place the order", live: "Open supplier page", external: "Open in browser",
+    confirm: "Place the order", live: "Open supplier page", external: "Open in browser", backToBom: "\u2190 Back to BOM", backToList: "\u2190 Back to the list",
     lines: "Lines", part: "Part", qty: "Qty", state: "State", note: "Note",
     cart: "Cart", orders: "Orders", tracking: "Tracking",
     ready: "Ready", working: "Working", waiting: "Waiting for you", done: "Done", failed: "Failed", stopped: "Stopped", blocked: "Blocked",
@@ -55,7 +55,7 @@ const COPY = {
     start: "开始采购", demo: "一键演示", stop: "停止",
     hint: "清单会在后台走供应商自己的页面。只有遇到安全验证、登录，或需要你确认下单时，才会请你出手。",
     confirmTitle: "确认下单", confirmText: "购物车已到确认页，现在下单吗？",
-    confirm: "确认下单", live: "打开原始页面", external: "在浏览器中打开",
+    confirm: "确认下单", live: "打开原始页面", external: "在浏览器中打开", backToBom: "\u2190 返回 BOM", backToList: "\u2190 返回清单",
     lines: "明细", part: "型号", qty: "数量", state: "状态", note: "说明",
     cart: "购物车", orders: "订单", tracking: "物流",
     ready: "准备就绪", working: "进行中", waiting: "等待你操作", done: "完成", failed: "失败", stopped: "已停止", blocked: "被拒绝",
@@ -102,7 +102,7 @@ const COPY = {
     start: "Iniciar compra", demo: "Demostración", stop: "Detener",
     hint: "La lista recorre las páginas del proveedor en segundo plano. Solo se te pide intervenir por una comprobación, un inicio de sesión o la confirmación del pedido.",
     confirmTitle: "Confirmar el pedido", confirmText: "El carrito está en la página de revisión. ¿Realizar el pedido?",
-    confirm: "Realizar el pedido", live: "Abrir la página del proveedor", external: "Abrir en el navegador",
+    confirm: "Realizar el pedido", live: "Abrir la página del proveedor", external: "Abrir en el navegador", backToBom: "\u2190 Volver a BOM", backToList: "\u2190 Volver a la lista",
     lines: "Líneas", part: "Pieza", qty: "Cant.", state: "Estado", note: "Nota",
     cart: "Carrito", orders: "Pedidos", tracking: "Seguimiento",
     ready: "Listo", working: "En curso", waiting: "Esperándote", done: "Hecho", failed: "Falló", stopped: "Detenido", blocked: "Bloqueado",
@@ -196,6 +196,8 @@ const elements = {
   rehearsalText: $("[data-rehearsal-text]"),
   stopAll: $("[data-stop-all]"),
   external: $("[data-external]"),
+  backSite: $("[data-back-site]"),
+  liveBack: $("[data-back]"),
   hint: $("[data-hint]"),
   suppliers: $("[data-suppliers]"),
 };
@@ -213,6 +215,8 @@ elements.rehearsalText.textContent = copy.rehearsal;
 elements.rehearsalLabel.title = copy.rehearsalHint;
 elements.stopAll.textContent = copy.stopAll;
 elements.external.textContent = copy.external;
+elements.backSite.textContent = copy.backToBom;
+elements.backSite.addEventListener("click", () => { void window.buyLab.back(); });
 elements.hint.textContent = copy.hint;
 
 function statusText(state) {
@@ -419,6 +423,9 @@ function render(state) {
     renderPanel(parts, state.flows[site.id], state.saved?.[site.id]);
   }
   renderService(state.service);
+  // Opened by BOM's Deal with it: Back (here and on the seller's page) goes to BOM.
+  elements.backSite.hidden = state.returnTo !== "site";
+  if (elements.liveBack) elements.liveBack.textContent = state.returnTo === "site" ? copy.backToBom : copy.backToList;
   const anyRunning = Object.values(state.flows).some((flow) => flow.running);
   elements.stopAll.disabled = !anyRunning;
   elements.demo.disabled = Object.values(state.flows).some((flow) => flow.running);
@@ -526,14 +533,31 @@ window.buyLab.state().then((state) => render(state)).catch(() => {});
  * and forwards the input; here only the overlay's visibility changes. */
 const overlay = document.querySelector("[data-live]");
 
+/* "split" (BOM's Deal with it at the cart check): the seller's cart check on
+ * the left, its live page on the right, as two cards. */
 function setView(view) {
-  const live = view === "live";
+  const live = view !== "flow";
   overlay.hidden = !live;
+  document.body.classList.toggle("is-split", view === "split");
+  if (view !== "split") for (const parts of panels.values()) parts.panel.classList.remove("is-focus");
   if (!live) return;
   requestAnimationFrame(() => {
     window.dispatchEvent(new Event("resize"));
     document.querySelector("[data-screen]")?.focus();
+    if (view === "split") {
+      const box = document.querySelector("[data-stage]").getBoundingClientRect();
+      void window.buyLab.stageSize({ width: Math.round(box.width), height: Math.round(box.height) });
+    }
   });
 }
 
 window.buyLab.onView((view) => setView(view));
+
+/* BOM's Deal with it → "Cart": this seller's cart check, scrolled into view. */
+window.buyLab.onReveal(({ id }) => {
+  const parts = panels.get(String(id || ""));
+  if (!parts) return;
+  for (const [key, other] of panels) other.panel.classList.toggle("is-focus", key === String(id));
+  const target = parts.cartCheckCard && !parts.cartCheckCard.hidden ? parts.cartCheckCard : parts.panel;
+  requestAnimationFrame(() => target.scrollIntoView({ block: "start", behavior: "smooth" }));
+});

@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld("buyLab", {
   select: (id) => ipcRenderer.invoke("buy-lab:select", String(id)),
   showLive: (id = "") => ipcRenderer.invoke("buy-lab:show-live", String(id)),
   showFlow: () => ipcRenderer.invoke("buy-lab:show-flow"),
+  // Back to BOM after its Deal with it (else to the list).
+  back: () => ipcRenderer.invoke("buy-lab:back"),
   reload: () => ipcRenderer.invoke("buy-lab:reload"),
   openExternal: () => ipcRenderer.invoke("buy-lab:open-external"),
   // The address book: saved shipping addresses on this computer.
@@ -35,6 +37,12 @@ contextBridge.exposeInMainWorld("buyLab", {
   onView: (callback) => {
     ipcRenderer.on("buy-lab:view", (_event, view) => callback(String(view)));
   },
+  // The side-by-side view's right card, measured: the shop is laid out to fit it.
+  stageSize: (size) => ipcRenderer.invoke("buy-lab:stage-size", size),
+  // BOM's Deal with it asked for one seller's cart check: { id, part: "cart" }.
+  onReveal: (callback) => {
+    ipcRenderer.on("buy-lab:reveal", (_event, target) => callback(target || {}));
+  },
   onFrame: (callback) => {
     ipcRenderer.on("live:frame", (_event, frame) => callback(frame));
   },
@@ -48,7 +56,7 @@ contextBridge.exposeInMainWorld("liveBridge", {
   },
   input: (event) => ipcRenderer.invoke("live:input", event),
   reload: () => ipcRenderer.invoke("live:reload"),
-  back: () => ipcRenderer.invoke("buy-lab:show-flow"),
+  back: () => ipcRenderer.invoke("buy-lab:back"),
   // The supplier Chrome's tabs: { viewing, tabs: [{ id, title, url, main }] }.
   onTabs: (callback) => {
     ipcRenderer.on("live:tabs", (_event, state) => callback(state));

@@ -468,3 +468,20 @@ table.lines td.n { width: 40px; color: var(--muted, #5b6b76); }
 .live .tab-supplier { font-weight: 600; }
 .live .tab-divider { flex: none; width: 1px; margin: 4px 4px; background: rgba(255, 255, 255, 0.28); }
 .live .tab-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: #f5a524; }
+
+
+/* BOM's Deal with it at the cart check: two cards side by side, the seller's
+   cart check (left) and its own page at the cart (right). */
+body.is-split { overflow: hidden; }
+body.is-split main.page { box-sizing: border-box; width: 50%; max-width: none; height: calc(100vh - 56px); margin: 0; padding: 16px 8px 16px 16px; overflow: auto; }
+body.is-split .page-hint { display: none; }
+body.is-split .suppliers { grid-template-columns: 1fr; }
+body.is-split .suppliers > .panel:not(.is-focus) { display: none; }
+body.is-split .live {
+  inset: 72px 16px 16px calc(50% + 8px);
+  /* the bar above is 56px; the cards start 16px under it */
+  overflow: hidden;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px #dce0e4;
+}

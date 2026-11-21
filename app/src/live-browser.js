@@ -192,6 +192,20 @@ class LiveBrowser {
     await this.refresh();
   }
 
+  /** Lay the shop out at another size (the window stays off screen): the
+   * Buy lab's side-by-side view gives it half the window. No size: back to
+   * the usual 1280 × 900. */
+  async setSize({ width = 1280, height = 900 } = {}) {
+    if (!this.session || this.closed) return;
+    try {
+      const { windowId } = await this.session.send("Browser.getWindowForTarget");
+      await this.session.send("Browser.setWindowBounds", { windowId, bounds: { left: -32000, top: 0, width, height } });
+    } catch {
+      /* Chrome went away */
+    }
+    await this.refresh();
+  }
+
   /** Page size in CSS pixels: the picture's own size. */
   size() {
     return this.frame && this.frame.width && this.frame.height
