@@ -49,6 +49,9 @@ class BuyLabWindow {
      * (2026-11-21: "点击back 跳到这个页面而不是原来的页面"). */
     this.onBackToSite = onBackToSite;
     this.returnTo = null;
+    // Sellers whose payment prompt was shown for the current wait (promptPayment).
+    this.payPrompted = new Set();
+    this.surfaced = false;
     this.hideOnBack = false;
     this.language = language;
     this.openExternal = openExternal;
@@ -258,6 +261,32 @@ class BuyLabWindow {
     // only for sign-ins and refusals that the person handles in the app,
     // shown for the supplier that is waiting.
     if (state.status === "waiting" && !state.confirm && state.message !== "challenge") this.showFor(id);
+    // The order's yes, where the person pays (2026-11-21: "付款的时候再提示"):
+    // the lab comes forward with this seller's lines and the yes beside its
+    // checkout page, once per wait.
+    if (state.status === "waiting" && state.confirm) {
+      if (this.payPrompted.has(id)) return;
+      this.payPrompted.add(id);
+      this.promptPayment(id);
+    } else {
+      this.payPrompted.delete(id);
+    }
+  }
+
+  /** The payment: two cards (the lines with Place the order, and the
+   * seller's checkout page), Back returning to BOM; shown without taking the
+   * keyboard when the lab was out of sight. */
+  promptPayment(id) {
+    if (this.closed || !this.lives.has(id)) return;
+    if (this.view !== "flow" && this.active && this.active !== id) {
+      this.publish();
+      this.surface();
+      return;
+    }
+    if (!this.returnTo) this.hideOnBack = !this.window.isVisible();
+    this.returnTo = "site";
+    this.showView("split", id);
+    this.surface();
   }
 
   /** Show a supplier's live page because it needs the person, without taking
@@ -277,6 +306,7 @@ class BuyLabWindow {
    * keyboard from what they are doing, and flashed in the taskbar / Dock. */
   surface() {
     if (this.closed || this.window.isVisible()) return;
+    this.surfaced = true;
     this.window.showInactive();
     this.window.flashFrame(true);
   }
@@ -334,7 +364,7 @@ class BuyLabWindow {
     this.returnTo = null;
     this.showView("flow");
     if (toSite) {
-      if (this.hideOnBack) this.window.hide();
+      if (this.hideOnBack) { this.window.hide(); this.surfaced = false; }
       this.hideOnBack = false;
       this.onBackToSite?.();
     }
@@ -430,8 +460,20 @@ class BuyLabWindow {
   }
 
   /** The cart check: the person says the cart is right, or asks to read it again. */
+  /** The cart is right: the purchase goes on to checkout out of sight and
+   * the person goes back to BOM (2026-11-21: "checkout 以后要退回原来的页面");
+   * the lab comes forward again at the payment (promptPayment). */
   confirmCart(id) {
-    return Boolean(this.flows.get(id)?.confirmCart());
+    if (!this.flows.get(id)?.confirmCart()) return false;
+    if (this.returnTo === "site") {
+      this.back();
+    } else if (this.surfaced) {
+      this.surfaced = false;
+      this.showView("flow");
+      this.window.hide();
+      this.onBackToSite?.();
+    }
+    return true;
   }
 
   recheckCart(id) {
@@ -501,6 +543,7 @@ class BuyLabWindow {
 
   focus() {
     if (this.closed) return;
+    this.surfaced = false;
     this.window.show();
     this.window.focus();
   }
