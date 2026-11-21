@@ -62,8 +62,18 @@ const ORDERS = [
   { number: "88012348", status: "Shipped", total: "$4.00" },
 ];
 
+/** The shop's cart holds what the last upload sent (its CSV, header first). */
+function uploadedCart() {
+  const last = ScriptedRunner.files.at(-1);
+  if (!last) return [];
+  return last.content.trim().split("\n").slice(1).map((row) => {
+    const [part, quantity] = row.split(",");
+    return { part, quantity };
+  });
+}
+
 function happyShop(task, params) {
-  if (task === "openCart") return { results: { cart: [{ part: "RC0402FR-0710KL", quantity: "10" }] } };
+  if (task === "openCart") return { results: { cart: uploadedCart() } };
   if (task === "placeOrder") return { results: { orderNumber: "88012345" } };
   if (task === "orders") return { results: { orders: ORDERS } };
   if (task === "track") return { results: { status: `track ${params.order}`, shipments: [{ number: `S${params.order}` }] } };
@@ -116,7 +126,7 @@ test("the demo's DigiKey purchase runs every task in order, with the same values
     { mpn: "RC0402FR-0710KL", quantity: "10", status: "added", index: 0 },
     { mpn: "GRM155R71C104KA88D", quantity: "10", status: "added", index: 1 },
   ]);
-  assert.deepEqual(end.cart, [{ part: "RC0402FR-0710KL", quantity: "10" }]);
+  assert.deepEqual(end.cart, [{ part: "RC0402FR-0710KL", quantity: "10" }, { part: "GRM155R71C104KA88D", quantity: "10" }]);
   assert.equal(end.orderNumber, "88012345");
   assert.deepEqual(end.orders, ORDERS);
   assert.deepEqual(end.tracking, [
@@ -126,7 +136,7 @@ test("the demo's DigiKey purchase runs every task in order, with the same values
 
   // What the window is told, in order (repeats collapsed).
   const messages = states.map((state) => state.message).filter((message, index, all) => message !== all[index - 1]);
-  assert.deepEqual(messages, [null, "bulk-adding", "reading-cart", "cart-check", "cart-confirmed", "placing-order", "reading-orders", "tracking", null]);
+  assert.deepEqual(messages, [null, "bulk-adding", "checking-cart", "reading-cart", "cart-check", "cart-confirmed", "placing-order", "reading-orders", "tracking", null]);
   assert.equal(states.at(-1).status, "done");
 });
 
@@ -454,4 +464,39 @@ test("a waitForUrl step without a pattern is refused before it runs", () => {
   const upload = lcsc.tasks.bulkAddBom.filter((step) => step.do === "waitForUrl");
   assert.equal(upload.length, 2);
   assert.ok(upload.every((step) => step.pattern instanceof RegExp));
+});
+
+
+/* 2026-11-21: DigiKey's upload said it finished, the order's parts were not in
+ * the cart, and the cart still held an earlier run's lines. */
+test("a part the upload left out is added on its own, and a line from before is removed", async () => {
+  resetScript((task, params, calls) => {
+    if (task === "openCart") {
+      const fixed = calls.some((call) => call.task === "addToCart");
+      return { results: { cart: fixed
+        ? [{ part: "RC0402FR-0710KL", quantity: "10" }, { part: "GRM155R71C104KA88D", quantity: "10" }]
+        : [{ part: "RC0402FR-0710KL", quantity: "10" }, { part: "535-13731-1-ND", quantity: "10" }] } };
+    }
+    return happyShop(task, params);
+  });
+  const { flow } = makeFlow();
+  await flow.start({ supplier: "digikey", text: DEMO_TEXT });
+  assert.deepEqual(ScriptedRunner.calls.map((call) => call.task).slice(0, 5),
+    ["bulkAddBom", "openCart", "removeFromCart", "addToCart", "openCart"]);
+  assert.deepEqual(ScriptedRunner.calls[2].params, { part: "535-13731-1-ND" });
+  assert.deepEqual(ScriptedRunner.calls[3].params, { part: "GRM155R71C104KA88D", quantity: "10" });
+  assert.equal(flow.state().status, "done");
+  assert.deepEqual(flow.lines.map((line) => line.status), ["added", "added"]);
+});
+
+test("a part that still won't go in fails with its name; with nothing of the list in the cart the purchase ends", async () => {
+  resetScript((task, params) => (task === "openCart" ? { results: { cart: [{ part: "535-13731-1-ND", quantity: "10" }] } }
+    : task === "addToCart" ? { status: "failed", steps: [{ status: "failed", error: { message: "No such part" } }] } : happyShop(task, params)));
+  const { flow } = makeFlow();
+  await flow.start({ supplier: "digikey", text: DEMO_TEXT });
+  const end = flow.state();
+  assert.equal(end.status, "failed");
+  assert.equal(end.message, "nothing-added");
+  assert.ok(flow.lines.every((line) => line.status === "failed"));
+  assert.ok(!ScriptedRunner.calls.some((call) => call.task === "placeOrder"), "nothing is checked out");
 });

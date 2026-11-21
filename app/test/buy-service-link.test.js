@@ -166,3 +166,24 @@ test("a job from BOM opens the Buy lab out of sight; a checkout link brings it f
   assert.equal(await link.openOrder("so_9"), JOB.seller);
   assert.ok(opens.some((options) => !options.quiet), "the person's checkout link opens it in front");
 });
+
+
+test("a run that fails before its cart tells BOM; a stop is reported as stopped until Continue", async () => {
+  const failing = harness([[JOB]]);
+  await failing.link.tick();
+  await failing.lab.link.ended({ status: "failed", message: "The supplier page is not ready" });
+  const cart = failing.posts.find((post) => post.path === "cart");
+  assert.equal(cart.body.failed, "The supplier page is not ready");
+  assert.deepEqual(failing.link.activity(), []);
+
+  const stopped = harness([[JOB], [JOB]]);
+  await stopped.link.tick();
+  await stopped.lab.link.ended({ status: "stopped", message: "stalled" });
+  assert.equal(stopped.posts.filter((post) => post.path === "cart").length, 0, "a stop does not fail the order");
+  assert.deepEqual(stopped.link.activity(), [{ purchase_request_id: "pr_1", seller: "digikey", step: "stopped", driver: "none", message: "stalled" }]);
+  await stopped.link.tick();
+  const beat = stopped.posts.filter((post) => post.path === "heartbeat").at(-1);
+  assert.deepEqual(beat.body.activity.map((item) => item.step), ["stopped"]);
+  stopped.lab.link.resumed();
+  assert.deepEqual(stopped.link.activity().filter((item) => item.step === "stopped"), []);
+});
