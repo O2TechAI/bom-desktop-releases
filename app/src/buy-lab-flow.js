@@ -691,10 +691,15 @@ class BuyLabFlow {
           line.error = null;
         }
       } else if (snapshot.status !== "done") {
+        // The batch didn't go through (the shop took none of it, or answered
+        // in a way the task didn't expect): not the end of the purchase. The
+        // cart is read next and settleCart adds each missing part one by one,
+        // failing only with the parts that still aren't there (2026-11-21).
         for (const line of this.lines) {
           line.status = "failed";
           line.error = failed?.error?.message || snapshot.status;
         }
+        this.bulkFailed = true;
       } else {
         for (const line of this.lines) line.status = "added";
       }
@@ -727,6 +732,11 @@ class BuyLabFlow {
         this.emit();
         if (this.stopRequested) { this.emit({ status: "stopped", message: "stopped" }); return false; }
       }
+    }
+    // A batch that failed as a whole goes to settleCart, which adds part by part.
+    if (this.bulkFailed) {
+      this.bulkFailed = false;
+      return true;
     }
     // Nothing in the cart from this list: going on would only check out
     // whatever else is there, or walk an empty cart to the checkout.
