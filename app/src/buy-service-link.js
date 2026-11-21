@@ -72,6 +72,8 @@ class ServiceLink {
     // Runs that ended without an order (the person stopped it, the site
     // refused): not started again by themselves; the checkout link does.
     this.ended = new Set();
+    // Why each ended run stopped, for BOM's Placing tab: key -> { job, message }.
+    this.stops = new Map();
     this.jobs = [];
     this.timer = null;
     this.busy = false;
@@ -126,6 +128,8 @@ class ServiceLink {
 
   async follow() {
     const live = new Set(this.jobs.map((job) => `${job.purchase_request_id}:${job.seller}`));
+    // A run BOM no longer has (cancelled, done) is forgotten.
+    for (const key of this.stops.keys()) if (!live.has(key)) this.stops.delete(key);
     // Cancelled in BOM, or otherwise over: stop its run.
     for (const [key, run] of this.running) {
       if (!live.has(key) && !run.placed) {
@@ -164,6 +168,12 @@ class ServiceLink {
    * BOM locks a seller the app is working on (2026-11-21). */
   activity() {
     const out = [];
+    // Ended without an order and waiting for the person's Continue in the Buy
+    // lab: BOM shows it as stopped, with why (2026-11-21: it waited for ever).
+    for (const { job, message } of this.stops.values()) {
+      out.push({ purchase_request_id: job.purchase_request_id, seller: job.seller, step: "stopped", driver: "none",
+        message: String(message || "stopped").slice(0, 64) });
+    }
     for (const run of this.running.values()) {
       const now = this.lab?.activity?.(run.job.seller);
       if (!now) continue;
@@ -215,14 +225,22 @@ class ServiceLink {
         this.running.delete(key);
         if (run.placed || run.stopped) return;
         this.ended.add(key);
-        if (message === "nothing-added" && !run.cartSent) {
-          const why = String(message || status || "The Buy lab stopped").slice(0, 500);
+        // A failure before the cart was reported is BOM's to know: its lines
+        // can't be had this time (the order shows "Did not go through"). A
+        // stop (the person, a page the app didn't know) can go on: BOM shows
+        // it as stopped until the person presses Continue in the Buy lab.
+        if (status === "failed" && !run.cartSent) {
+          const why = String(message || "The Buy lab could not build the cart").slice(0, 500);
           await this.post("cart", { purchase_request_id: run.job.purchase_request_id, seller: run.job.seller, failed: why });
+          return;
         }
+        this.stops.set(key, { job: run.job, message: message || status || "stopped" });
+        this.nudge?.();
       },
       // The person pressed Continue: the job is this run's again.
       resumed: () => {
         this.ended.delete(key);
+        this.stops.delete(key);
         run.stopped = false;
         this.running.set(key, run);
       },
@@ -235,6 +253,7 @@ class ServiceLink {
     const job = this.jobs.find((entry) => entry.supplier_order_id === orderId);
     if (!job) return null;
     this.ended.delete(`${job.purchase_request_id}:${job.seller}`);
+    this.stops.delete(`${job.purchase_request_id}:${job.seller}`);
     await this.follow();
     (await this.openBuyLab()).showFor?.(job.seller);
     return job.seller;

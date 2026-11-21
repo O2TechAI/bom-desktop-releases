@@ -546,6 +546,7 @@ class BuyLabFlow {
     this.tracking = [];
     this.placed = null;
     this.cartCheck = null;
+    this.freshCart = null;
     const saved = resumeKey ? this.store?.load(supplier) : null;
     if (saved && saved.resumeKey === resumeKey && saved.progress > STAGE.NEW && saved.progress < STAGE.PLACED) {
       // The same purchase, interrupted earlier: go on from where it got to.
@@ -599,6 +600,7 @@ class BuyLabFlow {
       const site = this.sites.find((entry) => entry.id === this.supplier);
       if (this.progress < STAGE.ADDED) {
         if (!(await this.addLines(site))) return;
+        if (!(await this.settleCart(site))) return;
         this.progress = STAGE.ADDED;
         this.save();
       }
@@ -735,6 +737,75 @@ class BuyLabFlow {
     return true;
   }
 
+  /** Stage 1b (2026-11-21): the cart holds this list and nothing else. A
+   * shop's batch upload can say it finished and leave parts out (DigiKey did,
+   * on a cart that still held an earlier run's lines), and a checkout buys
+   * the whole cart. So the cart is read: a part that isn't in it is added on
+   * its own; a line that isn't this list's is removed; a part that still won't
+   * go in fails with its name. False when nothing of the list is in the cart. */
+  async settleCart(site) {
+    const read = async () => {
+      const cart = finished(await this.runTask("openCart"));
+      return (Array.isArray(cart.results?.cart) ? cart.results.cart : []).filter((row) => partKey(row.part));
+    };
+    const wanted = new Set(this.lines.map((line) => partKey(line.mpn)));
+    this.emit({ status: "running", message: "checking-cart" });
+    let rows = await read();
+    const have = new Set(rows.map((row) => partKey(row.part)));
+    const extras = rows.filter((row) => !wanted.has(partKey(row.part)));
+    const missing = this.lines.filter((line) => !have.has(partKey(line.mpn)));
+    if (!extras.length && !missing.length) {
+      this.freshCart = rows; // the cart check takes this read instead of reading again
+      return true;
+    }
+    const attempt = async (task, params) => {
+      try {
+        const snapshot = await this.runTask(task, params);
+        const failed = snapshot.steps?.find((step) => step.status === "failed");
+        return snapshot.status === "done" ? null : (failed?.error?.message || snapshot.status);
+      } catch (error) {
+        if (error?.code === "stopped" || error?.code === "blocked") throw error;
+        return error.message;
+      }
+    };
+    if (site?.tasks.removeFromCart) {
+      for (const row of extras) {
+        this.emit({ message: "removing-extra" });
+        await attempt("removeFromCart", { part: row.part });
+        if (this.stopRequested) throw stoppedError();
+      }
+    }
+    if (site?.tasks.addToCart) {
+      for (const line of missing) {
+        this.emit({ message: "adding" });
+        line.status = "adding";
+        this.emit();
+        line.error = await attempt("addToCart", { part: line.mpn, quantity: line.quantity });
+        if (this.stopRequested) throw stoppedError();
+      }
+    }
+    rows = await read();
+    const inCart = new Set(rows.map((row) => partKey(row.part)));
+    for (const line of this.lines) {
+      if (inCart.has(partKey(line.mpn))) {
+        line.status = "added";
+        line.error = null;
+      } else {
+        line.status = "failed";
+        line.error = line.error || "Not in the cart";
+      }
+    }
+    this.emit();
+    if (!this.lines.some((line) => line.status === "added")) {
+      this.emit({ status: "failed", message: "nothing-added" });
+      return false;
+    }
+    const left = rows.filter((row) => !wanted.has(partKey(row.part))).map((row) => row.part);
+    if (left.length) throw new Error(`The cart still has other items: ${left.slice(0, 3).join(", ")}`);
+    this.freshCart = rows;
+    return true;
+  }
+
   /** Stage 2: the person checks the cart against the list before anything is
    * bought (2026-11-20: "在购买前展示购物车，让用户确认这个是他们想要买的产品").
    * It always waits for their "correct"; "re-check" reads the cart again
@@ -743,8 +814,13 @@ class BuyLabFlow {
   async checkCart() {
     for (;;) {
       this.emit({ status: "running", message: "reading-cart" });
-      const cart = finished(await this.runTask("openCart"));
-      this.cart = Array.isArray(cart.results?.cart) ? cart.results.cart : [];
+      if (this.freshCart) {
+        this.cart = this.freshCart;
+        this.freshCart = null;
+      } else {
+        const cart = finished(await this.runTask("openCart"));
+        this.cart = Array.isArray(cart.results?.cart) ? cart.results.cart : [];
+      }
       if (this.link?.cart) await this.link.cart(this.cart).catch(() => {});
       if (this.confirmedCart && sameCart(this.confirmedCart, this.cart)) {
         this.cartCheck = null;

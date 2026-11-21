@@ -507,6 +507,8 @@ test("a supplier with a bulk list adds the whole list in one call", async () => 
   } });
   flow.runTask = async (task, params) => {
     calls.push({ task, params });
+    // The shop's cart holds the list it was given.
+    if (task === "openCart") return { status: "done", steps: [], results: { cart: [{ part: "A", quantity: "2" }, { part: "B", quantity: "3" }] } };
     return { status: "done", steps: [], results: {} };
   };
   await flow.start({ supplier: "digikey", text: "A 2\nB 3" });
@@ -534,6 +536,7 @@ test("a supplier with a BOM tool uploads one CSV file", async () => {
   flow.runTask = async (task, params) => {
     calls.push({ task, params });
     if (task === "bulkAddBom") content = fs.readFileSync(params.file, "utf8");
+    if (task === "openCart") return { status: "done", steps: [], results: { cart: [{ part: "C1525", quantity: "10" }, { part: "C25804", quantity: "50" }] } };
     return { status: "done", steps: [], results: {} };
   };
   await flow.start({ supplier: "lcsc", text: "C1525 10\nC25804 50" });

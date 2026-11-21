@@ -17,7 +17,12 @@ class ScriptedRunner {
   constructor(options) { this.options = options; }
   async run() {
     calls.push({ task: this.options.task, params: this.options.params });
-    if (this.options.task === "openCart") return { status: "done", steps: [], results: { cart: [] } };
+    // The shop's cart holds what this purchase uploaded (its CSV, header first).
+    if (this.options.task === "bulkAddBom") {
+      ScriptedRunner.cart = require("node:fs").readFileSync(this.options.params.file, "utf8").trim().split("\n").slice(1)
+        .map((row) => ({ part: row.split(",")[0], quantity: row.split(",")[1] }));
+    }
+    if (this.options.task === "openCart") return { status: "done", steps: [], results: { cart: ScriptedRunner.cart || [] } };
     return { status: "done", steps: [], results: {} };
   }
   stop() {}
