@@ -413,10 +413,11 @@ const TRANSITIONS = [
       { do: "fill", target: "cart.bulkText", value: "{{quantity}}, {{part}}" },
       { do: "click", target: "cart.bulkAdd" },
       { do: "wait", ms: 2500 },
-      // A part sold in several packagings (cut tape, reel) comes back as an
-      // item that wasn't added, with "View Options": which packaging is a
-      // buying decision, so the person makes it and the run carries on.
-      { do: "handoff", message: "bulk_error", when: "cart.bulkError", untilGone: "cart.bulkError" },
+      // A part DigiKey didn't take ("were not added to your order", e.g. one
+      // sold in several packagings) is not waited on here: its notice stays on
+      // the page even once handled, so a hand-off never ended (2026-11-21, the
+      // run stuck at the cart). The flow's settleCart reads the cart next, adds
+      // what is missing one by one, and names what still isn't there.
       { do: "waitForHidden", target: "cart.empty", timeout: 20000 },
       { do: "waitFor", target: "cart.rows", timeout: 20000 },
     ],
@@ -433,7 +434,6 @@ const TRANSITIONS = [
       { do: "fill", target: "cart.bulkText", value: "{{lines}}" },
       { do: "click", target: "cart.bulkAdd" },
       { do: "wait", ms: 2500 },
-      { do: "handoff", message: "bulk_error", when: "cart.bulkError", untilGone: "cart.bulkError" },
       { do: "waitForHidden", target: "cart.empty", timeout: 20000 },
       { do: "waitFor", target: "cart.rows", timeout: 20000 },
     ],
@@ -503,7 +503,6 @@ const TRANSITIONS = [
       { do: "click", target: "cart.mapAdd" },
       { do: "waitForHidden", target: "cart.mapper", timeout: 20000 },
       { do: "wait", ms: 2500 },
-      { do: "handoff", message: "bulk_error", when: "cart.bulkError", untilGone: "cart.bulkError" },
       { do: "waitForHidden", target: "cart.empty", timeout: 20000 },
       { do: "waitFor", target: "cart.rows", timeout: 20000 },
     ],

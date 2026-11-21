@@ -165,17 +165,18 @@ test("LCSC writes one CSV for its BOM tool, then removes it", async () => {
 });
 
 
-test("a failed bulk add marks every line and ends the purchase (v0.0.13 went on to the cart)", async () => {
-  resetScript((task, params) => (task === "bulkAddBom"
-    ? { status: "failed", steps: [{ status: "failed", error: { message: "It isn't on the page" } }] }
-    : happyShop(task, params)));
+test("a failed bulk add goes on part by part, and ends only when nothing got into the cart", async () => {
+  // 2026-11-21: the batch failing as a whole no longer ends the purchase at
+  // once; the cart is read and each missing part is added on its own.
+  resetScript((task, params) => {
+    if (task === "bulkAddBom") return { status: "failed", steps: [{ status: "failed", error: { message: "It isn't on the page" } }] };
+    if (task === "openCart") return { results: { cart: [] } };
+    return happyShop(task, params);
+  });
   const { flow } = makeFlow();
   await flow.start({ supplier: "digikey", text: DEMO_TEXT });
-  assert.deepEqual(flow.state().lines.map((line) => [line.status, line.error]), [
-    ["failed", "It isn't on the page"],
-    ["failed", "It isn't on the page"],
-  ]);
-  assert.deepEqual(ScriptedRunner.calls.map((call) => call.task), ["bulkAddBom"]);
+  assert.deepEqual(ScriptedRunner.calls.map((call) => call.task), ["bulkAddBom", "openCart", "addToCart", "addToCart", "openCart"]);
+  assert.ok(flow.state().lines.every((line) => line.status === "failed"));
   assert.equal(flow.state().status, "failed");
   assert.equal(flow.state().message, "nothing-added");
 });
