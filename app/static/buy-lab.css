@@ -485,3 +485,21 @@ body.is-split .live {
   background: #ffffff;
   box-shadow: 0 0 0 1px #dce0e4;
 }
+
+/* The two cards hold only what the person checks (2026-11-21): the bar keeps
+   Back to BOM; the left card keeps the lines and the cart's yes (Correct, go
+   to checkout, Place the order); the seller's page has no tab row. */
+body.is-split header.bar > .supplier,
+body.is-split header.bar > [data-address-manage],
+body.is-split header.bar > .rehearsal,
+body.is-split header.bar > .actions,
+body.is-split .address-form,
+body.is-split .service-note,
+body.is-split .panel > .panel-head,
+body.is-split .panel > textarea,
+body.is-split .panel > .run-row,
+body.is-split .panel > .minis,
+body.is-split .cart-check > .cart-detail,
+body.is-split .cart-check .cart-extra,
+body.is-split .live .back,
+body.is-split .live .tabs { display: none !important; }
