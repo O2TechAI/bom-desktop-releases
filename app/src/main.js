@@ -414,6 +414,7 @@ async function openBuyLab({ quiet = false } = {}) {
     openExternal: (url) => void openExternal(url),
     downloadsPath: app.getPath("downloads"),
     onClosed: () => { buyLabWindow = null; },
+    onBackToSite: () => focusMainWindow(),
   })).then(
     (opened) => {
       buyLabWindow = opened;

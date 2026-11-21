@@ -24,6 +24,14 @@ const { LiveBrowser } = require("./live-browser");
 const BACKGROUND = "#ecf0f3";
 const LAB_SITES = ["digikey", "mouser", "lcsc"];
 
+/* Where each shop's cart starts on its cart page (the sites' own markup, see
+ * automation/sites): BOM's "Seller's site" scrolls there. */
+const CART_START = {
+  digikey: "#cartDetails",
+  mouser: "table#cart, #cart-form",
+  lcsc: "[id^='cartItemBox_'], .v2CartListItemWrap, .cartItemWrap",
+};
+
 /** the page's contents -> BuyLabWindow */
 const byContents = new WeakMap();
 
@@ -35,8 +43,13 @@ class BuyLabWindow {
     return window;
   }
 
-  constructor({ language, pageUrl, pagePreload, partition, userDataDir, downloadsPath, openExternal, onClosed, serviceStatus = null, quiet = false }) {
+  constructor({ language, pageUrl, pagePreload, partition, userDataDir, downloadsPath, openExternal, onClosed, onBackToSite = null, serviceStatus = null, quiet = false }) {
     this.serviceStatus = serviceStatus;
+    /* Opened by BOM's "Deal with it": Back goes back to BOM, not to the list
+     * (2026-11-21: "点击back 跳到这个页面而不是原来的页面"). */
+    this.onBackToSite = onBackToSite;
+    this.returnTo = null;
+    this.hideOnBack = false;
     this.language = language;
     this.openExternal = openExternal;
     this.downloadsPath = downloadsPath;
@@ -162,7 +175,7 @@ class BuyLabWindow {
 
   onFrame(id, frame) {
     this.lastFrame.set(id, frame);
-    if (this.closed || this.view !== "live" || id !== this.active) return;
+    if (this.closed || this.view === "flow" || id !== this.active) return;
     if (this.page.webContents.isDestroyed()) return;
     this.page.webContents.send("live:frame", frame);
   }
@@ -185,16 +198,21 @@ class BuyLabWindow {
     this.page.setBounds({ x: 0, y: 0, width, height });
   }
 
-  /** The list, or the live page of one supplier (`id`, else the active one). */
+  /** The list, the live page of one supplier (`id`, else the active one), or
+   * "split": that supplier's cart check beside its live page. */
   showView(name, id = this.active) {
     if (this.closed) return;
-    this.view = name === "live" ? "live" : "flow";
-    if (this.view === "live" && id && this.lives.has(id)) this.active = id;
+    const was = this.view;
+    this.view = name === "live" || name === "split" ? name : "flow";
+    if (this.view !== "flow" && id && this.lives.has(id)) this.active = id;
+    // Leaving the side-by-side view: the shop goes back to its usual size.
+    if (was === "split" && this.view !== "split") void this.lives.get(this.active)?.setSize();
     if (!this.page.webContents.isDestroyed()) {
       this.page.webContents.send("buy-lab:view", this.view);
+      if (this.view === "split") this.page.webContents.send("buy-lab:reveal", { id: this.active, part: "cart" });
       this.publish();
     }
-    if (this.view === "live") {
+    if (this.view !== "flow") {
       const id = this.active;
       if (id && this.lives.has(id)) {
         this.active = id;
@@ -215,6 +233,8 @@ class BuyLabWindow {
       lists: Object.fromEntries(this.listTexts),
       active: this.active,
       view: this.view,
+      // "site": the person came from BOM's Deal with it; Back returns there.
+      returnTo: this.returnTo,
       // BOM's purchasing service, as its last call answered.
       service: this.serviceStatus?.() || null,
       // A purchase that was interrupted, saved on this computer: it can go on
@@ -244,7 +264,7 @@ class BuyLabWindow {
    * the screen from the other supplier's page while the person is on it: the
    * waiting supplier's tab is marked instead (the page has the states). */
   showFor(id, { quiet = false } = {}) {
-    if (this.view === "live" && this.active && this.active !== id) {
+    if (this.view !== "flow" && this.active && this.active !== id) {
       this.publish();
       if (!quiet) this.surface();
       return;
@@ -261,12 +281,63 @@ class BuyLabWindow {
     this.window.flashFrame(true);
   }
 
-  /** The seller's own page (the cart the lab filled), in front: BOM's
-   * "Deal with it". False when this lab has no page for that seller. */
+  /** BOM's "Deal with it", in front. At the cart check, two cards side by
+   * side (2026-11-21: "左右两个卡片"): this lab's check of the cart against
+   * the list of parts to buy, and the seller's own page scrolled to its
+   * cart. Otherwise the seller's page alone, at its cart. False when this
+   * lab has no page for that seller. */
   openSellerPage(id) {
     if (this.closed || !this.lives.has(id)) return false;
-    this.showView("live", id);
+    if (!this.returnTo) this.hideOnBack = !this.window.isVisible();
+    this.returnTo = "site";
+    const atCartCheck = Boolean(this.flows.get(id)?.state()?.cartCheck);
+    this.showView(atCartCheck ? "split" : "live", id);
+    if (!atCartCheck) void this.revealCart(id);
     this.focus();
+    return true;
+  }
+
+  /** The side-by-side view measured its right card: the shop is laid out at
+   * that size (never narrower than 800, so it keeps its desktop layout). */
+  async fitStage({ width, height } = {}) {
+    if (this.closed || this.view !== "split") return false;
+    const live = this.lives.get(this.active);
+    if (!live) return false;
+    const w = Math.round(Math.min(1280, Math.max(800, Number(width) || 1280)));
+    const h = Math.round(Math.min(1400, Math.max(600, (Number(height) || 900) + 90)));
+    await live.setSize({ width: w, height: h });
+    await this.revealCart(this.active);
+    return true;
+  }
+
+  /** Scroll the seller's page to its cart, when it is on the cart page. */
+  async revealCart(id) {
+    const selector = CART_START[id];
+    const page = this.lives.get(id)?.page;
+    if (!selector || !page) return false;
+    try {
+      return await page.evaluate((css) => {
+        const cart = document.querySelector(css);
+        if (!cart) return false;
+        cart.scrollIntoView({ block: "start" });
+        return true;
+      }, selector);
+    } catch {
+      return false;
+    }
+  }
+
+  /** Back: to BOM when Deal with it brought the person here, else to the list. */
+  back() {
+    if (this.closed) return false;
+    const toSite = this.returnTo === "site";
+    this.returnTo = null;
+    this.showView("flow");
+    if (toSite) {
+      if (this.hideOnBack) this.window.hide();
+      this.hideOnBack = false;
+      this.onBackToSite?.();
+    }
     return true;
   }
 
@@ -491,6 +562,8 @@ function registerBuyLabIpc() {
     owner.showView("live", id ? String(id) : undefined);
     return true;
   });
+  ipcMain.handle("buy-lab:back", (event) => ownerOf(event)?.back() ?? false);
+  ipcMain.handle("buy-lab:stage-size", async (event, size) => (await ownerOf(event)?.fitStage(size && typeof size === "object" ? size : {})) ?? false);
   ipcMain.handle("buy-lab:show-flow", (event) => {
     const owner = ownerOf(event);
     if (!owner) return false;
