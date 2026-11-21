@@ -55,7 +55,7 @@ class ServiceLink {
    * @param {object} options
    * @param {(url: string, init: object) => Promise<Response>} options.fetch  the BOM site session's fetch
    * @param {string} options.origin  the BOM site
-   * @param {() => Promise<object>} options.openBuyLab
+   * @param {(options?: { quiet?: boolean }) => Promise<object>} options.openBuyLab the Buy lab; `quiet` opens it out of sight
    * @param {string} options.version
    */
   constructor({ fetch, origin, openBuyLab, version, log = () => {}, onStatus = () => {} }) {
@@ -132,7 +132,7 @@ class ServiceLink {
         this.running.delete(key);
         run.stopped = true;
         try {
-          (await this.openBuyLab()).stop(run.job.seller);
+          (await this.openBuyLab({ quiet: true })).stop(run.job.seller);
         } catch { /* the Buy lab is closed */ }
       }
     }
@@ -147,11 +147,12 @@ class ServiceLink {
       }
       // One purchase per supplier at a time: the next waits for its turn.
       if ([...this.running.values()].some((other) => other.job.seller === job.seller)) continue;
-      const lab = await this.openBuyLab();
+      // Out of sight: BOM's Placing tab follows it (2026-11-21).
+      const lab = await this.openBuyLab({ quiet: true });
       const fresh = { job, phase: job.phase, cartSent: job.phase !== "price", placed: false, stopped: false };
       if (lab.startFromService(job, this.linkFor(key, fresh))) {
         this.running.set(key, fresh);
-        lab.showFor?.(job.seller);
+        lab.showFor?.(job.seller, { quiet: true });
       }
     }
   }
