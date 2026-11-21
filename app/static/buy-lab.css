@@ -503,3 +503,39 @@ body.is-split .cart-check > .cart-detail,
 body.is-split .cart-check .cart-extra,
 body.is-split .live .back,
 body.is-split .live .tabs { display: none !important; }
+
+/* The app's turn on the supplier page: the picture stays visible under a light
+ * cover that takes the clicks; a card says what the app does, how far, and Stop. */
+.live .hold {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(16, 24, 32, 0.18);
+  cursor: progress;
+}
+.live .hold[hidden] { display: none; }
+.live .hold-card {
+  display: grid;
+  width: min(440px, 100%);
+  gap: 10px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 10px 30px rgba(16, 24, 32, 0.18);
+  cursor: default;
+}
+.live .hold-text { margin: 0; color: #1d2a22; font-size: 15px; font-weight: 600; }
+.live .hold-note { margin: 0; color: #5b6770; font-size: 13px; }
+.live .hold-track { position: relative; height: 4px; overflow: hidden; background: #e9eef2; border-radius: 999px; }
+.live .hold-track > span { display: block; height: 100%; background: #2f4a33; border-radius: inherit; transition: width 300ms linear; }
+.live .hold-track.is-indeterminate > span { width: 35%; animation: hold-slide 1.3s ease-in-out infinite; }
+.live .hold-card > button { justify-self: start; }
+@keyframes hold-slide { from { transform: translateX(-110%); } to { transform: translateX(320%); } }
+@media (prefers-reduced-motion: reduce) {
+  .live .hold-track > span { transition: none; }
+  .live .hold-track.is-indeterminate > span { animation: none; width: 100%; opacity: .4; }
+}

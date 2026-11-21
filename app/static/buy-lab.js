@@ -31,8 +31,18 @@ const COPY = {
       "cart-check": "Check the cart: is this what you want to buy?",
       "cart-confirmed": "Cart confirmed: going to checkout",
       "rehearsal-placed": "Rehearsal: stopped at the order's yes, nothing was ordered",
+      stalled: "The app stopped: nothing changed on the page for 3 minutes. Continue, or finish on the page yourself.",
     },
     empty: "Nothing yet", orderNumber: "Order", none: "—",
+    holdCart: "The app is adding your lines to the cart: {done} of {total}",
+    holdReading: "The app is reading the cart",
+    holdCheckout: "The app is filling in the checkout",
+    holdAfter: "The app is reading the order",
+    holdNote: "Please don't click this page now; it will be yours as soon as the app needs you.",
+    holdStop: "Stop after this line",
+    holdStopNow: "Stop now",
+    holdStopping: "Stopping after this line…",
+    totalLower: "The order's total ({review}) is lower than the cart you confirmed ({cart}): the cart may have changed. Check it before you place the order.",
     demoBoth: "Demo (DigiKey + LCSC + Mouser)", stopAll: "Stop all", openPage: "Open its page",
     cartCheckTitle: "Check the cart", cartCheckText: "Compare it with your list before anything is bought.",
     cartOk: "Correct, go to checkout", cartRecheck: "Re-check", cartList: "Your list", cartCart: "In the cart",
@@ -78,8 +88,18 @@ const COPY = {
       "cart-check": "请核对购物车：这是你要买的吗？",
       "cart-confirmed": "购物车已确认，正在进入结账",
       "rehearsal-placed": "演练：停在确认下单这一步，没有下单",
+      stalled: "已停止：页面 3 分钟没有任何变化。可以继续，或在页面上自己完成。",
     },
     empty: "还没有内容", orderNumber: "订单", none: "—",
+    holdCart: "正在把物料加入购物车：{done}/{total}",
+    holdReading: "正在读取购物车",
+    holdCheckout: "正在填写结账信息",
+    holdAfter: "正在读取订单",
+    holdNote: "现在请不要点击这个页面，需要你操作时会马上交给你。",
+    holdStop: "做完这一行再停止",
+    holdStopNow: "立即停止",
+    holdStopping: "做完这一行就停止…",
+    totalLower: "订单总价（{review}）比你确认的购物车（{cart}）还低，购物车可能被改过。下单前请再核对一下。",
     demoBoth: "一键演示（DigiKey + LCSC + Mouser）", stopAll: "全部停止", openPage: "打开它的页面",
     cartCheckTitle: "核对购物车", cartCheckText: "下单前，和你的清单对一下。",
     cartOk: "没问题，去结账", cartRecheck: "重新读取", cartList: "你的清单", cartCart: "购物车里",
@@ -125,8 +145,18 @@ const COPY = {
       "cart-check": "Revisa el carrito: ¿es lo que quieres comprar?",
       "cart-confirmed": "Carrito confirmado: yendo al pago",
       "rehearsal-placed": "Ensayo: se detuvo en la confirmación del pedido, no se pidió nada",
+      stalled: "La app se detuvo: nada cambió en la página en 3 minutos. Continúa o termina tú en la página.",
     },
     empty: "Nada todavía", orderNumber: "Pedido", none: "—",
+    holdCart: "La app está añadiendo tus líneas al carrito: {done} de {total}",
+    holdReading: "La app está leyendo el carrito",
+    holdCheckout: "La app está completando el pago",
+    holdAfter: "La app está leyendo el pedido",
+    holdNote: "No hagas clic en esta página ahora; será tuya en cuanto la app te necesite.",
+    holdStop: "Detener tras esta línea",
+    holdStopNow: "Detener ya",
+    holdStopping: "Se detendrá tras esta línea…",
+    totalLower: "El total del pedido ({review}) es menor que el carrito que confirmaste ({cart}): el carrito pudo cambiar. Revísalo antes de pedir.",
     demoBoth: "Demostración (DigiKey + LCSC + Mouser)", stopAll: "Detener todo", openPage: "Abrir su página",
     cartCheckTitle: "Revisa el carrito", cartCheckText: "Compáralo con tu lista antes de comprar nada.",
     cartOk: "Correcto, ir al pago", cartRecheck: "Volver a leer", cartList: "Tu lista", cartCart: "En el carrito",
@@ -225,7 +255,7 @@ function statusText(state) {
     case "waiting": return state.confirm ? copy.waiting : (copy.messages[state.message] || copy.waitingPerson);
     case "done": return copy.done;
     case "failed": return copy.messages[state.message] || state.message || copy.failed;
-    case "stopped": return copy.stopped;
+    case "stopped": return state.message === "stalled" ? copy.messages.stalled : copy.stopped;
     default: return copy.ready;
   }
 }
@@ -309,11 +339,11 @@ function buildPanel(site) {
     if (!list.value.trim()) { list.focus(); return; }
     void startOne(site.id, list.value);
   });
-  stop.addEventListener("click", () => { void window.buyLab.stop(site.id); });
+  stop.addEventListener("click", () => { void window.buyLab.stop(site.id, { soft: true }); });
   confirm.addEventListener("click", () => { void window.buyLab.confirm(site.id); });
   cartOk.addEventListener("click", () => { void window.buyLab.confirmCart(site.id); });
   cartRecheck.addEventListener("click", () => { void window.buyLab.recheckCart(site.id); });
-  cartStop.addEventListener("click", () => { void window.buyLab.stop(site.id); });
+  cartStop.addEventListener("click", () => { void window.buyLab.stop(site.id, { soft: true }); });
   resume.addEventListener("click", () => { void window.buyLab.resume(site.id); });
   openPage.addEventListener("click", () => { void window.buyLab.showLive(site.id); });
 
@@ -372,6 +402,14 @@ function renderPanel(parts, state, saved) {
   if (state.confirm) {
     parts.confirmCard.hidden = false;
     parts.confirmText.textContent = `${copy.confirmText} ${state.confirm.value || ""}`.trim();
+    // The review page's total under the cart the person confirmed: the cart changed since.
+    const check = state.totalCheck;
+    if (check?.lower) {
+      parts.confirmText.textContent += ` ${copy.totalLower.replace("{review}", `$${check.review}`).replace("{cart}", `$${check.cart}`)}`;
+      parts.confirmText.dataset.tone = "waiting";
+    } else {
+      parts.confirmText.removeAttribute("data-tone");
+    }
   } else {
     parts.confirmCard.hidden = true;
   }
@@ -428,6 +466,7 @@ function render(state) {
   // Opened by BOM's Deal with it: Back (here and on the seller's page) goes to BOM.
   elements.backSite.hidden = state.returnTo !== "site";
   if (elements.liveBack) elements.liveBack.textContent = state.returnTo === "site" ? copy.backToBom : copy.backToList;
+  renderHold(state);
   const anyRunning = Object.values(state.flows).some((flow) => flow.running);
   elements.stopAll.disabled = !anyRunning;
   elements.demo.disabled = Object.values(state.flows).some((flow) => flow.running);
@@ -534,6 +573,37 @@ window.buyLab.state().then((state) => render(state)).catch(() => {});
  * shop stops for the person or when they open it. live.js draws the frames
  * and forwards the input; here only the overlay's visibility changes. */
 const overlay = document.querySelector("[data-live]");
+
+/* While the app has the shown supplier's page (adding to the cart, reading it,
+ * filling the checkout), a cover over the picture says so and holds the
+ * person's clicks (the app holds their keys too); its Stop finishes the line
+ * first (2026-11-21: 机器操作的环节不能让人干预). */
+const hold = {
+  box: document.querySelector("[data-hold]"),
+  text: document.querySelector("[data-hold-text]"),
+  note: document.querySelector("[data-hold-note]"),
+  bar: document.querySelector("[data-hold-bar]"),
+  stop: document.querySelector("[data-hold-stop]"),
+};
+if (hold.note) hold.note.textContent = copy.holdNote;
+hold.stop?.addEventListener("click", () => {
+  if (current?.active) void window.buyLab.stop(current.active, { soft: true });
+});
+
+function renderHold(state) {
+  if (!hold.box) return;
+  const flow = state?.flows?.[state.active];
+  const driving = Boolean(flow?.driving);
+  hold.box.hidden = !driving;
+  if (!driving) return;
+  const counted = flow.phase === "cart" && flow.total > 0;
+  const words = { cart: copy.holdCart, reading: copy.holdReading, checkout: copy.holdCheckout, after: copy.holdAfter }[flow.phase] || copy.working;
+  hold.text.textContent = words.replace("{done}", String(flow.done)).replace("{total}", String(flow.total));
+  hold.bar.parentElement.classList.toggle("is-indeterminate", !counted);
+  hold.bar.style.width = counted ? `${Math.max(4, Math.round((100 * flow.done) / flow.total))}%` : "";
+  hold.stop.textContent = flow.softStop ? copy.holdStopNow : copy.holdStop;
+  hold.stop.title = flow.softStop ? copy.holdStopping : "";
+}
 
 /* "split" (BOM's Deal with it at the cart check): the seller's cart check on
  * the left, its live page on the right, as two cards. */

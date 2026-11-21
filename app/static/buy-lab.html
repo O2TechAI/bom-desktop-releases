@@ -53,6 +53,15 @@
       <div class="stage" data-stage>
         <canvas class="screen" data-screen tabindex="0" aria-label="Supplier page"></canvas>
         <p class="status" data-status role="status">Connecting to Chrome…</p>
+        <!-- The app's turn on this page: a cover that holds clicks, says what it does, and stops (buy-lab.js). -->
+        <div class="hold" data-hold hidden>
+          <div class="hold-card" role="status" aria-live="polite">
+            <p class="hold-text" data-hold-text></p>
+            <div class="hold-track"><span data-hold-bar></span></div>
+            <p class="hold-note" data-hold-note></p>
+            <button class="quiet" type="button" data-hold-stop>Stop</button>
+          </div>
+        </div>
         <button class="back" type="button" data-back>← Back to the list</button>
         <!-- The supplier Chrome's tabs (live.js): the main one, and a sign-in elsewhere. -->
         <nav class="tabs" data-tabs aria-label="Tabs"></nav>
