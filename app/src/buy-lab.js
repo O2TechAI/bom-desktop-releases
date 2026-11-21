@@ -35,7 +35,7 @@ class BuyLabWindow {
     return window;
   }
 
-  constructor({ language, pageUrl, pagePreload, partition, userDataDir, downloadsPath, openExternal, onClosed, serviceStatus = null }) {
+  constructor({ language, pageUrl, pagePreload, partition, userDataDir, downloadsPath, openExternal, onClosed, serviceStatus = null, quiet = false }) {
     this.serviceStatus = serviceStatus;
     this.language = language;
     this.openExternal = openExternal;
@@ -62,6 +62,10 @@ class BuyLabWindow {
       minHeight: 640,
       title: "O2 BOM - Buy lab",
       backgroundColor: BACKGROUND,
+      // A purchase BOM hands over opens the lab out of sight: the person
+      // follows it on BOM's Placing tab, and the lab comes forward only when
+      // a seller needs them (surface()) or they open it.
+      show: !quiet,
       autoHideMenuBar: process.platform !== "darwin",
     });
 
@@ -99,7 +103,7 @@ class BuyLabWindow {
     this.layout();
     this.window.on("resize", () => this.layout());
     this.window.on("closed", () => { void this.close(); });
-    this.window.show();
+    if (!quiet) this.window.show();
   }
 
   async start() {
@@ -199,7 +203,7 @@ class BuyLabWindow {
         if (!this.page.webContents.isDestroyed()) this.page.webContents.send("live:tabs", this.lives.get(id).tabs());
         void this.lives.get(id).refresh();
       }
-      this.page.webContents.focus();
+      if (this.window.isVisible()) this.page.webContents.focus();
     }
   }
 
@@ -239,12 +243,31 @@ class BuyLabWindow {
   /** Show a supplier's live page because it needs the person, without taking
    * the screen from the other supplier's page while the person is on it: the
    * waiting supplier's tab is marked instead (the page has the states). */
-  showFor(id) {
+  showFor(id, { quiet = false } = {}) {
     if (this.view === "live" && this.active && this.active !== id) {
       this.publish();
+      if (!quiet) this.surface();
       return;
     }
     this.showView("live", id);
+    if (!quiet) this.surface();
+  }
+
+  /** A lab out of sight that needs the person: shown without taking the
+   * keyboard from what they are doing, and flashed in the taskbar / Dock. */
+  surface() {
+    if (this.closed || this.window.isVisible()) return;
+    this.window.showInactive();
+    this.window.flashFrame(true);
+  }
+
+  /** The seller's own page (the cart the lab filled), in front: BOM's
+   * "Deal with it". False when this lab has no page for that seller. */
+  openSellerPage(id) {
+    if (this.closed || !this.lives.has(id)) return false;
+    this.showView("live", id);
+    this.focus();
+    return true;
   }
 
   /** A purchase that could not start: shown on that supplier's panel. */

@@ -389,13 +389,22 @@ function checkoutOrder(url) {
  * of the supplier's own Chrome when the shop stops for the person. */
 let serviceLink = null;
 
-async function openBuyLab() {
+/** `quiet`: a purchase BOM handed over opens the lab out of sight (and
+ * leaves an open one where it is); the menu, a checkout link and BOM's
+ * "Deal with it" bring it forward. */
+async function openBuyLab({ quiet = false } = {}) {
   if (buyLabWindow) {
-    buyLabWindow.focus();
+    if (!quiet) buyLabWindow.focus();
     return buyLabWindow;
   }
-  if (buyLabOpening) return buyLabOpening;
+  if (buyLabOpening) {
+    return buyLabOpening.then((lab) => {
+      if (!quiet) lab.focus();
+      return lab;
+    });
+  }
   buyLabOpening = useAccountLanguage().then(() => BuyLabWindow.create({
+    quiet,
     language,
     pageUrl: localUrl("buy-lab.html", { lang: language }),
     pagePreload: path.join(__dirname, "buy-lab-preload.js"),
@@ -461,6 +470,20 @@ function registerSiteIpc() {
     try {
       await openSupplier(id);
       return { ok: true };
+    } catch (error) {
+      return { ok: false, message: error.message };
+    }
+  });
+  // BOM's "Deal with it" on a seller being bought: that seller's own page
+  // in the Buy lab (where the cart is), else its supplier window.
+  ipcMain.handle("desktop:open-seller-page", async (event, id) => {
+    if (!fromSite(event)) return { ok: false, message: "Not allowed" };
+    const seller = String(id || "");
+    try {
+      if (buyLabWindow?.openSellerPage(seller)) return { ok: true, where: "buy_lab" };
+      if (!suppliers.some((site) => site.id === seller)) return { ok: false, message: "Unknown supplier" };
+      await openSupplier(seller);
+      return { ok: true, where: "supplier" };
     } catch (error) {
       return { ok: false, message: error.message };
     }

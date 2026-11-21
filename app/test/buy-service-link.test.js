@@ -26,7 +26,7 @@ function harness(jobsByTick) {
     started: [], stopped: [], shown: [],
     startFromService(job, link) { this.started.push(job); this.link = link; return true; },
     stop(id) { this.stopped.push(id); },
-    showFor(id) { this.shown.push(id); },
+    showFor(id, options = {}) { this.shown.push(id); this.shownQuiet = [...(this.shownQuiet || []), Boolean(options.quiet)]; },
   };
   const fetch = async (url, init) => {
     const path = url.split("/desk/")[1];
@@ -35,8 +35,9 @@ function harness(jobsByTick) {
     const jobs = path === "heartbeat" ? (jobsByTick[Math.min(tick++, jobsByTick.length - 1)] || []) : [];
     return { ok: true, status: 200, json: async () => ({ jobs, recorded: true }) };
   };
-  const link = new ServiceLink({ fetch, origin: "https://bom.test", openBuyLab: async () => lab, version: "9.9.9" });
-  return { link, lab, posts };
+  const opens = [];
+  const link = new ServiceLink({ fetch, origin: "https://bom.test", openBuyLab: async (options) => { opens.push(options || {}); return lab; }, version: "9.9.9" });
+  return { link, lab, posts, opens };
 }
 
 
@@ -152,4 +153,16 @@ test("the suppliers Buying may hand over are the Buy lab's own profiles, not a l
   const { SITES } = require("../src/automation/sites");
   const { REQUIRED_TASKS } = require("../src/buy-lab-flow");
   assert.deepEqual(SITES.filter((site) => REQUIRED_TASKS.every((task) => site.tasks[task])).map((site) => site.id).sort(), ["digikey", "lcsc", "mouser"]);
+});
+
+
+test("a job from BOM opens the Buy lab out of sight; a checkout link brings it forward", async () => {
+  const { link, lab, opens } = harness([[{ ...JOB, supplier_order_id: "so_9" }]]);
+  await link.tick();
+  assert.equal(lab.started.length, 1);
+  assert.ok(opens.length > 0 && opens.every((options) => options.quiet === true), "service work never focuses the lab");
+  assert.deepEqual(lab.shownQuiet, [true]);
+  opens.length = 0;
+  assert.equal(await link.openOrder("so_9"), JOB.seller);
+  assert.ok(opens.some((options) => !options.quiet), "the person's checkout link opens it in front");
 });
