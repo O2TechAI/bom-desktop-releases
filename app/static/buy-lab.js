@@ -202,7 +202,7 @@ const elements = {
   suppliers: $("[data-suppliers]"),
 };
 
-elements.title.textContent = copy.title;
+if (elements.title) elements.title.textContent = copy.title;
 elements.addressLabel.textContent = copy.address;
 elements.addressManage.textContent = copy.addressManage;
 elements.addressNote.textContent = copy.addressNote;
@@ -340,8 +340,10 @@ function renderCartCheck(parts, check) {
     if (line.issue) tr.dataset.issue = line.issue;
     return tr;
   }));
-  const verdict = check.issues ? copy.cartIssues.replace("{n}", String(check.issues)) : copy.cartAllGood;
-  parts.cartSummary.textContent = check.total ? `${verdict} · ${copy.cartTotal}: $${check.total}` : verdict;
+  // A cart that matches says nothing more (2026-11-21: the "Every line matches · Cart total"
+  // line removed); only lines that differ are named.
+  parts.cartSummary.hidden = !check.issues;
+  parts.cartSummary.textContent = check.issues ? copy.cartIssues.replace("{n}", String(check.issues)) : "";
   parts.cartSummary.dataset.tone = check.issues ? "waiting" : "";
 }
 
