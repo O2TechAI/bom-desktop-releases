@@ -184,7 +184,7 @@ const COMMON_TARGETS = {
       { css: "[data-label*='status' i], [class*='order-status' i]" },
       // A seller's word for where the order is, alone in its element: DigiKey's
       // banner says "Received" before it ships (2026-11-23).
-      { text: /^(received|in process|processing|being processed|pending|reviewing|under review|ready to ship|awaiting shipment|picking|packed|backordered|partially shipped|shipped|in transit|out for delivery|delivered|completed|closed|open|on hold|unpaid|awaiting payment|paid|cancell?ed)$/i },
+      { text: /^(received|in process|processing|being processed|pending|reviewing|under review|ready to ship|awaiting shipment|picking|packed|backordered|partially shipped|shipped|in transit|out for delivery|delivered|complete|completed|closed|open|on hold|unpaid|awaiting payment|paid|cancell?ed)$/i },
     ],
   },
   "checkout.shippingPage": {

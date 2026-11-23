@@ -623,10 +623,13 @@ class BuyLabWindow {
         const step = snapshot.steps.find((item) => item.error);
         return { failed: String(step?.error?.message || snapshot.status || "failed").slice(0, 200) };
       }
-      const shipments = (Array.isArray(snapshot.results?.shipments) ? snapshot.results.shipments : [])
+      // A site that reads the order's row in its history (Mouser) gives rows of
+      // { status, number, link }; the others the order page's status and links.
+      const rows = Array.isArray(snapshot.results?.rows) ? snapshot.results.rows : [];
+      const shipments = (Array.isArray(snapshot.results?.shipments) ? snapshot.results.shipments : rows)
         .map((item) => ({ number: String(item?.number || "").trim().slice(0, 120), link: item?.link ? String(item.link).slice(0, 1000) : null }))
         .filter((item) => item.number);
-      const status = snapshot.results?.status;
+      const status = snapshot.results?.status || rows.find((row) => row?.status)?.status;
       return { status: status ? String(status).trim().slice(0, 200) : null, shipments };
     } catch (error) {
       return { failed: String(error?.message || error).slice(0, 200) };

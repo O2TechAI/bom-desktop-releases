@@ -174,6 +174,21 @@ const TARGETS = {
   },
   // Not signed in, the cart offers "Guest Checkout" and this link instead of
   // Checkout (2026-11-23): the order goes on from the person's own account.
+  // Tracking from the order history itself (2026-11-23): Mouser puts each
+  // order's status and tracking numbers in its row; its order page has none.
+  "track.orderRow": {
+    title: T("The order's row", "该订单那一行", "La fila del pedido"),
+    any: [{ css: "table tbody tr" }],
+    hasText: "{{order}}",
+  },
+  "track.rowStatus": {
+    title: T("Order status", "订单状态", "Estado del pedido"),
+    any: [{ css: "td:nth-child(6)" }],
+  },
+  "track.rowTracking": {
+    title: T("Tracking number", "物流单号", "Número de seguimiento"),
+    any: [{ css: "td:nth-child(10) a" }],
+  },
   "cart.signIn": {
     title: T("Log in to your account", "登录你的账户", "Inicia sesión en tu cuenta"),
     any: [{ role: "link", name: /^log ?in to your account$/i }, { css: "a[href*='MouserLogin' i]" }],
@@ -500,15 +515,17 @@ module.exports = {
     ],
     track: [
       { do: "walk", to: "orders" },
-      { do: "act", name: "openOrder" },
-      { do: "read", target: "track.status", as: "status", optional: true, timeout: 8000 },
       {
         do: "extract",
-        target: "track.shipments",
-        fields: { number: { target: "track.self" }, link: { target: "track.self", read: "href" } },
-        as: "shipments",
+        target: "track.orderRow",
+        fields: {
+          status: { target: "track.rowStatus" },
+          number: { target: "track.rowTracking" },
+          link: { target: "track.rowTracking", read: "href" },
+        },
+        as: "rows",
         optional: true,
-        timeout: 8000,
+        timeout: 20000,
       },
     ],
   },
