@@ -145,7 +145,8 @@ const COMMON_TARGETS = {
   },
   "order.number": {
     title: T("Order number", "订单号", "Número de pedido"),
-    any: [{ text: /(web |sales )?order (number|#|no\.?)\s*:?\s*\d{6,}/i }],
+    // DigiKey's confirmation names it "SALESORDER ID" (2026-11-23, live).
+    any: [{ text: /(web |sales )?order (number|#|no\.?)\s*:?\s*\d{6,}/i }, { text: /sales ?order id\s*:?\s*\d{6,}/i }],
   },
   "orders.number": {
     title: T("Order number", "订单号", "Número de pedido"),

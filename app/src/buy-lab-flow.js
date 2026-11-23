@@ -238,6 +238,19 @@ const STAGE = { NEW: 0, ADDED: 1, CART_CONFIRMED: 2, PLACED: 3 };
  * the person takes over (2026-11-21: 机器操作的环节不能让人干预, with a timeout). */
 const STALL_MS = 3 * 60 * 1000;
 
+/** The order number in what a confirmation page said around it (2026-11-23:
+ * Mouser's whole sentence reached BOM as the number). DigiKey's sales order
+ * id is the one its order history and tracking use, before its web id. */
+function orderNumberOf(text) {
+  const said = String(text || "").replace(/\s+/g, " ").trim();
+  if (!said) return null;
+  const named = said.match(/sales ?order id\s*:?\s*([A-Z0-9-]{5,})/i)
+    || said.match(/order (?:number|#|no\.?)\s*:?\s*([A-Z0-9-]{5,})/i);
+  if (named) return named[1];
+  const digits = said.match(/\d{6,}/);
+  return digits ? digits[0] : said.slice(0, 64);
+}
+
 /** Which part of the purchase a run message belongs to, for BOM's Placing tab. */
 function phaseOf(message) {
   if (["adding", "bulk-adding", "reloading-blocked"].includes(message)) return "cart";
@@ -633,6 +646,12 @@ class BuyLabFlow {
         this.store?.clear(this.supplier);
       }
 
+      // Bought for BOM (2026-11-23: "这个不应该跳提示"): the confirmation stays on
+      // screen with nothing over it; BOM has the order number and follows it.
+      if (this.link) {
+        this.emit({ status: "done", message: null });
+        return;
+      }
       this.emit({ message: "reading-orders" });
       const orders = finished(await this.runTask("orders"));
       this.orders = Array.isArray(orders.results?.orders) ? orders.results.orders : [];
@@ -903,7 +922,7 @@ class BuyLabFlow {
       this.emit({ status: "running", message: "rehearsal-placed" });
       return;
     }
-    this.orderNumber = placed?.results?.orderNumber || null;
+    this.orderNumber = orderNumberOf(placed?.results?.orderNumber);
     this.placed = { orderNumber: this.orderNumber, total: this.lastTotal || null, rehearsal: false, at: new Date().toISOString() };
     this.emit();
     if (this.link?.placed) await this.link.placed({ orderNumber: this.orderNumber }).catch(() => {});
