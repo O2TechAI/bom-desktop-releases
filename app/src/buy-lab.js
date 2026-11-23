@@ -610,7 +610,7 @@ class BuyLabWindow {
         onChange: (snapshot) => {
           if (snapshot.status === "waiting" && !needsPerson) {
             needsPerson = true;
-            why = `${snapshot.message || "person"} at ${snapshot.state || "?"} ${String(live.page.url()).slice(0, 80)}`;
+            why = `${snapshot.message || "person"} at ${snapshot.state || "?"} (signed in ${snapshot.metrics?.signIns || 0}x) ${String(live.page.url()).slice(0, 90)}`;
             runner.stop();
           }
         },
@@ -618,7 +618,7 @@ class BuyLabWindow {
       timer = setTimeout(() => runner.stop(), 120_000);
       const snapshot = await runner.run();
       // Which page wanted the person, so BOM says why (2026-11-23).
-      if (needsPerson) return { failed: why.startsWith("sign_in") ? "The seller wants a sign-in first" : `Needs the person: ${why}`.slice(0, 200) };
+      if (needsPerson) return { failed: `Needs the person: ${why}`.slice(0, 200) };
       if (snapshot.status !== "done") {
         const step = snapshot.steps.find((item) => item.error);
         return { failed: String(step?.error?.message || snapshot.status || "failed").slice(0, 200) };

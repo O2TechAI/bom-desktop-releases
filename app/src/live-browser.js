@@ -220,6 +220,11 @@ class LiveBrowser {
     const at = (value, extent) => Math.max(0, Math.min(extent, Math.round(Number(value || 0) * extent)));
     const x = at(event.x, width);
     const y = at(event.y, height);
+    // A click or Enter may send a sign-in form: what it holds is read first,
+    // whole (kept-signin.js keeps the person's login for next time).
+    if (event.kind === "click" || (event.kind === "key" && /^(Enter|NumpadEnter)$/.test(String(event.key || "")))) {
+      await this.browser.beforeSend?.().catch(() => {});
+    }
     try {
       switch (event.kind) {
         case "move":

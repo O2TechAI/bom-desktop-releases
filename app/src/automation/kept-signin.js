@@ -174,7 +174,14 @@ async function loginFrame(page, home) {
 function loadLogin(profilePath) {
   if (!canSeal()) return null;
   const login = unseal(path.join(profilePath, LOGIN_FILE));
-  return login?.password ? login : null;
+  // One that did not get through is not tried again: a seller locks an
+  // account after a few wrong passwords. The person's next sign-in replaces it.
+  return login?.password && !login.failedAt ? login : null;
+}
+
+function markLoginFailed(profilePath) {
+  const login = canSeal() ? unseal(path.join(profilePath, LOGIN_FILE)) : null;
+  if (login?.password) seal(path.join(profilePath, LOGIN_FILE), { ...login, failedAt: new Date().toISOString() });
 }
 
 function saveLogin(profilePath, login) {
@@ -192,14 +199,28 @@ function watchLogins(page, profilePath, home) {
   let typed = null; // { username, password } on the form now
   let username = ""; // from a first step that asks for the name alone
   let busy = false;
-  return async () => {
+  /* Read at the person's click or Enter, before it reaches the page: the
+   * form as it is sent, not as it was a moment ago. */
+  const atSend = async () => {
+    const found = await loginFrame(page(), home);
+    if (!found) return;
+    await found.frame.evaluate(unmarkLoginFields).catch(() => {});
+    if (found.fields.pass) {
+      typed = { username: found.fields.user || username || typed?.username || "", password: found.fields.pass };
+    } else if (found.fields.user) {
+      username = found.fields.user;
+    }
+  };
+  const poll = async () => {
     if (busy || !canSeal()) return;
     busy = true;
     try {
       const found = await loginFrame(page(), home);
       if (found) await found.frame.evaluate(unmarkLoginFields).catch(() => {});
+      // While the form is up, only its name step is noted here; the password
+      // is read when it is sent (atSend), so a half-typed one is never kept.
       if (found?.fields.pass) {
-        typed = { username: found.fields.user || username || typed?.username || "", password: found.fields.pass };
+        if (found.fields.user) username = found.fields.user;
       } else if (found?.fields.user) {
         username = found.fields.user;
       } else if (!found && typed?.password) {
@@ -210,6 +231,7 @@ function watchLogins(page, profilePath, home) {
       busy = false;
     }
   };
+  return { poll, atSend };
 }
 
 /**
@@ -249,7 +271,10 @@ async function signInAgain(page, profilePath, home) {
       if (!now) return true;
       if (fields.pass === null && now.fields.pass !== null) { next = true; break; } // on to the password step
     }
-    if (!next) return false;
+    if (!next) {
+      if (fields.pass !== null) markLoginFailed(profilePath);
+      return false;
+    }
   }
   return false;
 }
@@ -260,16 +285,18 @@ function keepSignedIn({ context, profilePath, siteId, home, page }) {
   const saver = setInterval(save, SAVE_EVERY_MS);
   const pinger = setInterval(() => { void ping(page(), siteId).catch(() => {}); }, PING_EVERY_MS);
   const watch = watchLogins(page, profilePath, home);
-  const watcher = setInterval(() => { void watch().catch(() => {}); }, WATCH_EVERY_MS);
+  const watcher = setInterval(() => { void watch.poll().catch(() => {}); }, WATCH_EVERY_MS);
   saver.unref?.();
   pinger.unref?.();
   watcher.unref?.();
-  return async () => {
+  const stop = async () => {
     clearInterval(saver);
     clearInterval(pinger);
     clearInterval(watcher);
     await save();
   };
+  stop.beforeSend = () => watch.atSend();
+  return stop;
 }
 
 module.exports = { keepSignedIn, restoreSessionCookies, saveSessionCookies, signInAgain };

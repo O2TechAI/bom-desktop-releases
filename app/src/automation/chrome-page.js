@@ -199,6 +199,7 @@ class SupplierBrowser extends EventEmitter {
         const browser = new SupplierBrowser({ profile, context, downloadsPath, mayGo, challengeMayGo, openExternal });
         browser.stopKeeping = keepSignedIn({ context, profilePath, siteId: profile?.id, home: profile?.urls?.home, page: () => browser.page });
         // A sign-in page: the kept login first, the person only if that fails.
+        browser.beforeSend = () => browser.stopKeeping?.beforeSend?.() ?? Promise.resolve();
         browser.signInAgain = () => signInAgain(browser.page, profilePath, profile?.urls?.home).catch(() => false);
         return await browser.start(bounds);
       } catch (error) {
