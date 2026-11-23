@@ -592,7 +592,7 @@ module.exports = {
     addToCart: [{ do: "walk", to: ["product", "results"] }, { do: "act", name: ["addToCartHere", "addToCart"] }],
     openCart: [
       { do: "walk", to: "cart" },
-      { do: "extract", target: "cart.rows", fields: { part: { target: "cart.part" }, quantity: { target: "cart.quantity", read: "value" }, unitPrice: { target: "cart.unitPrice" }, extended: { target: "cart.extended" } }, as: "cart", optional: true, timeout: 5000 },
+      { do: "extract", target: "cart.rows", fields: { part: { target: "cart.part" }, text: { target: "track.self" }, quantity: { target: "cart.quantity", read: "value" }, unitPrice: { target: "cart.unitPrice" }, extended: { target: "cart.extended" } }, as: "cart", optional: true, timeout: 5000 },
     ],
     removeFromCart: [
       { do: "walk", to: "cart" },

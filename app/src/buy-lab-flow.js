@@ -276,7 +276,12 @@ function compareCart(lines, rows, expected = {}) {
   const cartRows = (rows || []).filter((row) => partKey(row.part));
   const used = new Set();
   const checked = lines.map((line) => {
-    const index = cartRows.findIndex((row, at) => !used.has(at) && partKey(row.part) === partKey(line.mpn));
+    // By the row's part number, else by the MPN in its text: a line bought by
+    // its MPN shows the seller's own number in the cart (2026-11-23: DigiKey's
+    // 490-3261-1-ND for GRM155R71C104KA88D).
+    const key = partKey(line.mpn);
+    let index = cartRows.findIndex((row, at) => !used.has(at) && partKey(row.part) === key);
+    if (index < 0 && key.length >= 6) index = cartRows.findIndex((row, at) => !used.has(at) && partKey(row.text).includes(key));
     const row = index >= 0 ? cartRows[index] : null;
     if (index >= 0) used.add(index);
     const unitPrice = row ? amount(row.unitPrice) : null;

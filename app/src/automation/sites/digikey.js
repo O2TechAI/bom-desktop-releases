@@ -615,7 +615,7 @@ module.exports = {
         do: "extract",
         target: "cart.rows",
         fields: {
-          part: { target: "cart.part" },
+          part: { target: "cart.part" }, text: { target: "track.self" },
           quantity: { target: "cart.quantity", read: "value" },
           unitPrice: { target: "cart.unitPrice" },
           extended: { target: "cart.extended" },

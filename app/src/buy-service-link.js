@@ -43,13 +43,19 @@ function cartReport(job, rows) {
     const key = partKey(row.part);
     if (key && !byPart.has(key)) byPart.set(key, row);
   }
+  const inText = (mpn) => {
+    const key = partKey(mpn);
+    return key.length >= 6 ? (rows || []).find((row) => partKey(row.text).includes(key)) : null;
+  };
   return job.lines.map((line) => {
-    const row = byPart.get(partKey(line.sku)) || byPart.get(partKey(line.mpn));
+    // A line bought by its MPN: the cart shows the seller's own number, and
+    // the MPN in the row's text (2026-11-23).
+    const row = byPart.get(partKey(line.sku)) || byPart.get(partKey(line.mpn)) || inText(line.mpn);
     if (!row) return { line_id: line.line_id };
     const quantity = money(row.quantity) || line.quantity;
     let unit = money(row.unitPrice);
     if (!unit && money(row.extended) && Number(quantity) > 0) unit = String(Number(money(row.extended)) / Number(quantity));
-    return { line_id: line.line_id, unit_price: unit, quantity, sku: line.sku };
+    return { line_id: line.line_id, unit_price: unit, quantity, sku: line.sku || (row.part ? String(row.part).trim().slice(0, 64) : null) };
   });
 }
 
