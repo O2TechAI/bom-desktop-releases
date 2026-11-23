@@ -182,7 +182,9 @@ const COMMON_TARGETS = {
     title: T("Order status", "订单状态", "Estado del pedido"),
     any: [
       { css: "[data-label*='status' i], [class*='order-status' i]" },
-      { text: /^(shipped|delivered|in transit|partially shipped|processing|open|on hold|cancell?ed)$/i },
+      // A seller's word for where the order is, alone in its element: DigiKey's
+      // banner says "Received" before it ships (2026-11-23).
+      { text: /^(received|in process|processing|being processed|pending|reviewing|under review|ready to ship|awaiting shipment|picking|packed|backordered|partially shipped|shipped|in transit|out for delivery|delivered|completed|closed|open|on hold|unpaid|awaiting payment|paid|cancell?ed)$/i },
     ],
   },
   "checkout.shippingPage": {
