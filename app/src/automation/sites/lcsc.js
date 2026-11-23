@@ -43,6 +43,31 @@ const DIALOG = { any: [{ css: ".v-dialog--active" }] };
  * /order sent the run back to the home page. */
 const ORDERS_URL = "https://www.lcsc.com/personalCenter/order/list";
 
+/* LCSC's Add Shipping Address dialog, filled with the saved address, kept as
+ * the default and as the billing address too, then saved. */
+const ADD_ADDRESS_STEPS = [
+  { do: "click", target: "checkout.addShipping" },
+  { do: "waitFor", target: "addr.dialog", timeout: 15000 },
+  { do: "fill", target: "addr.firstName", value: "{{firstName}}" },
+  { do: "fill", target: "addr.lastName", value: "{{lastName}}" },
+  // LCSC takes only digits and "+" here.
+  { do: "fill", target: "addr.phone", value: "{{phoneDigits}}" },
+  { do: "click", target: "addr.country" },
+  { do: "type", value: "United States" },
+  { do: "click", target: "addr.countryUS" },
+  { do: "click", target: "addr.state" },
+  { do: "type", value: "{{stateName}}" },
+  { do: "click", target: "addr.stateOption" },
+  { do: "fill", target: "addr.city", value: "{{city}}" },
+  { do: "fill", target: "addr.line1", value: "{{line1}}" },
+  { do: "fill", target: "addr.line2", value: "{{line2}}" },
+  { do: "fill", target: "addr.zip", value: "{{zip}}" },
+  { do: "click", target: "addr.setDefault" },
+  { do: "click", target: "addr.syncBilling" },
+  { do: "click", target: "addr.save" },
+  { do: "waitForHidden", target: "addr.dialog", timeout: 20000 },
+];
+
 module.exports = {
   id: "lcsc",
   name: "LCSC",
@@ -145,6 +170,13 @@ module.exports = {
    * name, phone, country (searchable), state (searchable), city, street,
    * apt, postal code; then "Set As Default", "Sync My Shipping Address as the
    * Bill Address", Cancel / Save. */
+  // The checkout already ships to the BOM's address (2026-11-23): its street
+  // line is on the page. Otherwise the account's own default would be used.
+  "checkout.shipsToSaved": {
+    title: T("The BOM's ship-to address", "BOM 的收货地址", "La dirección de envío de la BOM"),
+    any: [{ css: "body" }],
+    hasText: "{{line1}}",
+  },
   "checkout.addShipping": {
     title: T("Add a shipping address", "添加收货地址", "Añadir dirección"),
     any: [{ text: /^add$/i }],
@@ -447,27 +479,22 @@ module.exports = {
         from: ["checkoutAddress"],
         to: ["review", "checkoutAddress"],
         steps: [
-          { do: "click", target: "checkout.addShipping" },
-          { do: "waitFor", target: "addr.dialog", timeout: 15000 },
-          { do: "fill", target: "addr.firstName", value: "{{firstName}}" },
-          { do: "fill", target: "addr.lastName", value: "{{lastName}}" },
-          // LCSC takes only digits and "+" here.
-          { do: "fill", target: "addr.phone", value: "{{phoneDigits}}" },
-          { do: "click", target: "addr.country" },
-          { do: "type", value: "United States" },
-          { do: "click", target: "addr.countryUS" },
-          { do: "click", target: "addr.state" },
-          { do: "type", value: "{{stateName}}" },
-          { do: "click", target: "addr.stateOption" },
-          { do: "fill", target: "addr.city", value: "{{city}}" },
-          { do: "fill", target: "addr.line1", value: "{{line1}}" },
-          { do: "fill", target: "addr.line2", value: "{{line2}}" },
-          { do: "fill", target: "addr.zip", value: "{{zip}}" },
-          { do: "click", target: "addr.setDefault" },
-          { do: "click", target: "addr.syncBilling" },
-          { do: "click", target: "addr.save" },
-          { do: "waitForHidden", target: "addr.dialog", timeout: 20000 },
+          ...ADD_ADDRESS_STEPS,
           { do: "waitForHidden", target: "checkout.noAddress", timeout: 20000 },
+        ],
+      },
+      {
+        /* The account has an address, but not the BOM's (2026-11-23: an old
+         * test address was about to be used): the BOM's is added, as default
+         * and billing, before the order goes on to the person's yes. */
+        name: "addAddress",
+        title: T("Ship to the BOM's address", "改用 BOM 的收货地址", "Enviar a la dirección de la BOM"),
+        auto: false,
+        from: ["review"],
+        to: ["review"],
+        steps: [
+          ...ADD_ADDRESS_STEPS,
+          { do: "waitFor", target: "checkout.shipsToSaved", timeout: 20000 },
         ],
       },
       // Only when an operation names them: they change the cart or open one order.
@@ -556,6 +583,7 @@ module.exports = {
       { do: "walk", to: "cart" },
       { do: "walk", to: ["checkoutAddress", "review", "confirmation"] },
       { do: "act", name: "fillAddress", when: "checkout.noAddress" },
+      { do: "act", name: "addAddress", unless: "checkout.shipsToSaved", whenTimeout: 5000 },
       { do: "walk", to: "confirmation" },
     ],
     orders: [
