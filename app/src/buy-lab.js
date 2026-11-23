@@ -44,8 +44,11 @@ class BuyLabWindow {
     return window;
   }
 
-  constructor({ language, pageUrl, pagePreload, partition, userDataDir, downloadsPath, openExternal, onClosed, onBackToSite = null, serviceStatus = null, quiet = false }) {
+  constructor({ language, pageUrl, pagePreload, partition, userDataDir, downloadsPath, openExternal, onClosed, onBackToSite = null, serviceStatus = null, onResumeSaved = null, quiet = false }) {
     this.serviceStatus = serviceStatus;
+    // Continue on a run saved before the app started again, when it is one of
+    // BOM's: BOM's link takes it on, so its cart and order still reach BOM.
+    this.onResumeSaved = onResumeSaved;
     /* Opened by BOM's "Deal with it": Back goes back to BOM, not to the list
      * (2026-11-21: "点击back 跳到这个页面而不是原来的页面"). */
     this.onBackToSite = onBackToSite;
@@ -534,6 +537,17 @@ class BuyLabWindow {
     }
     const saved = this.runs.load(id);
     if (!saved?.text) return false;
+    if (saved.resumeKey && this.onResumeSaved) {
+      try {
+        if (await this.onResumeSaved(id, saved.resumeKey)) {
+          this.publish();
+          return true;
+        }
+      } catch (error) {
+        this.failStart(id, error.message);
+        return false;
+      }
+    }
     this.listTexts.set(id, saved.text);
     void this.startPurchase({ supplier: id, text: saved.text, address: saved.address, rehearsal: saved.rehearsal, resumeKey: saved.resumeKey })
       .catch((error) => this.failStart(id, error.message));

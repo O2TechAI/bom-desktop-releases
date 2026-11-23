@@ -410,6 +410,7 @@ async function openBuyLab({ quiet = false } = {}) {
     pagePreload: path.join(__dirname, "buy-lab-preload.js"),
     partition: PARTITION,
     serviceStatus: () => serviceLink?.status || null,
+    onResumeSaved: (id, resumeKey) => (serviceLink ? serviceLink.continueSaved(id, resumeKey) : false),
     userDataDir: app.getPath("userData"),
     openExternal: (url) => void openExternal(url),
     downloadsPath: app.getPath("downloads"),
@@ -646,6 +647,7 @@ if (!app.requestSingleInstanceLock()) {
       version: app.getVersion(),
       log: (message) => console.warn(message),
       onStatus: () => buyLabWindow?.publish?.(),
+      stateFile: path.join(app.getPath("userData"), "buy-lab", "service-stops.json"),
     });
     serviceLink.start();
   });

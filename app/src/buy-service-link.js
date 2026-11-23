@@ -21,6 +21,9 @@
  * the yes is always the person's, in the Buy lab.
  */
 
+const fs = require("node:fs");
+const path = require("node:path");
+
 const TICK_MS = 15_000;
 const BASE = "/api/v1/buy-lab-service/desk";
 
@@ -58,7 +61,7 @@ class ServiceLink {
    * @param {(options?: { quiet?: boolean }) => Promise<object>} options.openBuyLab the Buy lab; `quiet` opens it out of sight
    * @param {string} options.version
    */
-  constructor({ fetch, origin, openBuyLab, version, log = () => {}, onStatus = () => {} }) {
+  constructor({ fetch, origin, openBuyLab, version, log = () => {}, onStatus = () => {}, stateFile = null }) {
     this.onStatus = onStatus;
     // How the last call to the service went, for the Buy lab to show:
     // { state: "ok" } or { state: "error", http, message }.
@@ -74,6 +77,11 @@ class ServiceLink {
     this.ended = new Set();
     // Why each ended run stopped, for BOM's Placing tab: key -> { job, message }.
     this.stops = new Map();
+    // Both kept on disk (2026-11-23: "修一下重启后自动重新开始的问题"): a run
+    // the person stopped stays stopped when the app starts again, and BOM
+    // still shows it stopped, until the person presses Continue.
+    this.stateFile = stateFile;
+    this.loadState();
     this.jobs = [];
     // Placed orders BOM wants looked up on the seller's page (2026-11-23):
     // one at a time, out of sight, each at most every ten minutes from here.
@@ -81,6 +89,46 @@ class ServiceLink {
     this.trackBusy = false;
     this.timer = null;
     this.busy = false;
+  }
+
+  loadState() {
+    if (!this.stateFile) return;
+    try {
+      const saved = JSON.parse(fs.readFileSync(this.stateFile, "utf8"));
+      for (const key of saved.ended || []) this.ended.add(String(key));
+      for (const [key, stop] of Object.entries(saved.stops || {})) {
+        if (stop?.job?.purchase_request_id && stop.job.seller) this.stops.set(key, { job: stop.job, message: stop.message || "stopped" });
+      }
+    } catch {
+      // none yet
+    }
+  }
+
+  saveState() {
+    if (!this.stateFile) return;
+    try {
+      fs.mkdirSync(path.dirname(this.stateFile), { recursive: true });
+      const stops = Object.fromEntries([...this.stops].map(([key, { job, message }]) => [key, {
+        job: { purchase_request_id: job.purchase_request_id, seller: job.seller, supplier_order_id: job.supplier_order_id || null },
+        message,
+      }]));
+      fs.writeFileSync(this.stateFile, JSON.stringify({ ended: [...this.ended], stops }, null, 2));
+    } catch (error) {
+      this.log(`buy service: could not keep the stopped runs: ${error.message}`);
+    }
+  }
+
+  /** The person pressed Continue in the Buy lab on a run saved before the app
+   * started again: it goes on as BOM's job (with its link), from where it
+   * was. False when that run is not one of BOM's stopped ones. */
+  async continueSaved(seller, resumeKey) {
+    const key = String(resumeKey || "");
+    if (!key.endsWith(`:${seller}`) || !(this.ended.has(key) || this.stops.has(key))) return false;
+    this.ended.delete(key);
+    this.stops.delete(key);
+    this.saveState();
+    await this.follow();
+    return [...this.running.keys()].includes(key);
   }
 
   start() {
@@ -134,7 +182,10 @@ class ServiceLink {
   async follow() {
     const live = new Set(this.jobs.map((job) => `${job.purchase_request_id}:${job.seller}`));
     // A run BOM no longer has (cancelled, done) is forgotten.
-    for (const key of this.stops.keys()) if (!live.has(key)) this.stops.delete(key);
+    let forgot = false;
+    for (const key of [...this.stops.keys()]) if (!live.has(key)) { this.stops.delete(key); forgot = true; }
+    for (const key of [...this.ended]) if (!live.has(key)) { this.ended.delete(key); forgot = true; }
+    if (forgot) this.saveState();
     // Cancelled in BOM, or otherwise over: stop its run.
     for (const [key, run] of this.running) {
       if (!live.has(key) && !run.placed) {
@@ -266,6 +317,7 @@ class ServiceLink {
         this.running.delete(key);
         if (run.placed || run.stopped) return;
         this.ended.add(key);
+        this.saveState();
         // A failure before the cart was reported is BOM's to know: its lines
         // can't be had this time (the order shows "Did not go through"). A
         // stop (the person, a page the app didn't know) can go on: BOM shows
@@ -276,12 +328,14 @@ class ServiceLink {
           return;
         }
         this.stops.set(key, { job: run.job, message: message || status || "stopped" });
+        this.saveState();
         this.nudge?.();
       },
       // The person pressed Continue: the job is this run's again.
       resumed: () => {
         this.ended.delete(key);
         this.stops.delete(key);
+        this.saveState();
         run.stopped = false;
         this.running.set(key, run);
       },
@@ -295,6 +349,7 @@ class ServiceLink {
     if (!job) return null;
     this.ended.delete(`${job.purchase_request_id}:${job.seller}`);
     this.stops.delete(`${job.purchase_request_id}:${job.seller}`);
+    this.saveState();
     await this.follow();
     (await this.openBuyLab()).showFor?.(job.seller);
     return job.seller;
