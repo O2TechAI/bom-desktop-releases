@@ -12,7 +12,7 @@
  * The overlay is shown only when the shop stops for the person (a security
  * check, a sign-in) or when they ask for it. */
 
-const { BaseWindow, WebContentsView, ipcMain } = require("electron");
+const { BaseWindow, Notification, WebContentsView, ipcMain } = require("electron");
 const path = require("node:path");
 
 const { browserChoices } = require("./automation/browser");
@@ -262,6 +262,7 @@ class BuyLabWindow {
   publishFlow(id, state) {
     if (this.closed) return;
     this.publish();
+    this.notifyIfWaiting(id, state);
     // A check is handed to Chrome's own window (onChallenge); the canvas is
     // only for sign-ins and refusals that the person handles in the app,
     // shown for the supplier that is waiting.
@@ -279,6 +280,42 @@ class BuyLabWindow {
       this.promptPayment(id);
     } else {
       this.payPrompted.delete(id);
+    }
+  }
+
+  /**
+   * A system notification each time a seller starts waiting for the person
+   * (2026-11-23: "这种情况你要和用户说": a security check waited 15 minutes
+   * unseen). Once per wait; clicking it shows that seller's page.
+   */
+  notifyIfWaiting(id, state) {
+    this.notified = this.notified || new Map();
+    const waiting = state.status === "waiting";
+    const kind = !waiting ? "" : state.confirm ? "confirm" : state.cartCheck ? "cart-check" : String(state.message || "person");
+    if (!kind) { this.notified.delete(id); return; }
+    if (this.notified.get(id) === kind) return;
+    this.notified.set(id, kind);
+    if (!Notification.isSupported?.()) return;
+    const site = this.sites.find((entry) => entry.id === id);
+    const seller = site?.name || id;
+    const zh = String(this.language || "").startsWith("zh");
+    const text = {
+      challenge: zh ? `${seller} 弹出了安全验证，请在打开的 Chrome 窗口里完成` : `${seller} is showing a security check: finish it in the Chrome window that opened`,
+      "cart-check": zh ? `请核对 ${seller} 的购物车` : `Check the ${seller} cart`,
+      confirm: zh ? `${seller} 的订单等你确认` : `The ${seller} order is waiting for your yes`,
+      sign_in: zh ? `请登录 ${seller}` : `Sign in to ${seller}`,
+      lost: zh ? `app 停在一个不认识的 ${seller} 页面，请接手` : `The app is on a ${seller} page it doesn't know: take it from there`,
+    }[kind] || (zh ? `${seller} 在等你操作` : `${seller} is waiting for you`);
+    try {
+      const note = new Notification({ title: zh ? `O2 BOM · ${seller} 需要你` : `O2 BOM · ${seller} needs you`, body: text });
+      note.on("click", () => {
+        if (kind === "challenge") return; // the check is in Chrome's own window, already in front
+        this.showFor(id);
+        this.focus();
+      });
+      note.show();
+    } catch {
+      // no notifications on this system: the lab and BOM's Placing still say it
     }
   }
 
