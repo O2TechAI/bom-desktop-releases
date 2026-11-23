@@ -653,7 +653,10 @@ class Runner {
       if (moves > MAX_MOVES) throw new AutomationError("no_path", "Too many pages on the way");
       const transition = nextTransition(machine, state, goals);
       if (!transition) throw new AutomationError("no_path", `No way from ${state} to ${goals.join(" or ")}`);
+      const before = this.driver.contents.getURL?.() || "";
       const next = await this.take(transition, view, state);
+      // One line per move, for the app's log (2026-11-23: a walk that went round unseen).
+      console.warn(`[walk ${this.profile.id}] ${state} --${transition.name}--> ${next} | ${String(before).slice(0, 90)} -> ${String(this.driver.contents.getURL?.() || "").slice(0, 90)}`);
       if (next === state && info?.stuck) {
         // The page didn't let the app on (a payment to choose): the person's turn.
         await this.personAt(state, info.stuck, view);
