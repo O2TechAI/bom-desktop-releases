@@ -75,6 +75,10 @@ class ServiceLink {
     // Why each ended run stopped, for BOM's Placing tab: key -> { job, message }.
     this.stops = new Map();
     this.jobs = [];
+    // Placed orders BOM wants looked up on the seller's page (2026-11-23):
+    // one at a time, out of sight, each at most every ten minutes from here.
+    this.trackTried = new Map(); // supplier order id -> when
+    this.trackBusy = false;
     this.timer = null;
     this.busy = false;
   }
@@ -114,6 +118,7 @@ class ServiceLink {
       this.setStatus({ state: "ok" });
       this.jobs = Array.isArray(answer.jobs) ? answer.jobs : [];
       await this.follow();
+      if (Array.isArray(answer.track) && answer.track.length) void this.track(answer.track);
     } catch (error) {
       // Nothing decides beforehand whether the service is there: the call is
       // made, and what it answered is shown (not signed in to BOM, a site
@@ -160,6 +165,42 @@ class ServiceLink {
         this.running.set(key, fresh);
         lab.showFor?.(job.seller, { quiet: true });
       }
+    }
+  }
+
+  /** Look up placed orders on their sellers' pages, one after another, and
+   * tell BOM what each page said. A seller busy with a purchase is skipped
+   * this time; BOM asks again. */
+  async track(due) {
+    if (this.trackBusy) return;
+    this.trackBusy = true;
+    try {
+      for (const item of due) {
+        const tried = this.trackTried.get(item.supplier_order_id) || 0;
+        if (Date.now() - tried < 10 * 60 * 1000) continue;
+        // A purchase for this seller, running or waiting its turn, comes first.
+        if ([...this.running.values()].some((run) => run.job.seller === item.seller)) continue;
+        if (this.jobs.some((job) => job.seller === item.seller && !this.ended.has(`${job.purchase_request_id}:${job.seller}`))) continue;
+        let lab;
+        try {
+          lab = await this.openBuyLab({ quiet: true });
+        } catch {
+          return;
+        }
+        if (!lab?.trackOrder) return;
+        const read = await lab.trackOrder(item.seller, item.supplier_order_number);
+        if (!read) continue; // busy: next time
+        this.trackTried.set(item.supplier_order_id, Date.now());
+        try {
+          await this.post("tracking", {
+            purchase_request_id: item.purchase_request_id, supplier_order_id: item.supplier_order_id, ...read,
+          });
+        } catch (error) {
+          this.log(`buy service: tracking ${item.seller} ${item.supplier_order_number}: ${error.message}`);
+        }
+      }
+    } finally {
+      this.trackBusy = false;
     }
   }
 

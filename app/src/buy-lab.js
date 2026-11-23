@@ -19,6 +19,7 @@ const { browserChoices } = require("./automation/browser");
 const { SITES } = require("./automation/sites");
 const { AddressBook, BuyLabFlow, RunStore, siteAddress, siteOrderText } = require("./buy-lab-flow");
 const { LiveBrowser } = require("./live-browser");
+const { Runner } = require("./automation/runner");
 
 /* Behind the flow page (its own ground); the live overlay paints dark. */
 const BACKGROUND = "#ecf0f3";
@@ -550,6 +551,63 @@ class BuyLabWindow {
     // do lands between the app's own steps (2026-11-21).
     if (this.flows.get(this.active)?.driving()) return false;
     return live.input(event);
+  }
+
+  /**
+   * Read one placed order's page on that seller's site, out of sight
+   * (2026-11-23: "做一下物流追踪"): the order's status in the seller's words
+   * and its tracking numbers. Only while no purchase uses that seller's page;
+   * null when it is busy. A page that wants the person (signed out) is left
+   * alone and reported as such: tracking never asks anything of anyone.
+   */
+  async trackOrder(seller, number) {
+    const flow = this.flows.get(seller);
+    const site = this.sites.find((entry) => entry.id === seller);
+    if (!flow || !site?.tasks?.track || !number) return null;
+    this.tracking = this.tracking || new Set();
+    if (flow.running || flow.status === "waiting" || this.tracking.has(seller)) return null;
+    this.tracking.add(seller);
+    let runner = null;
+    let timer = null;
+    try {
+      const live = await this.ensureSite(seller);
+      if (!live || flow.running) return null;
+      let needsPerson = false;
+      runner = new Runner({
+        contents: live.browser.link,
+        profile: site,
+        task: "track",
+        params: { order: String(number) },
+        themeCss: "",
+        warmupMs: 0,
+        navigationGapMs: 250,
+        checkSettleMs: 0,
+        session: { warmedUp: false },
+        onChange: (snapshot) => {
+          if (snapshot.status === "waiting" && !needsPerson) {
+            needsPerson = true;
+            runner.stop();
+          }
+        },
+      });
+      timer = setTimeout(() => runner.stop(), 120_000);
+      const snapshot = await runner.run();
+      if (needsPerson) return { failed: "The seller wants a sign-in first" };
+      if (snapshot.status !== "done") {
+        const step = snapshot.steps.find((item) => item.error);
+        return { failed: String(step?.error?.message || snapshot.status || "failed").slice(0, 200) };
+      }
+      const shipments = (Array.isArray(snapshot.results?.shipments) ? snapshot.results.shipments : [])
+        .map((item) => ({ number: String(item?.number || "").trim().slice(0, 120), link: item?.link ? String(item.link).slice(0, 1000) : null }))
+        .filter((item) => item.number);
+      const status = snapshot.results?.status;
+      return { status: status ? String(status).trim().slice(0, 200) : null, shipments };
+    } catch (error) {
+      return { failed: String(error?.message || error).slice(0, 200) };
+    } finally {
+      clearTimeout(timer);
+      this.tracking.delete(seller);
+    }
   }
 
   /** What each supplier's run is doing, for BOM: step, who has the page, lines done. */
