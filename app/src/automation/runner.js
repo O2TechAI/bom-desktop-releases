@@ -440,24 +440,36 @@ class Runner {
     // A sign-in: the login kept from the person's last one goes in first,
     // once per run, and the person is asked only if it did not get through
     // (2026-11-23: sign in once). A check or a code still comes to them.
-    if (message === "sign_in" && !this.signedInAgain && this.driver.contents.signInAgain) {
-      this.signedInAgain = true;
+    // A seller that passes through its sign-in address once more on the way
+    // back (Mouser) gets a moment to settle, and a second try.
+    if (message === "sign_in" && (this.signInTries || 0) < 2 && this.driver.contents.signInAgain) {
+      this.signInTries = (this.signInTries || 0) + 1;
       this.message = "signing-in";
       this.emit();
-      const through = await this.driver.contents.signInAgain().catch(() => false);
+      const settled = async () => {
+        if (!isDone) return true;
+        try {
+          return await isDone();
+        } catch {
+          return false;
+        }
+      };
+      let done = false;
+      if (this.signedInOnce) {
+        for (let i = 0; i < 10 && !done; i++) {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          done = await settled();
+        }
+      }
+      if (!done && (await this.driver.contents.signInAgain().catch(() => false))) {
+        this.signedInOnce = true;
+        done = await settled();
+      }
       if (this.controller.signal.aborted) throw new AutomationError("stopped", "Stopped");
       this.message = null;
-      if (through) {
-        let done = !isDone;
-        try {
-          done = done || (await isDone());
-        } catch {
-          done = false;
-        }
-        if (done) {
-          this.metrics.signIns = (this.metrics.signIns || 0) + 1;
-          return;
-        }
+      if (done) {
+        this.metrics.signIns = (this.metrics.signIns || 0) + 1;
+        return;
       }
     }
     this.metrics.handoffs += 1;

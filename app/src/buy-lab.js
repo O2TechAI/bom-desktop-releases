@@ -596,6 +596,7 @@ class BuyLabWindow {
       const live = await this.ensureSite(seller);
       if (!live || flow.running) return null;
       let needsPerson = false;
+      let why = "";
       runner = new Runner({
         contents: live.browser.link,
         profile: site,
@@ -609,13 +610,15 @@ class BuyLabWindow {
         onChange: (snapshot) => {
           if (snapshot.status === "waiting" && !needsPerson) {
             needsPerson = true;
+            why = `${snapshot.message || "person"} at ${snapshot.state || "?"} ${String(live.page.url()).slice(0, 80)}`;
             runner.stop();
           }
         },
       });
       timer = setTimeout(() => runner.stop(), 120_000);
       const snapshot = await runner.run();
-      if (needsPerson) return { failed: "The seller wants a sign-in first" };
+      // Which page wanted the person, so BOM says why (2026-11-23).
+      if (needsPerson) return { failed: why.startsWith("sign_in") ? "The seller wants a sign-in first" : `Needs the person: ${why}`.slice(0, 200) };
       if (snapshot.status !== "done") {
         const step = snapshot.steps.find((item) => item.error);
         return { failed: String(step?.error?.message || snapshot.status || "failed").slice(0, 200) };
