@@ -30,7 +30,7 @@ const { fill, normalizeTarget } = require("../src/automation/targets");
 const { overlayThemeCss, rootBlock } = require("../src/automation/theme");
 const { MAX_HOSTS, createTrafficWatch } = require("../src/automation/traffic");
 
-const PARAMS = { part: "GRM155R71C104KA88D", quantity: "100", order: "88012345", state: "OH", stateName: "Ohio", customerType: "13" };
+const PARAMS = { part: "GRM155R71C104KA88D", quantity: "100", order: "88012345", state: "OH", stateName: "Ohio", customerType: "13", firstName: "Ada", lastName: "Lovelace", phoneDigits: "2165550100", line1: "123 Main St", line2: "Suite 4", city: "Cleveland", zip: "44101" };
 
 
 function fakeContents() {

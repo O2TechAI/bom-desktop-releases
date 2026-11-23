@@ -437,6 +437,41 @@ class Runner {
 
   /** Wait until `isDone()` says so or the person presses Continue. */
   async waitForPerson(message, view, isDone, timeout = 15 * 60 * 1000) {
+    // A sign-in: the login kept from the person's last one goes in first,
+    // once per run, and the person is asked only if it did not get through
+    // (2026-11-23: sign in once). A check or a code still comes to them.
+    // A seller that passes through its sign-in address once more on the way
+    // back (Mouser) gets a moment to settle, and a second try.
+    if (message === "sign_in" && (this.signInTries || 0) < 2 && this.driver.contents.signInAgain) {
+      this.signInTries = (this.signInTries || 0) + 1;
+      this.message = "signing-in";
+      this.emit();
+      const settled = async () => {
+        if (!isDone) return true;
+        try {
+          return await isDone();
+        } catch {
+          return false;
+        }
+      };
+      let done = false;
+      if (this.signedInOnce) {
+        for (let i = 0; i < 10 && !done; i++) {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          done = await settled();
+        }
+      }
+      if (!done && (await this.driver.contents.signInAgain().catch(() => false))) {
+        this.signedInOnce = true;
+        done = await settled();
+      }
+      if (this.controller.signal.aborted) throw new AutomationError("stopped", "Stopped");
+      this.message = null;
+      if (done) {
+        this.metrics.signIns = (this.metrics.signIns || 0) + 1;
+        return;
+      }
+    }
     this.metrics.handoffs += 1;
     if (message === "challenge") this.metrics.checks += 1;
     await this.driver.clearMarks();
@@ -607,6 +642,19 @@ class Runner {
         continue;
       }
       visits[state] = (visits[state] || 0) + 1;
+      // An unknown page, for the app's log: its address and the buttons on it,
+      // so a page the site changed can be told apart (2026-11-23: DigiKey's
+      // product page after a security check was not recognised).
+      if (state === UNKNOWN) {
+        try {
+          const contextId = await this.driver.world();
+          const { result } = await this.driver.send("Runtime.evaluate", {
+            contextId, returnByValue: true,
+            expression: `JSON.stringify({ url: location.href, h1: (document.querySelector("h1")?.innerText || "").slice(0, 80), buttons: [...document.querySelectorAll("button, input[type=submit], a[role=button]")].filter((b) => b.offsetParent !== null).map((b) => [b.id, b.getAttribute("data-testid"), (b.innerText || b.value || "").trim().slice(0, 30)].filter(Boolean).join("|")).filter(Boolean).slice(0, 25) })`,
+          });
+          console.warn(`[unknown ${this.profile.id}] ${String(result?.value || "").slice(0, 1500)}`);
+        } catch { /* only for the log */ }
+      }
       // Lost mid-way, or going round in circles: the person takes over.
       if ((state === UNKNOWN && moves > 0) || visits[state] > MAX_VISITS) {
         await this.personAt(state, info?.stuck || "lost", view);
@@ -618,7 +666,10 @@ class Runner {
       if (moves > MAX_MOVES) throw new AutomationError("no_path", "Too many pages on the way");
       const transition = nextTransition(machine, state, goals);
       if (!transition) throw new AutomationError("no_path", `No way from ${state} to ${goals.join(" or ")}`);
+      const before = this.driver.contents.getURL?.() || "";
       const next = await this.take(transition, view, state);
+      // One line per move, for the app's log (2026-11-23: a walk that went round unseen).
+      console.warn(`[walk ${this.profile.id}] ${state} --${transition.name}--> ${next} | ${String(before).slice(0, 90)} -> ${String(this.driver.contents.getURL?.() || "").slice(0, 90)}`);
       if (next === state && info?.stuck) {
         // The page didn't let the app on (a payment to choose): the person's turn.
         await this.personAt(state, info.stuck, view);

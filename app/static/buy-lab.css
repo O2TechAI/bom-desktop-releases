@@ -300,7 +300,7 @@ table.lines td.n { width: 40px; color: var(--muted, #5b6b76); }
   position: absolute;
   top: 12px;
   left: 12px;
-  z-index: 2;
+  z-index: 4;
   padding: 6px 12px;
   border: 1px solid rgba(255, 255, 255, 0.28);
   border-radius: 999px;
@@ -428,7 +428,9 @@ table.lines td.n { width: 40px; color: var(--muted, #5b6b76); }
   top: 12px;
   left: 170px;
   right: 12px;
-  z-index: 2;
+  /* Above the app's cover (.hold, 3): the person can switch supplier or go
+   * back while the app works on a page (2026-11-23). */
+  z-index: 4;
   display: flex;
   gap: 6px;
   overflow-x: auto;
@@ -512,24 +514,25 @@ body.is-split .live .tabs { display: none !important; }
   z-index: 3;
   display: flex;
   align-items: flex-end;
-  justify-content: center;
-  padding: 24px;
-  background: rgba(16, 24, 32, 0.18);
+  /* A corner, not the middle (2026-11-23: "这里把上面阻塞了"): the page under it stays readable. */
+  justify-content: flex-end;
+  padding: 12px;
+  background: rgba(16, 24, 32, 0.06);
   cursor: progress;
 }
 .live .hold[hidden] { display: none; }
 .live .hold-card {
   display: grid;
-  width: min(440px, 100%);
-  gap: 10px;
-  padding: 16px 18px;
+  width: min(320px, 100%);
+  gap: 6px;
+  padding: 10px 12px;
   border-radius: 14px;
   background: #ffffff;
   box-shadow: 0 10px 30px rgba(16, 24, 32, 0.18);
   cursor: default;
 }
-.live .hold-text { margin: 0; color: #1d2a22; font-size: 15px; font-weight: 600; }
-.live .hold-note { margin: 0; color: #5b6770; font-size: 13px; }
+.live .hold-text { margin: 0; color: #1d2a22; font-size: 13px; font-weight: 600; }
+.live .hold-note { margin: 0; color: #5b6770; font-size: 12px; }
 .live .hold-track { position: relative; height: 4px; overflow: hidden; background: #e9eef2; border-radius: 999px; }
 .live .hold-track > span { display: block; height: 100%; background: #2f4a33; border-radius: inherit; transition: width 300ms linear; }
 .live .hold-track.is-indeterminate > span { width: 35%; animation: hold-slide 1.3s ease-in-out infinite; }

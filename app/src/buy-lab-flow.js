@@ -238,6 +238,19 @@ const STAGE = { NEW: 0, ADDED: 1, CART_CONFIRMED: 2, PLACED: 3 };
  * the person takes over (2026-11-21: 机器操作的环节不能让人干预, with a timeout). */
 const STALL_MS = 3 * 60 * 1000;
 
+/** The order number in what a confirmation page said around it (2026-11-23:
+ * Mouser's whole sentence reached BOM as the number). DigiKey's sales order
+ * id is the one its order history and tracking use, before its web id. */
+function orderNumberOf(text) {
+  const said = String(text || "").replace(/\s+/g, " ").trim();
+  if (!said) return null;
+  const named = said.match(/sales ?order id\s*:?\s*([A-Z0-9-]{5,})/i)
+    || said.match(/order (?:number|#|no\.?)\s*:?\s*([A-Z0-9-]{5,})/i);
+  if (named) return named[1];
+  const digits = said.match(/\d{6,}/);
+  return digits ? digits[0] : said.slice(0, 64);
+}
+
 /** Which part of the purchase a run message belongs to, for BOM's Placing tab. */
 function phaseOf(message) {
   if (["adding", "bulk-adding", "reloading-blocked"].includes(message)) return "cart";
@@ -263,7 +276,12 @@ function compareCart(lines, rows, expected = {}) {
   const cartRows = (rows || []).filter((row) => partKey(row.part));
   const used = new Set();
   const checked = lines.map((line) => {
-    const index = cartRows.findIndex((row, at) => !used.has(at) && partKey(row.part) === partKey(line.mpn));
+    // By the row's part number, else by the MPN in its text: a line bought by
+    // its MPN shows the seller's own number in the cart (2026-11-23: DigiKey's
+    // 490-3261-1-ND for GRM155R71C104KA88D).
+    const key = partKey(line.mpn);
+    let index = cartRows.findIndex((row, at) => !used.has(at) && partKey(row.part) === key);
+    if (index < 0 && key.length >= 6) index = cartRows.findIndex((row, at) => !used.has(at) && partKey(row.text).includes(key));
     const row = index >= 0 ? cartRows[index] : null;
     if (index >= 0) used.add(index);
     const unitPrice = row ? amount(row.unitPrice) : null;
@@ -370,6 +388,8 @@ class BuyLabFlow {
     return {
       status: this.status,
       message: this.message,
+      // Why the order's ship-to was not filled in on the supplier's form.
+      addressNote: this.addressNote || null,
       supplier: this.supplier,
       sites: this.sites.map((site) => ({ id: site.id, name: site.name })),
       lines: this.lines,
@@ -598,6 +618,21 @@ class BuyLabFlow {
     this.emit();
     try {
       const site = this.sites.find((entry) => entry.id === this.supplier);
+      // Continued past the cart (2026-11-23): another order may have taken this
+      // seller's cart since, or it was emptied. Lines no longer in it are added
+      // again (a fresh cart where the shop keeps the other one), not asked about.
+      if (this.progress >= STAGE.ADDED && this.progress < STAGE.PLACED) {
+        this.emit({ status: "running", message: "reading-cart" });
+        const cart = finished(await this.runTask("openCart"));
+        const rows = Array.isArray(cart.results?.cart) ? cart.results.cart : [];
+        if (compareCart(this.lines, rows).lines.some((line) => line.issue === "missing")) {
+          this.progress = STAGE.NEW;
+          this.confirmedCart = null;
+          this.save();
+        } else {
+          this.freshCart = rows;
+        }
+      }
       if (this.progress < STAGE.ADDED) {
         if (!(await this.addLines(site))) return;
         if (!(await this.settleCart(site))) return;
@@ -616,6 +651,12 @@ class BuyLabFlow {
         this.store?.clear(this.supplier);
       }
 
+      // Bought for BOM (2026-11-23: "这个不应该跳提示"): the confirmation stays on
+      // screen with nothing over it; BOM has the order number and follows it.
+      if (this.link) {
+        this.emit({ status: "done", message: null });
+        return;
+      }
       this.emit({ message: "reading-orders" });
       const orders = finished(await this.runTask("orders"));
       this.orders = Array.isArray(orders.results?.orders) ? orders.results.orders : [];
@@ -758,12 +799,25 @@ class BuyLabFlow {
       const cart = finished(await this.runTask("openCart"));
       return (Array.isArray(cart.results?.cart) ? cart.results.cart : []).filter((row) => partKey(row.part));
     };
-    const wanted = new Set(this.lines.map((line) => partKey(line.mpn)));
+    // Each line's row: by its part number, else by the MPN in the row's text
+    // (2026-11-23: a line bought by its MPN shows the seller's own number, and
+    // was taken for a stranger and removed from the cart).
+    const match = (rows) => {
+      const used = new Set();
+      const found = new Set();
+      for (const line of this.lines) {
+        const key = partKey(line.mpn);
+        let index = rows.findIndex((row, at) => !used.has(at) && partKey(row.part) === key);
+        if (index < 0 && key.length >= 6) index = rows.findIndex((row, at) => !used.has(at) && partKey(row.text).includes(key));
+        if (index >= 0) { used.add(index); found.add(line); }
+      }
+      return { used, found };
+    };
     this.emit({ status: "running", message: "checking-cart" });
     let rows = await read();
-    const have = new Set(rows.map((row) => partKey(row.part)));
-    const extras = rows.filter((row) => !wanted.has(partKey(row.part)));
-    const missing = this.lines.filter((line) => !have.has(partKey(line.mpn)));
+    const first = match(rows);
+    const extras = rows.filter((_, at) => !first.used.has(at));
+    const missing = this.lines.filter((line) => !first.found.has(line));
     if (!extras.length && !missing.length) {
       this.freshCart = rows; // the cart check takes this read instead of reading again
       return true;
@@ -795,9 +849,9 @@ class BuyLabFlow {
       }
     }
     rows = await read();
-    const inCart = new Set(rows.map((row) => partKey(row.part)));
+    const after = match(rows);
     for (const line of this.lines) {
-      if (inCart.has(partKey(line.mpn))) {
+      if (after.found.has(line)) {
         line.status = "added";
         line.error = null;
       } else {
@@ -810,7 +864,11 @@ class BuyLabFlow {
       this.emit({ status: "failed", message: "nothing-added" });
       return false;
     }
-    const left = rows.filter((row) => !wanted.has(partKey(row.part))).map((row) => row.part);
+    // A line bought by the MPN may show the seller's own number in the cart.
+    const wanted = new Set(this.lines.map((line) => partKey(line.mpn)));
+    const known = (row) => wanted.has(partKey(row.part))
+      || [...wanted].some((key) => key.length >= 6 && partKey(row.text).includes(key));
+    const left = rows.filter((row) => !known(row)).map((row) => row.part || row.text);
     if (left.length) throw new Error(`The cart still has other items: ${left.slice(0, 3).join(", ")}`);
     this.freshCart = rows;
     return true;
@@ -886,7 +944,7 @@ class BuyLabFlow {
       this.emit({ status: "running", message: "rehearsal-placed" });
       return;
     }
-    this.orderNumber = placed?.results?.orderNumber || null;
+    this.orderNumber = orderNumberOf(placed?.results?.orderNumber);
     this.placed = { orderNumber: this.orderNumber, total: this.lastTotal || null, rehearsal: false, at: new Date().toISOString() };
     this.emit();
     if (this.link?.placed) await this.link.placed({ orderNumber: this.orderNumber }).catch(() => {});
@@ -940,7 +998,10 @@ class BuyLabFlow {
 function finished(snapshot) {
   if (snapshot.status === "done") return snapshot;
   if (snapshot.status === "stopped") throw stoppedError();
-  const failed = snapshot.steps.find((step) => step.status === "failed");
+  const failedSteps = snapshot.steps.filter((step) => step.status === "failed");
+  // A walk names where it was going ("Order placed"); the step under it that
+  // failed names what was missing ("Checkout"), which is what to say (2026-11-23).
+  const failed = failedSteps.find((step) => step.do !== "walk" && step.do !== "act") || failedSteps[0];
   // Which thing on the page it was: "It isn't on the page (Secure Checkout)".
   const what = failed?.targetTitle?.en || failed?.target || "";
   const message = failed?.error?.message || `The ${snapshot.task || "step"} didn't finish`;

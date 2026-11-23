@@ -220,6 +220,18 @@ class LiveBrowser {
     const at = (value, extent) => Math.max(0, Math.min(extent, Math.round(Number(value || 0) * extent)));
     const x = at(event.x, width);
     const y = at(event.y, height);
+    // A click or Enter may send a sign-in form: what it holds is read first,
+    // whole (kept-signin.js keeps the person's login for next time).
+    if (event.kind === "click" || (event.kind === "key" && /^(Enter|NumpadEnter)$/.test(String(event.key || "")))) {
+      // Never in the person's way: at most 400 ms, then the input goes on
+      // (2026-11-23: a slow frame on Mouser's sign-in held every click).
+      if (this.browser.beforeSend) {
+        await Promise.race([
+          this.browser.beforeSend().catch(() => {}),
+          new Promise((resolve) => setTimeout(resolve, 400)),
+        ]);
+      }
+    }
     try {
       switch (event.kind) {
         case "move":

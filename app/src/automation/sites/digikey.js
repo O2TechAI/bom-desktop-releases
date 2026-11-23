@@ -63,6 +63,31 @@ const TARGETS = {
       // looks and reads like the button but does nothing. Wait for the real
       // one, which DigiKey names `add-to-cart-btn`.
       { css: "#add-to-cart-btn-price-procurement, button[data-testid='add-to-cart-btn']" },
+      // Any other buy box (a part sold in several packagings, 2026-11-23).
+      { role: "button", name: /^add to (cart|bag)$/i },
+    ],
+  },
+  /* A part sold in several packagings (cut tape, tape & reel, Digi-Reel):
+   * the options on its page (2026-11-23: "根据描述来进行选择"). */
+  "product.packaging": {
+    title: T("Packaging options", "包装选项", "Opciones de empaque"),
+    any: [
+      { role: "radio", name: /cut tape|tape & reel|digi-?reel/i },
+      { role: "tab", name: /cut tape|tape & reel|digi-?reel/i },
+      { role: "option", name: /cut tape|tape & reel|digi-?reel/i },
+      { text: /^(cut tape|tape & reel|digi-?reel)/i },
+    ],
+  },
+  /* Cut tape: what a small quantity is sold as. Tape & reel is a whole reel,
+   * and Digi-Reel adds a reeling fee, so neither is chosen by the app. */
+  "product.packCutTape": {
+    title: T("Cut Tape", "剪切带", "Cinta cortada"),
+    any: [
+      { role: "radio", name: /cut tape/i },
+      { role: "tab", name: /cut tape/i },
+      { role: "option", name: /cut tape/i },
+      { role: "button", name: /cut tape/i },
+      { text: /^cut tape( \(ct\))?$/i },
     ],
   },
   "cart.count": {
@@ -307,7 +332,12 @@ const STATES = {
   cart: { title: T("Cart", "购物车", "Carrito"), match: { url: /\/ordering\/shoppingcart/i } },
   orderDetail: { title: T("Order", "订单详情", "Pedido"), match: { url: /\/orderhistory\/(?!list)[^?]*\d{5,}/i } },
   orders: { title: T("Orders", "订单记录", "Pedidos"), match: [{ url: /\/orderhistory\/list/i }, { url: /orderhistory/i, all: ["orders.rows"] }] },
-  product: { title: T("Product page", "商品页", "Página del producto"), match: { all: ["product.addToCart", "product.ofPart"] } },
+  product: {
+    title: T("Product page", "商品页", "Página del producto"),
+    // Its buy box, or its packaging options before one is chosen (2026-11-23:
+    // the page of a part in several packagings was not recognised).
+    match: [{ all: ["product.addToCart", "product.ofPart"] }, { all: ["product.packaging", "product.ofPart"] }],
+  },
   results: { title: T("Search results", "搜索结果", "Resultados"), match: { url: /\/products\/result/i, all: ["results.exact"] } },
   // The home page Buy lab's Chrome opens on. Known by its address only, and
   // last, so it never shadows a page above. Unknown, a walk from here waited
@@ -322,7 +352,20 @@ const TRANSITIONS = [
     title: T("Search for the part", "搜索型号", "Buscar la pieza"),
     from: "*",
     to: ["product", "results", "challenge"],
-    steps: [{ do: "goto", url: "{{search}}" }, { do: "click", target: "cookies.accept", optional: true, timeout: 2500 }],
+    // Search the way a person does: the shop's own page, the box, the term and
+    // the search button. A cold goto of the result URL is exactly what
+    // Cloudflare asks to verify first.
+    steps: [
+      { do: "goto", url: "{{home}}" },
+      { do: "wait", ms: 1500 },
+      { do: "click", target: "search.input" },
+      { do: "fill", target: "search.input", value: "{{part}}" },
+      { do: "wait", ms: 400 },
+      { do: "click", target: "search.submit", navigates: true },
+      { do: "waitForUrl", pattern: /products\/result|product-detail/i, timeout: 20000 },
+      { do: "wait", ms: 800 },
+      { do: "click", target: "cookies.accept", optional: true, timeout: 2500 },
+    ],
   },
   {
     name: "openExact",
@@ -330,6 +373,21 @@ const TRANSITIONS = [
     from: ["results"],
     to: ["product"],
     steps: [{ do: "click", target: "results.exact", navigates: true }],
+  },
+  {
+    // After an order DigiKey sends its cart address to that order's
+    // confirmation (/ordering/submit) until a new cart is started (2026-11-23:
+    // the walk to the cart went round on the confirmation and was lost).
+    name: "newCartAfterOrder",
+    title: T("Start a new cart", "新建购物车", "Empezar un carrito nuevo"),
+    from: ["confirmation"],
+    to: ["cart", "challenge"],
+    steps: [
+      { do: "click", target: "cart.newCart", timeout: 15000 },
+      { do: "click", target: "cart.newCartCreate", when: "cart.newCartDialog", whenTimeout: 5000 },
+      { do: "wait", ms: 2500 },
+      { do: "goto", url: "{{cart}}" },
+    ],
   },
   {
     name: "goCart",
@@ -383,8 +441,11 @@ const TRANSITIONS = [
     to: ["product"],
     steps: [
       { do: "peek", target: "cart.count", as: "cartBefore" },
+      // Several packagings: cut tape, as a small quantity is sold.
+      { do: "click", target: "product.packCutTape", when: "product.packaging", whenTimeout: 2000 },
+      { do: "wait", ms: 800 },
       { do: "fill", target: "product.quantity", value: "{{quantity}}" },
-      { do: "click", target: "product.addToCart" },
+      { do: "click", target: "product.addToCart", timeout: 15000 },
       { do: "waitForChange", target: "cart.count", from: "cartBefore", or: "cart.added" },
     ],
   },
@@ -522,6 +583,9 @@ module.exports = {
   name: "DigiKey",
   verified: false,
   hosts: ["*.digikey.com"],
+  // No Fetch domain here: Cloudflare scores that CDP footprint, and the flow
+  // keeps to the shop's own pages anyway.
+  guard: false,
   urls: {
     home: "https://www.digikey.com/",
     search: "https://www.digikey.com/en/products/result?keywords={{part|url}}",
@@ -567,7 +631,7 @@ module.exports = {
         do: "extract",
         target: "cart.rows",
         fields: {
-          part: { target: "cart.part" },
+          part: { target: "cart.part" }, text: { target: "track.self" },
           quantity: { target: "cart.quantity", read: "value" },
           unitPrice: { target: "cart.unitPrice" },
           extended: { target: "cart.extended" },

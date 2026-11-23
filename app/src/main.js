@@ -410,6 +410,7 @@ async function openBuyLab({ quiet = false } = {}) {
     pagePreload: path.join(__dirname, "buy-lab-preload.js"),
     partition: PARTITION,
     serviceStatus: () => serviceLink?.status || null,
+    onResumeSaved: (id, resumeKey) => (serviceLink ? serviceLink.continueSaved(id, resumeKey) : false),
     userDataDir: app.getPath("userData"),
     openExternal: (url) => void openExternal(url),
     downloadsPath: app.getPath("downloads"),
@@ -477,10 +478,17 @@ function registerSiteIpc() {
   });
   // BOM's "Deal with it" on a seller being bought: that seller's own page
   // in the Buy lab (where the cart is), else its supplier window.
-  ipcMain.handle("desktop:open-seller-page", async (event, id) => {
+  ipcMain.handle("desktop:open-seller-page", async (event, id, options) => {
     if (!fromSite(event)) return { ok: false, message: "Not allowed" };
     const seller = String(id || "");
+    const view = ["cart", "order"].includes(options?.view) ? options.view : "";
+    const order = String(options?.order || "").replace(/[^0-9A-Za-z-]/g, "").slice(0, 40);
     try {
+      // A step of an order: the seller's cart, or that order's own page.
+      if (view) {
+        const lab = await openBuyLab();
+        if (await lab.openSellerAt(seller, { view, order })) return { ok: true, where: "buy_lab" };
+      }
       if (buyLabWindow?.openSellerPage(seller)) return { ok: true, where: "buy_lab" };
       if (!suppliers.some((site) => site.id === seller)) return { ok: false, message: "Unknown supplier" };
       await openSupplier(seller);
@@ -588,10 +596,12 @@ if (!app.requestSingleInstanceLock()) {
   // profile is not left locked by a browser nobody can see.
   let closingSuppliers = false;
   app.on("before-quit", (event) => {
-    if (closingSuppliers || supplierWindows.size === 0) return;
+    // The Buy lab's Chromes too: each keeps its sign-in as it closes
+    // (automation/kept-signin.js), which needs the app still running.
+    if (closingSuppliers || (supplierWindows.size === 0 && !buyLabWindow)) return;
     event.preventDefault();
     closingSuppliers = true;
-    Promise.allSettled([...supplierWindows.values()].map((opened) => opened.close()))
+    Promise.allSettled([...supplierWindows.values(), ...(buyLabWindow ? [buyLabWindow] : [])].map((opened) => opened.close()))
       .finally(() => { supplierWindows.clear(); app.quit(); });
   });
 
@@ -637,6 +647,7 @@ if (!app.requestSingleInstanceLock()) {
       version: app.getVersion(),
       log: (message) => console.warn(message),
       onStatus: () => buyLabWindow?.publish?.(),
+      stateFile: path.join(app.getPath("userData"), "buy-lab", "service-stops.json"),
     });
     serviceLink.start();
   });

@@ -20,10 +20,26 @@
  * sign-in's callback), the address moves to the main tab and the tab closes. */
 
 const { EventEmitter } = require("node:events");
+
+/* A checkout's payment provider (2026-11-23: Mouser's PayPal popup spun for
+ * ever): its iframes in the shop's page and the popup talk to each other, and
+ * some shops send the whole page there and back. Their pages are part of the
+ * checkout, so the guard lets them through; chat widgets and ads stay blocked. */
+const PAYMENT_HOSTS = /(^|\.)(paypal\.com|paypalobjects\.com|braintreegateway\.com|braintree-api\.com|pay\.google\.com|payments\.google\.com|stripe\.com|stripe\.network|adyen\.com|adyenpayments\.com|cardinalcommerce\.com|cybersource\.com|authorize\.net|klarna\.com|affirm\.com)$/i;
+
+function isPaymentProvider(url) {
+  try {
+    const { protocol, hostname } = new URL(url);
+    return protocol === "https:" && PAYMENT_HOSTS.test(hostname);
+  } catch {
+    return false;
+  }
+}
 const fs = require("node:fs");
 const path = require("node:path");
 
 const { createTrafficWatch } = require("./traffic");
+const { keepSignedIn, restoreSessionCookies, signInAgain } = require("./kept-signin");
 
 const NAVIGATION_TIMEOUT = 45000;
 const ABORTED = /net::ERR_ABORTED|interrupted by another navigation|Navigation interrupted|frame was detached/i;
@@ -46,6 +62,11 @@ class ChromePage extends EventEmitter {
       detach: () => { this.detach(); },
       sendCommand: (method, params) => this.send(method, params),
     };
+  }
+
+  /** Sign in with the login kept for this seller (kept-signin.js). */
+  async signInAgain() {
+    return this.browser.signInAgain ? this.browser.signInAgain() : false;
   }
 
   async attach() {
@@ -172,7 +193,15 @@ class SupplierBrowser extends EventEmitter {
           ],
           ...(choice.channel ? { channel: choice.channel } : { executablePath: choice.executablePath }),
         });
-        return await new SupplierBrowser({ profile, context, downloadsPath, mayGo, challengeMayGo, openExternal }).start(bounds);
+        // Signed in once stays signed in (kept-signin.js): what Chrome dropped
+        // since last time goes back before the first page loads.
+        await restoreSessionCookies(context, profilePath).catch(() => 0);
+        const browser = new SupplierBrowser({ profile, context, downloadsPath, mayGo, challengeMayGo, openExternal });
+        browser.stopKeeping = keepSignedIn({ context, profilePath, siteId: profile?.id, home: profile?.urls?.home, page: () => browser.page });
+        // A sign-in page: the kept login first, the person only if that fails.
+        browser.beforeSend = () => browser.stopKeeping?.beforeSend?.() ?? Promise.resolve();
+        browser.signInAgain = () => signInAgain(browser.page, profilePath, profile?.urls?.home).catch(() => false);
+        return await browser.start(bounds);
       } catch (error) {
         lastError = error;
         // Another browser may still work; try the next one. A profile that is
@@ -190,6 +219,7 @@ class SupplierBrowser extends EventEmitter {
     this.downloadsPath = downloadsPath;
     this.mayGo = mayGo || (() => false);
     this.challengeMayGo = challengeMayGo || (() => false);
+    this.useGuard = profile?.guard !== false;
     this.openExternal = openExternal || (() => {});
     this.traffic = createTrafficWatch();
     this.closed = false;
@@ -219,10 +249,12 @@ class SupplierBrowser extends EventEmitter {
     } catch {
       this.mainFrameId = null;
     }
-    await this.guard.send("Fetch.enable", {
-      patterns: [{ resourceType: "Document", requestStage: "Request" }],
-    });
-    this.guard.on("Fetch.requestPaused", (event) => { void this.onDocument(event); });
+    if (this.useGuard) {
+      await this.guard.send("Fetch.enable", {
+        patterns: [{ resourceType: "Document", requestStage: "Request" }],
+      });
+      this.guard.on("Fetch.requestPaused", (event) => { void this.onDocument(event); });
+    }
 
     this.watchPage(this.page);
     this.context.on("page", (opened) => {
@@ -331,6 +363,7 @@ class SupplierBrowser extends EventEmitter {
    * supplier page again, that address goes to the main tab instead (sent once,
    * from there) and the tab closes. */
   async guardTab(page) {
+    if (!this.useGuard) return;
     const session = await this.context.newCDPSession(page);
     let mainFrameId = null;
     try {
@@ -411,7 +444,7 @@ class SupplierBrowser extends EventEmitter {
     const url = event.request?.url || "";
     let allow = false;
     try {
-      allow = this.mayGo(url) || this.challengeMayGo(url) || /^about:/i.test(url);
+      allow = this.mayGo(url) || this.challengeMayGo(url) || /^about:/i.test(url) || isPaymentProvider(url);
     } catch {
       allow = false;
     }
@@ -467,11 +500,18 @@ class SupplierBrowser extends EventEmitter {
   finish() {
     if (this.closed) return;
     this.closed = true;
+    // Chrome went away by itself: no more keeping (its last save stays).
+    const stop = this.stopKeeping;
+    this.stopKeeping = null;
+    if (stop) void stop().catch(() => {});
     if (this.link) this.link.destroyed = true;
     this.emit("closed");
   }
 
   async close() {
+    // The sign-in is kept before Chrome closes and drops it.
+    await this.stopKeeping?.().catch(() => {});
+    this.stopKeeping = null;
     this.finish();
     await this.context.close().catch(() => {});
   }

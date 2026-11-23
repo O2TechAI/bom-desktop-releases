@@ -22,7 +22,9 @@ contextBridge.exposeInMainWorld("o2Desktop", Object.freeze({
   openSupplier: (id) => ipcRenderer.invoke("desktop:open-supplier", String(id)),
   openBuyLab: () => ipcRenderer.invoke("desktop:open-buy-lab"),
   // A seller being bought: its own page with the cart (the Buy lab's), else its supplier window.
-  openSellerPage: (id) => ipcRenderer.invoke("desktop:open-seller-page", String(id)),
+  // With { view: "cart" } or { view: "order", order }: at that step of the order.
+  openSellerPage: (id, options) => ipcRenderer.invoke("desktop:open-seller-page", String(id),
+    options && typeof options === "object" ? { view: String(options.view || ""), order: String(options.order || "") } : null),
   // Buying hands the orders of these suppliers to the Buy lab, which runs
   // them in the person's own Chrome: start({ orders: [{ supplier, lines:
   // [{ part, quantity }] }], address, reference }) -> { ok, started, skipped,

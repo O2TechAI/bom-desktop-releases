@@ -12,13 +12,14 @@
  * The overlay is shown only when the shop stops for the person (a security
  * check, a sign-in) or when they ask for it. */
 
-const { BaseWindow, WebContentsView, ipcMain } = require("electron");
+const { BaseWindow, Notification, WebContentsView, ipcMain } = require("electron");
 const path = require("node:path");
 
 const { browserChoices } = require("./automation/browser");
 const { SITES } = require("./automation/sites");
 const { AddressBook, BuyLabFlow, RunStore, siteAddress, siteOrderText } = require("./buy-lab-flow");
 const { LiveBrowser } = require("./live-browser");
+const { Runner } = require("./automation/runner");
 
 /* Behind the flow page (its own ground); the live overlay paints dark. */
 const BACKGROUND = "#ecf0f3";
@@ -43,8 +44,11 @@ class BuyLabWindow {
     return window;
   }
 
-  constructor({ language, pageUrl, pagePreload, partition, userDataDir, downloadsPath, openExternal, onClosed, onBackToSite = null, serviceStatus = null, quiet = false }) {
+  constructor({ language, pageUrl, pagePreload, partition, userDataDir, downloadsPath, openExternal, onClosed, onBackToSite = null, serviceStatus = null, onResumeSaved = null, quiet = false }) {
     this.serviceStatus = serviceStatus;
+    // Continue on a run saved before the app started again, when it is one of
+    // BOM's: BOM's link takes it on, so its cart and order still reach BOM.
+    this.onResumeSaved = onResumeSaved;
     /* Opened by BOM's "Deal with it": Back goes back to BOM, not to the list
      * (2026-11-21: "点击back 跳到这个页面而不是原来的页面"). */
     this.onBackToSite = onBackToSite;
@@ -76,7 +80,7 @@ class BuyLabWindow {
       height: 900,
       minWidth: 960,
       minHeight: 640,
-      title: "O2 BOM - Buy lab",
+      title: "O2 BOM - Supplier pages",
       backgroundColor: BACKGROUND,
       // A purchase BOM hands over opens the lab out of sight: the person
       // follows it on BOM's Placing tab, and the lab comes forward only when
@@ -258,6 +262,7 @@ class BuyLabWindow {
   publishFlow(id, state) {
     if (this.closed) return;
     this.publish();
+    this.notifyIfWaiting(id, state);
     // A check is handed to Chrome's own window (onChallenge); the canvas is
     // only for sign-ins and refusals that the person handles in the app,
     // shown for the supplier that is waiting.
@@ -275,6 +280,42 @@ class BuyLabWindow {
       this.promptPayment(id);
     } else {
       this.payPrompted.delete(id);
+    }
+  }
+
+  /**
+   * A system notification each time a seller starts waiting for the person
+   * (2026-11-23: "这种情况你要和用户说": a security check waited 15 minutes
+   * unseen). Once per wait; clicking it shows that seller's page.
+   */
+  notifyIfWaiting(id, state) {
+    this.notified = this.notified || new Map();
+    const waiting = state.status === "waiting";
+    const kind = !waiting ? "" : state.confirm ? "confirm" : state.cartCheck ? "cart-check" : String(state.message || "person");
+    if (!kind) { this.notified.delete(id); return; }
+    if (this.notified.get(id) === kind) return;
+    this.notified.set(id, kind);
+    if (!Notification.isSupported?.()) return;
+    const site = this.sites.find((entry) => entry.id === id);
+    const seller = site?.name || id;
+    const zh = String(this.language || "").startsWith("zh");
+    const text = {
+      challenge: zh ? `${seller} 弹出了安全验证，请在打开的 Chrome 窗口里完成` : `${seller} is showing a security check: finish it in the Chrome window that opened`,
+      "cart-check": zh ? `请核对 ${seller} 的购物车` : `Check the ${seller} cart`,
+      confirm: zh ? `${seller} 的订单等你确认` : `The ${seller} order is waiting for your yes`,
+      sign_in: zh ? `请登录 ${seller}` : `Sign in to ${seller}`,
+      lost: zh ? `app 停在一个不认识的 ${seller} 页面，请接手` : `The app is on a ${seller} page it doesn't know: take it from there`,
+    }[kind] || (zh ? `${seller} 在等你操作` : `${seller} is waiting for you`);
+    try {
+      const note = new Notification({ title: zh ? `O2 BOM · ${seller} 需要你` : `O2 BOM · ${seller} needs you`, body: text });
+      note.on("click", () => {
+        if (kind === "challenge") return; // the check is in Chrome's own window, already in front
+        this.showFor(id);
+        this.focus();
+      });
+      note.show();
+    } catch {
+      // no notifications on this system: the lab and BOM's Placing still say it
     }
   }
 
@@ -338,6 +379,29 @@ class BuyLabWindow {
     this.showView(atCartCheck ? "split" : "live", id);
     if (!atCartCheck) void this.revealCart(id);
     this.focus();
+    return true;
+  }
+
+  /** BOM's link to a step of an order (2026-11-23: "点进去可以看到每个状态对应
+   * 的页面"): that seller's page in front, at its cart, or at one placed
+   * order's own page (walked to the way tracking does, when no purchase is
+   * using the page; else the page as it is). */
+  async openSellerAt(id, { view, order = "" } = {}) {
+    const site = this.sites.find((entry) => entry.id === id);
+    if (this.closed || !site) return false;
+    await this.ensureSite(id);
+    const live = this.lives.get(id);
+    if (!live) return false;
+    if (!this.returnTo) this.hideOnBack = !this.window.isVisible();
+    this.returnTo = "site";
+    this.showView("live", id);
+    this.focus();
+    const flow = this.flows.get(id);
+    const free = !flow?.running && flow?.status !== "waiting";
+    if (free && view === "order" && order) void this.trackOrder(id, order);
+    else if (free && view === "cart" && site.urls?.cart) {
+      void live.page.goto(site.urls.cart).then(() => this.revealCart(id)).catch(() => {});
+    }
     return true;
   }
 
@@ -442,11 +506,15 @@ class BuyLabWindow {
     const text = siteOrderText({ supplier, lines: (job?.lines || []).map((line) => ({ part: line.sku || line.mpn, quantity: line.quantity })) });
     if (!flow || flow.running || !text) return false;
     let address = null;
+    let addressNote = null;
     try {
       address = siteAddress(job.ship_to);
-    } catch {
+    } catch (error) {
       address = null; // the supplier's form stays the person's
+      // Said in the panel, so the person knows why the form is empty (2026-11-23).
+      addressNote = String(error?.message || error).slice(0, 160);
     }
+    flow.addressNote = addressNote;
     this.listTexts.set(supplier, text);
     // The link keeps one job per supplier at a time (buy-service-link.js).
     const expected = Object.fromEntries((job.lines || []).filter((line) => line.unit_price != null)
@@ -506,6 +574,17 @@ class BuyLabWindow {
     }
     const saved = this.runs.load(id);
     if (!saved?.text) return false;
+    if (saved.resumeKey && this.onResumeSaved) {
+      try {
+        if (await this.onResumeSaved(id, saved.resumeKey)) {
+          this.publish();
+          return true;
+        }
+      } catch (error) {
+        this.failStart(id, error.message);
+        return false;
+      }
+    }
     this.listTexts.set(id, saved.text);
     void this.startPurchase({ supplier: id, text: saved.text, address: saved.address, rehearsal: saved.rehearsal, resumeKey: saved.resumeKey })
       .catch((error) => this.failStart(id, error.message));
@@ -546,6 +625,69 @@ class BuyLabWindow {
     // do lands between the app's own steps (2026-11-21).
     if (this.flows.get(this.active)?.driving()) return false;
     return live.input(event);
+  }
+
+  /**
+   * Read one placed order's page on that seller's site, out of sight
+   * (2026-11-23: "做一下物流追踪"): the order's status in the seller's words
+   * and its tracking numbers. Only while no purchase uses that seller's page;
+   * null when it is busy. A page that wants the person (signed out) is left
+   * alone and reported as such: tracking never asks anything of anyone.
+   */
+  async trackOrder(seller, number) {
+    const flow = this.flows.get(seller);
+    const site = this.sites.find((entry) => entry.id === seller);
+    if (!flow || !site?.tasks?.track || !number) return null;
+    this.tracking = this.tracking || new Set();
+    if (flow.running || flow.status === "waiting" || this.tracking.has(seller)) return null;
+    this.tracking.add(seller);
+    let runner = null;
+    let timer = null;
+    try {
+      const live = await this.ensureSite(seller);
+      if (!live || flow.running) return null;
+      let needsPerson = false;
+      let why = "";
+      runner = new Runner({
+        contents: live.browser.link,
+        profile: site,
+        task: "track",
+        params: { order: String(number) },
+        themeCss: "",
+        warmupMs: 0,
+        navigationGapMs: 250,
+        checkSettleMs: 0,
+        session: { warmedUp: false },
+        onChange: (snapshot) => {
+          if (snapshot.status === "waiting" && !needsPerson) {
+            needsPerson = true;
+            why = `${snapshot.message || "person"} at ${snapshot.state || "?"} (signed in ${snapshot.metrics?.signIns || 0}x) ${String(live.page.url()).slice(0, 90)}`;
+            runner.stop();
+          }
+        },
+      });
+      timer = setTimeout(() => runner.stop(), 120_000);
+      const snapshot = await runner.run();
+      // Which page wanted the person, so BOM says why (2026-11-23).
+      if (needsPerson) return { failed: `Needs the person: ${why}`.slice(0, 200) };
+      if (snapshot.status !== "done") {
+        const step = snapshot.steps.find((item) => item.error);
+        return { failed: String(step?.error?.message || snapshot.status || "failed").slice(0, 200) };
+      }
+      // A site that reads the order's row in its history (Mouser) gives rows of
+      // { status, number, link }; the others the order page's status and links.
+      const rows = Array.isArray(snapshot.results?.rows) ? snapshot.results.rows : [];
+      const shipments = (Array.isArray(snapshot.results?.shipments) ? snapshot.results.shipments : rows)
+        .map((item) => ({ number: String(item?.number || "").trim().slice(0, 120), link: item?.link ? String(item.link).slice(0, 1000) : null }))
+        .filter((item) => item.number);
+      const status = snapshot.results?.status || rows.find((row) => row?.status)?.status;
+      return { status: status ? String(status).trim().slice(0, 200) : null, shipments };
+    } catch (error) {
+      return { failed: String(error?.message || error).slice(0, 200) };
+    } finally {
+      clearTimeout(timer);
+      this.tracking.delete(seller);
+    }
   }
 
   /** What each supplier's run is doing, for BOM: step, who has the page, lines done. */

@@ -172,6 +172,80 @@ const TARGETS = {
     within: { any: [{ css: "#CreateNewCartModal" }] },
     any: [{ css: "button.m-btn-primary" }, { role: "button", name: /^create new cart$/i }],
   },
+  // Not signed in, the cart offers "Guest Checkout" and this link instead of
+  // Checkout (2026-11-23): the order goes on from the person's own account.
+  // Tracking from the order history itself (2026-11-23): Mouser puts each
+  // order's status and tracking numbers in its row; its order page has none.
+  "track.orderRow": {
+    title: T("The order's row", "该订单那一行", "La fila del pedido"),
+    any: [{ css: "table tbody tr" }],
+    hasText: "{{order}}",
+  },
+  "track.rowStatus": {
+    title: T("Order status", "订单状态", "Estado del pedido"),
+    any: [{ css: "td:nth-child(6)" }],
+  },
+  "track.rowTracking": {
+    title: T("Tracking number", "物流单号", "Número de seguimiento"),
+    any: [{ css: "td:nth-child(10) a" }],
+  },
+  "cart.signIn": {
+    title: T("Log in to your account", "登录你的账户", "Inicia sesión en tu cuenta"),
+    any: [{ role: "link", name: /^log ?in to your account$/i }, { css: "a[href*='MouserLogin' i]" }],
+  },
+  // Checkout's address form (2026-11-23, live: "Addresses", Billing
+  // Information): the same fields every supplier gets, found by their labels.
+  "addr.form": {
+    title: T("Address form", "地址表单", "Formulario de dirección"),
+    any: [{ role: "textbox", name: /^address line 1/i }],
+  },
+  "addr.firstName": {
+    title: T("First name", "名", "Nombre"),
+    any: [{ role: "textbox", name: /^first name/i }],
+  },
+  "addr.lastName": {
+    title: T("Last name", "姓", "Apellido"),
+    any: [{ role: "textbox", name: /^last name/i }],
+  },
+  "addr.phone": {
+    title: T("Phone", "电话", "Teléfono"),
+    any: [{ role: "textbox", name: /^phone/i }],
+  },
+  "addr.company": {
+    title: T("Company name", "公司名称", "Empresa"),
+    any: [{ role: "textbox", name: /^company name/i }],
+  },
+  "addr.line1": {
+    title: T("Address line 1", "地址第 1 行", "Dirección, línea 1"),
+    any: [{ role: "textbox", name: /^address line 1/i }],
+  },
+  "addr.line2": {
+    title: T("Address line 2", "地址第 2 行", "Dirección, línea 2"),
+    any: [{ role: "textbox", name: /^address line 2/i }],
+  },
+  "addr.city": {
+    title: T("City", "城市", "Ciudad"),
+    any: [{ role: "textbox", name: /^city/i }],
+  },
+  "addr.zip": {
+    title: T("Postal code", "邮编", "Código postal"),
+    any: [{ role: "textbox", name: /^(postal|zip) code/i }],
+  },
+  // "Copy these details to my shipping information? Yes / No" (required).
+  "addr.copyToShipping": {
+    title: T("Ship to this address too", "收货地址同上", "Enviar también a esta dirección"),
+    any: [{ role: "radio", name: /^yes$/i }],
+  },
+  // Shipping Information's "Address Type" (required once copied): Business
+  // for a ship-to with a company, Residential otherwise.
+  "addr.addressType": {
+    title: T("Address type", "地址类型", "Tipo de dirección"),
+    any: [{ role: "combobox", name: /^address type/i }],
+  },
+  "addr.state": {
+    title: T("State", "州", "Estado"),
+    any: [{ role: "combobox", name: /^state/i }],
+  },
   "cart.notice": {
     title: T("Continue Checkout", "继续结账", "Continuar con el pago"),
     any: [{ css: "#btnSaveNContinue" }],
@@ -222,6 +296,8 @@ const STATES = {
     match: { all: ["review.submit"] },
     enter: [{ do: "read", target: "review.total", as: "total", optional: true, timeout: 3000 }],
   },
+  // The address form comes first: its page is headed Billing Information too.
+  addresses: { title: T("Addresses", "地址", "Direcciones"), match: { url: /checkout/i, all: ["addr.form"] }, stuck: "checkout_details" },
   payment: { title: T("Payment", "付款", "Pago"), match: { url: /checkout/i, all: ["checkout.paymentPage"] }, stuck: "checkout_details" },
   shipping: { title: T("Shipping", "收货地址", "Envío"), match: { url: /checkout/i, all: ["checkout.shippingPage"] }, stuck: "checkout_details" },
   checkoutStep: { title: T("Checkout", "结账", "Pago"), match: { url: /checkout/i, all: ["checkout.continue"] }, stuck: "checkout_details" },
@@ -267,7 +343,7 @@ const TRANSITIONS = [
     name: "checkout",
     title: T("Check out", "结账", "Pagar"),
     from: ["cart"],
-    to: ["cartNotice", "signIn", "shipping", "payment", "checkoutStep", "review"],
+    to: ["cartNotice", "signIn", "addresses", "shipping", "payment", "checkoutStep", "review"],
     steps: [
       // The cookie banner can come up after the cart opened and cover
       // Checkout: its settings, then "Reject All" (or the default choices).
@@ -275,22 +351,51 @@ const TRANSITIONS = [
       { do: "click", target: "cookies.reject", optional: true, timeout: 3000 },
       { do: "click", target: "cookies.saveChoices", optional: true, timeout: 1500 },
       { do: "waitForHidden", target: "cookies.backdrop", optional: true, timeout: 5000 },
-      { do: "click", target: "checkout.start", navigates: true },
+      // Signed out there is no Checkout, only Guest Checkout: sign in first (the
+      // person's), and the walk comes back to Checkout from the account.
+      { do: "click", target: "cart.signIn", when: "cart.signIn", whenTimeout: 2500, navigates: true },
+      { do: "click", target: "checkout.start", when: "checkout.start", whenTimeout: 5000, navigates: true },
     ],
   },
   {
     name: "continueNotice",
     title: T("Continue Checkout", "继续结账", "Continuar con el pago"),
     from: ["cartNotice"],
-    to: ["signIn", "shipping", "payment", "checkoutStep", "review"],
+    to: ["signIn", "addresses", "shipping", "payment", "checkoutStep", "review"],
     steps: [{ do: "click", target: "cart.notice", navigates: true }],
   },
   {
     name: "continue",
     title: T("Continue", "继续", "Continuar"),
-    from: ["shipping", "payment", "checkoutStep"],
-    to: ["shipping", "payment", "checkoutStep", "review", "signIn"],
+    from: ["addresses", "shipping", "payment", "checkoutStep"],
+    to: ["addresses", "shipping", "payment", "checkoutStep", "review", "signIn"],
     steps: [{ do: "click", target: "checkout.continue", navigates: true }],
+  },
+  {
+    /* The BOM's ship-to into the address form (billing; Mouser ships there
+     * unless told otherwise), then Continue. Only when an operation names it. */
+    name: "fillAddress",
+    title: T("Fill in the saved address", "填写保存的地址", "Rellenar la dirección guardada"),
+    auto: false,
+    from: ["addresses"],
+    to: ["addresses", "shipping", "payment", "checkoutStep", "review"],
+    steps: [
+      { do: "fill", target: "addr.firstName", value: "{{firstName}}" },
+      { do: "fill", target: "addr.lastName", value: "{{lastName}}" },
+      { do: "fill", target: "addr.phone", value: "{{phoneDigits}}" },
+      { do: "fill", target: "addr.company", value: "{{company}}", optional: true, timeout: 2000 },
+      { do: "fill", target: "addr.line1", value: "{{line1}}" },
+      { do: "fill", target: "addr.line2", value: "{{line2}}", optional: true, timeout: 2000 },
+      { do: "fill", target: "addr.city", value: "{{city}}" },
+      { do: "select", target: "addr.state", option: "{{stateName}}" },
+      { do: "fill", target: "addr.zip", value: "{{zip}}" },
+      { do: "click", target: "addr.copyToShipping", when: "addr.copyToShipping", whenTimeout: 2000 },
+      // "Yes" rebuilds the Shipping Information section: wait for it to settle.
+      { do: "wait", ms: 2500 },
+      { do: "waitFor", target: "addr.addressType", optional: true, timeout: 10000 },
+      { do: "select", target: "addr.addressType", option: /^(business|commercial)/i, when: "addr.addressType", whenTimeout: 3000 },
+      { do: "click", target: "checkout.continue", navigates: true },
+    ],
   },
   {
     name: "submitOrder",
@@ -336,7 +441,7 @@ const TRANSITIONS = [
 ];
 
 const CART_FIELDS = {
-  part: { target: "cart.part" },
+  part: { target: "cart.part" }, text: { target: "track.self" },
   quantity: { target: "cart.quantity", read: "value" },
   unitPrice: { target: "cart.unitPrice" },
   extended: { target: "cart.extended" },
@@ -386,6 +491,13 @@ module.exports = {
     removeFromCart: [{ do: "walk", to: "cart" }, { do: "act", name: "removeLine" }],
     checkout: [{ do: "walk", to: "cart" }, { do: "walk", to: "review" }],
     placeOrder: [{ do: "walk", to: "cart" }, { do: "walk", to: "confirmation" }],
+    // The same with the BOM's ship-to: filled into the address form when it comes.
+    placeOrderWithAddress: [
+      { do: "walk", to: "cart" },
+      { do: "walk", to: ["addresses", "review", "confirmation"] },
+      { do: "act", name: "fillAddress", when: "addr.form" },
+      { do: "walk", to: "confirmation" },
+    ],
     orders: [
       { do: "walk", to: "orders" },
       {
@@ -403,19 +515,21 @@ module.exports = {
     ],
     track: [
       { do: "walk", to: "orders" },
-      { do: "act", name: "openOrder" },
-      { do: "read", target: "track.status", as: "status", optional: true, timeout: 8000 },
       {
         do: "extract",
-        target: "track.shipments",
-        fields: { number: { target: "track.self" }, link: { target: "track.self", read: "href" } },
-        as: "shipments",
+        target: "track.orderRow",
+        fields: {
+          status: { target: "track.rowStatus" },
+          number: { target: "track.rowTracking" },
+          link: { target: "track.rowTracking", read: "href" },
+        },
+        as: "rows",
         optional: true,
-        timeout: 8000,
+        timeout: 20000,
       },
     ],
   },
-  taskParams: { bulkAddPaa: ["lines"], removeFromCart: ["part"], checkout: [], placeOrder: [], orders: [], track: ["order"] },
+  taskParams: { bulkAddPaa: ["lines"], removeFromCart: ["part"], checkout: [], placeOrder: [], placeOrderWithAddress: ["firstName", "lastName", "phoneDigits", "company", "line1", "line2", "city", "stateName", "zip"], orders: [], track: ["order"] },
   taskDefaults: {
     addToCart: { part: "GRM155R71C104KA88D", quantity: "10" },
     removeFromCart: { part: "GRM155R71C104KA88D" },

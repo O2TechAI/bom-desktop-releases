@@ -43,6 +43,41 @@ const DIALOG = { any: [{ css: ".v-dialog--active" }] };
  * /order sent the run back to the home page. */
 const ORDERS_URL = "https://www.lcsc.com/personalCenter/order/list";
 
+/* The Compliance statement on the checkout page, answered as the person
+ * chose (not resold as is; Industrial) and kept as their default. Skipped
+ * where LCSC no longer asks. */
+const COMPLIANCE_STEPS = [
+  { do: "click", target: "compliance.resellNo", when: "compliance.application", whenTimeout: 3000 },
+  { do: "click", target: "compliance.application", when: "compliance.application" },
+  { do: "click", target: "compliance.industrial", when: "compliance.application", timeout: 5000 },
+  { do: "click", target: "compliance.setDefault", when: "compliance.application", optional: true, timeout: 2000 },
+];
+
+/* LCSC's Add Shipping Address dialog, filled with the saved address, kept as
+ * the default and as the billing address too, then saved. */
+const ADD_ADDRESS_STEPS = [
+  { do: "click", target: "checkout.addShipping" },
+  { do: "waitFor", target: "addr.dialog", timeout: 15000 },
+  { do: "fill", target: "addr.firstName", value: "{{firstName}}" },
+  { do: "fill", target: "addr.lastName", value: "{{lastName}}" },
+  // LCSC takes only digits and "+" here.
+  { do: "fill", target: "addr.phone", value: "{{phoneDigits}}" },
+  { do: "click", target: "addr.country" },
+  { do: "type", value: "United States" },
+  { do: "click", target: "addr.countryUS" },
+  { do: "click", target: "addr.state" },
+  { do: "type", value: "{{stateName}}" },
+  { do: "click", target: "addr.stateOption" },
+  { do: "fill", target: "addr.city", value: "{{city}}" },
+  { do: "fill", target: "addr.line1", value: "{{line1}}" },
+  { do: "fill", target: "addr.line2", value: "{{line2}}" },
+  { do: "fill", target: "addr.zip", value: "{{zip}}" },
+  { do: "click", target: "addr.setDefault" },
+  { do: "click", target: "addr.syncBilling" },
+  { do: "click", target: "addr.save" },
+  { do: "waitForHidden", target: "addr.dialog", timeout: 20000 },
+];
+
 module.exports = {
   id: "lcsc",
   name: "LCSC",
@@ -145,6 +180,33 @@ module.exports = {
    * name, phone, country (searchable), state (searchable), city, street,
    * apt, postal code; then "Set As Default", "Sync My Shipping Address as the
    * Bill Address", Cancel / Save. */
+  // The checkout already ships to the BOM's address (2026-11-23): its street
+  // line is on the page. Otherwise the account's own default would be used.
+  "checkout.shipsToSaved": {
+    title: T("The BOM's ship-to address", "BOM 的收货地址", "La dirección de envío de la BOM"),
+    any: [{ css: "body" }],
+    hasText: "{{line1}}",
+  },
+  // Checkout's Compliance statement (2026-11-23, live; the person's answers:
+  // "选no/industry"): not resold as is, used in Industrial, kept as default.
+  "compliance.resellNo": {
+    title: T("Not resold as is", "不原样转售", "No se revende tal cual"),
+    // The radio input itself is hidden; its visible "No" is what takes the click.
+    any: [{ text: /^no$/i }, { css: "label", hasText: /^\s*no\s*$/i }],
+  },
+  "compliance.application": {
+    title: T("How the parts are used", "元器件用途", "Uso de los componentes"),
+    any: [{ css: "input[placeholder='please choose' i]" }],
+  },
+  "compliance.industrial": {
+    title: T("Industrial", "工业", "Industrial"),
+    any: [{ role: "option", name: /^industrial$/i }, { text: /^industrial$/i }],
+  },
+  "compliance.setDefault": {
+    title: T("Keep these answers", "设为默认", "Guardar como predeterminado"),
+    // Like the radio: the checkbox input is hidden, its label takes the click.
+    any: [{ text: /^set as default$/i }, { role: "checkbox", name: /set as default/i }],
+  },
   "checkout.addShipping": {
     title: T("Add a shipping address", "添加收货地址", "Añadir dirección"),
     any: [{ text: /^add$/i }],
@@ -447,27 +509,22 @@ module.exports = {
         from: ["checkoutAddress"],
         to: ["review", "checkoutAddress"],
         steps: [
-          { do: "click", target: "checkout.addShipping" },
-          { do: "waitFor", target: "addr.dialog", timeout: 15000 },
-          { do: "fill", target: "addr.firstName", value: "{{firstName}}" },
-          { do: "fill", target: "addr.lastName", value: "{{lastName}}" },
-          // LCSC takes only digits and "+" here.
-          { do: "fill", target: "addr.phone", value: "{{phoneDigits}}" },
-          { do: "click", target: "addr.country" },
-          { do: "type", value: "United States" },
-          { do: "click", target: "addr.countryUS" },
-          { do: "click", target: "addr.state" },
-          { do: "type", value: "{{stateName}}" },
-          { do: "click", target: "addr.stateOption" },
-          { do: "fill", target: "addr.city", value: "{{city}}" },
-          { do: "fill", target: "addr.line1", value: "{{line1}}" },
-          { do: "fill", target: "addr.line2", value: "{{line2}}" },
-          { do: "fill", target: "addr.zip", value: "{{zip}}" },
-          { do: "click", target: "addr.setDefault" },
-          { do: "click", target: "addr.syncBilling" },
-          { do: "click", target: "addr.save" },
-          { do: "waitForHidden", target: "addr.dialog", timeout: 20000 },
+          ...ADD_ADDRESS_STEPS,
           { do: "waitForHidden", target: "checkout.noAddress", timeout: 20000 },
+        ],
+      },
+      {
+        /* The account has an address, but not the BOM's (2026-11-23: an old
+         * test address was about to be used): the BOM's is added, as default
+         * and billing, before the order goes on to the person's yes. */
+        name: "addAddress",
+        title: T("Ship to the BOM's address", "改用 BOM 的收货地址", "Enviar a la dirección de la BOM"),
+        auto: false,
+        from: ["review"],
+        to: ["review"],
+        steps: [
+          ...ADD_ADDRESS_STEPS,
+          { do: "waitFor", target: "checkout.shipsToSaved", timeout: 20000 },
         ],
       },
       // Only when an operation names them: they change the cart or open one order.
@@ -535,7 +592,7 @@ module.exports = {
     addToCart: [{ do: "walk", to: ["product", "results"] }, { do: "act", name: ["addToCartHere", "addToCart"] }],
     openCart: [
       { do: "walk", to: "cart" },
-      { do: "extract", target: "cart.rows", fields: { part: { target: "cart.part" }, quantity: { target: "cart.quantity", read: "value" }, unitPrice: { target: "cart.unitPrice" }, extended: { target: "cart.extended" } }, as: "cart", optional: true, timeout: 5000 },
+      { do: "extract", target: "cart.rows", fields: { part: { target: "cart.part" }, text: { target: "track.self" }, quantity: { target: "cart.quantity", read: "value" }, unitPrice: { target: "cart.unitPrice" }, extended: { target: "cart.extended" } }, as: "cart", optional: true, timeout: 5000 },
     ],
     removeFromCart: [
       { do: "walk", to: "cart" },
@@ -548,6 +605,8 @@ module.exports = {
     // From the cart, so an order placed earlier is never taken for this one.
     placeOrder: [
       { do: "walk", to: "cart" },
+      { do: "walk", to: ["review", "confirmation"] },
+      ...COMPLIANCE_STEPS,
       { do: "walk", to: "confirmation" },
     ],
     // The same with the saved address: added on the checkout page when the
@@ -556,6 +615,8 @@ module.exports = {
       { do: "walk", to: "cart" },
       { do: "walk", to: ["checkoutAddress", "review", "confirmation"] },
       { do: "act", name: "fillAddress", when: "checkout.noAddress" },
+      { do: "act", name: "addAddress", unless: "checkout.shipsToSaved", whenTimeout: 5000 },
+      ...COMPLIANCE_STEPS,
       { do: "walk", to: "confirmation" },
     ],
     orders: [
