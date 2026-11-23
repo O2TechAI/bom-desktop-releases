@@ -43,6 +43,16 @@ const DIALOG = { any: [{ css: ".v-dialog--active" }] };
  * /order sent the run back to the home page. */
 const ORDERS_URL = "https://www.lcsc.com/personalCenter/order/list";
 
+/* The Compliance statement on the checkout page, answered as the person
+ * chose (not resold as is; Industrial) and kept as their default. Skipped
+ * where LCSC no longer asks. */
+const COMPLIANCE_STEPS = [
+  { do: "click", target: "compliance.resellNo", when: "compliance.application", whenTimeout: 3000 },
+  { do: "click", target: "compliance.application", when: "compliance.application" },
+  { do: "click", target: "compliance.industrial", when: "compliance.application", timeout: 5000 },
+  { do: "click", target: "compliance.setDefault", when: "compliance.application", optional: true, timeout: 2000 },
+];
+
 /* LCSC's Add Shipping Address dialog, filled with the saved address, kept as
  * the default and as the billing address too, then saved. */
 const ADD_ADDRESS_STEPS = [
@@ -176,6 +186,24 @@ module.exports = {
     title: T("The BOM's ship-to address", "BOM 的收货地址", "La dirección de envío de la BOM"),
     any: [{ css: "body" }],
     hasText: "{{line1}}",
+  },
+  // Checkout's Compliance statement (2026-11-23, live; the person's answers:
+  // "选no/industry"): not resold as is, used in Industrial, kept as default.
+  "compliance.resellNo": {
+    title: T("Not resold as is", "不原样转售", "No se revende tal cual"),
+    any: [{ role: "radio", name: /^no$/i }, { css: "label, span, div", hasText: /^no$/i }],
+  },
+  "compliance.application": {
+    title: T("How the parts are used", "元器件用途", "Uso de los componentes"),
+    any: [{ css: "input[placeholder='please choose' i]" }],
+  },
+  "compliance.industrial": {
+    title: T("Industrial", "工业", "Industrial"),
+    any: [{ role: "option", name: /^industrial$/i }, { text: /^industrial$/i }],
+  },
+  "compliance.setDefault": {
+    title: T("Keep these answers", "设为默认", "Guardar como predeterminado"),
+    any: [{ role: "checkbox", name: /set as default/i }, { text: /^set as default$/i }],
   },
   "checkout.addShipping": {
     title: T("Add a shipping address", "添加收货地址", "Añadir dirección"),
@@ -575,6 +603,8 @@ module.exports = {
     // From the cart, so an order placed earlier is never taken for this one.
     placeOrder: [
       { do: "walk", to: "cart" },
+      { do: "walk", to: ["review", "confirmation"] },
+      ...COMPLIANCE_STEPS,
       { do: "walk", to: "confirmation" },
     ],
     // The same with the saved address: added on the checkout page when the
@@ -584,6 +614,7 @@ module.exports = {
       { do: "walk", to: ["checkoutAddress", "review", "confirmation"] },
       { do: "act", name: "fillAddress", when: "checkout.noAddress" },
       { do: "act", name: "addAddress", unless: "checkout.shipsToSaved", whenTimeout: 5000 },
+      ...COMPLIANCE_STEPS,
       { do: "walk", to: "confirmation" },
     ],
     orders: [

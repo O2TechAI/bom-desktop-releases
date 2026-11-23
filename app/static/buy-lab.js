@@ -41,6 +41,7 @@ const COPY = {
     holdCheckout: "The app is filling in the checkout",
     holdAfter: "The app is reading the order",
     holdNote: "Please don't click this page now; it will be yours as soon as the app needs you.",
+    addressNote: "(The order's ship-to can't be filled in for you: {why}.)",
     holdStop: "Stop after this line",
     holdStopNow: "Stop now",
     holdStopping: "Stopping after this line…",
@@ -100,6 +101,7 @@ const COPY = {
     holdCheckout: "正在填写结账信息",
     holdAfter: "正在读取订单",
     holdNote: "现在请不要点击这个页面，需要你操作时会马上交给你。",
+    addressNote: "（订单的收货地址无法自动填写：{why}。）",
     holdStop: "做完这一行再停止",
     holdStopNow: "立即停止",
     holdStopping: "做完这一行就停止…",
@@ -159,6 +161,7 @@ const COPY = {
     holdCheckout: "La app está completando el pago",
     holdAfter: "La app está leyendo el pedido",
     holdNote: "No hagas clic en esta página ahora; será tuya en cuanto la app te necesite.",
+    addressNote: "(La dirección de envío del pedido no se puede rellenar: {why}.)",
     holdStop: "Detener tras esta línea",
     holdStopNow: "Detener ya",
     holdStopping: "Se detendrá tras esta línea…",
@@ -393,7 +396,9 @@ function renderPlaced(parts, placed) {
 }
 
 function renderPanel(parts, state, saved) {
-  parts.status.textContent = statusText(state);
+  parts.status.textContent = state.addressNote && state.running
+    ? `${statusText(state)} ${copy.addressNote.replace("{why}", state.addressNote)}`
+    : statusText(state);
   parts.status.dataset.tone = tone(state);
   parts.start.disabled = Boolean(state.running);
   // Continue: this window's interrupted purchase, or one saved before the app closed.

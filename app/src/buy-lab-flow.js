@@ -370,6 +370,8 @@ class BuyLabFlow {
     return {
       status: this.status,
       message: this.message,
+      // Why the order's ship-to was not filled in on the supplier's form.
+      addressNote: this.addressNote || null,
       supplier: this.supplier,
       sites: this.sites.map((site) => ({ id: site.id, name: site.name })),
       lines: this.lines,

@@ -442,11 +442,15 @@ class BuyLabWindow {
     const text = siteOrderText({ supplier, lines: (job?.lines || []).map((line) => ({ part: line.sku || line.mpn, quantity: line.quantity })) });
     if (!flow || flow.running || !text) return false;
     let address = null;
+    let addressNote = null;
     try {
       address = siteAddress(job.ship_to);
-    } catch {
+    } catch (error) {
       address = null; // the supplier's form stays the person's
+      // Said in the panel, so the person knows why the form is empty (2026-11-23).
+      addressNote = String(error?.message || error).slice(0, 160);
     }
+    flow.addressNote = addressNote;
     this.listTexts.set(supplier, text);
     // The link keeps one job per supplier at a time (buy-service-link.js).
     const expected = Object.fromEntries((job.lines || []).filter((line) => line.unit_price != null)
