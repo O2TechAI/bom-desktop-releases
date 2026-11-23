@@ -39,6 +39,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const { createTrafficWatch } = require("./traffic");
+const { keepSignedIn, restoreSessionCookies } = require("./kept-signin");
 
 const NAVIGATION_TIMEOUT = 45000;
 const ABORTED = /net::ERR_ABORTED|interrupted by another navigation|Navigation interrupted|frame was detached/i;
@@ -187,7 +188,12 @@ class SupplierBrowser extends EventEmitter {
           ],
           ...(choice.channel ? { channel: choice.channel } : { executablePath: choice.executablePath }),
         });
-        return await new SupplierBrowser({ profile, context, downloadsPath, mayGo, challengeMayGo, openExternal }).start(bounds);
+        // Signed in once stays signed in (kept-signin.js): what Chrome dropped
+        // since last time goes back before the first page loads.
+        await restoreSessionCookies(context, profilePath).catch(() => 0);
+        const browser = new SupplierBrowser({ profile, context, downloadsPath, mayGo, challengeMayGo, openExternal });
+        browser.stopKeeping = keepSignedIn({ context, profilePath, siteId: profile?.id, page: () => browser.page });
+        return await browser.start(bounds);
       } catch (error) {
         lastError = error;
         // Another browser may still work; try the next one. A profile that is
@@ -482,11 +488,18 @@ class SupplierBrowser extends EventEmitter {
   finish() {
     if (this.closed) return;
     this.closed = true;
+    // Chrome went away by itself: no more keeping (its last save stays).
+    const stop = this.stopKeeping;
+    this.stopKeeping = null;
+    if (stop) void stop().catch(() => {});
     if (this.link) this.link.destroyed = true;
     this.emit("closed");
   }
 
   async close() {
+    // The sign-in is kept before Chrome closes and drops it.
+    await this.stopKeeping?.().catch(() => {});
+    this.stopKeeping = null;
     this.finish();
     await this.context.close().catch(() => {});
   }
