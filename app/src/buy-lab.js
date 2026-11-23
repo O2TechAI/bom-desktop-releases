@@ -80,7 +80,7 @@ class BuyLabWindow {
       height: 900,
       minWidth: 960,
       minHeight: 640,
-      title: "O2 BOM - Buy lab",
+      title: "O2 BOM - Supplier pages",
       backgroundColor: BACKGROUND,
       // A purchase BOM hands over opens the lab out of sight: the person
       // follows it on BOM's Placing tab, and the lab comes forward only when
