@@ -128,7 +128,8 @@ class ServiceLink {
     this.stops.delete(key);
     this.saveState();
     await this.follow();
-    return [...this.running.keys()].includes(key);
+    // BOM's job either way: started now, or when this seller is free.
+    return this.running.has(key) || this.jobs.some((job) => `${job.purchase_request_id}:${job.seller}` === key);
   }
 
   start() {
