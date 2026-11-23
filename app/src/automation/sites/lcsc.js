@@ -191,7 +191,8 @@ module.exports = {
   // "选no/industry"): not resold as is, used in Industrial, kept as default.
   "compliance.resellNo": {
     title: T("Not resold as is", "不原样转售", "No se revende tal cual"),
-    any: [{ role: "radio", name: /^no$/i }, { css: "label, span, div", hasText: /^no$/i }],
+    // The radio input itself is hidden; its visible "No" is what takes the click.
+    any: [{ text: /^no$/i }, { css: "label", hasText: /^\s*no\s*$/i }],
   },
   "compliance.application": {
     title: T("How the parts are used", "元器件用途", "Uso de los componentes"),
