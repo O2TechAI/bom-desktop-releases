@@ -172,6 +172,12 @@ const TARGETS = {
     within: { any: [{ css: "#CreateNewCartModal" }] },
     any: [{ css: "button.m-btn-primary" }, { role: "button", name: /^create new cart$/i }],
   },
+  // Not signed in, the cart offers "Guest Checkout" and this link instead of
+  // Checkout (2026-11-23): the order goes on from the person's own account.
+  "cart.signIn": {
+    title: T("Log in to your account", "登录你的账户", "Inicia sesión en tu cuenta"),
+    any: [{ role: "link", name: /^log ?in to your account$/i }, { css: "a[href*='MouserLogin' i]" }],
+  },
   "cart.notice": {
     title: T("Continue Checkout", "继续结账", "Continuar con el pago"),
     any: [{ css: "#btnSaveNContinue" }],
@@ -275,7 +281,10 @@ const TRANSITIONS = [
       { do: "click", target: "cookies.reject", optional: true, timeout: 3000 },
       { do: "click", target: "cookies.saveChoices", optional: true, timeout: 1500 },
       { do: "waitForHidden", target: "cookies.backdrop", optional: true, timeout: 5000 },
-      { do: "click", target: "checkout.start", navigates: true },
+      // Signed out there is no Checkout, only Guest Checkout: sign in first (the
+      // person's), and the walk comes back to Checkout from the account.
+      { do: "click", target: "cart.signIn", when: "cart.signIn", whenTimeout: 2500, navigates: true },
+      { do: "click", target: "checkout.start", when: "checkout.start", whenTimeout: 5000, navigates: true },
     ],
   },
   {

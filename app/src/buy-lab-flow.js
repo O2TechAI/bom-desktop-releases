@@ -940,7 +940,10 @@ class BuyLabFlow {
 function finished(snapshot) {
   if (snapshot.status === "done") return snapshot;
   if (snapshot.status === "stopped") throw stoppedError();
-  const failed = snapshot.steps.find((step) => step.status === "failed");
+  const failedSteps = snapshot.steps.filter((step) => step.status === "failed");
+  // A walk names where it was going ("Order placed"); the step under it that
+  // failed names what was missing ("Checkout"), which is what to say (2026-11-23).
+  const failed = failedSteps.find((step) => step.do !== "walk" && step.do !== "act") || failedSteps[0];
   // Which thing on the page it was: "It isn't on the page (Secure Checkout)".
   const what = failed?.targetTitle?.en || failed?.target || "";
   const message = failed?.error?.message || `The ${snapshot.task || "step"} didn't finish`;
