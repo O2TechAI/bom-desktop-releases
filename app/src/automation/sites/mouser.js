@@ -496,7 +496,7 @@ module.exports = {
       },
     ],
   },
-  taskParams: { bulkAddPaa: ["lines"], removeFromCart: ["part"], checkout: [], placeOrder: [], placeOrderWithAddress: ["firstName", "lastName", "phoneDigits", "line1", "city", "stateName", "zip"], orders: [], track: ["order"] },
+  taskParams: { bulkAddPaa: ["lines"], removeFromCart: ["part"], checkout: [], placeOrder: [], placeOrderWithAddress: ["firstName", "lastName", "phoneDigits", "company", "line1", "line2", "city", "stateName", "zip"], orders: [], track: ["order"] },
   taskDefaults: {
     addToCart: { part: "GRM155R71C104KA88D", quantity: "10" },
     removeFromCart: { part: "GRM155R71C104KA88D" },
