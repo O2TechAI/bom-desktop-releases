@@ -332,6 +332,21 @@ const TRANSITIONS = [
     steps: [{ do: "click", target: "results.exact", navigates: true }],
   },
   {
+    // After an order DigiKey sends its cart address to that order's
+    // confirmation (/ordering/submit) until a new cart is started (2026-11-23:
+    // the walk to the cart went round on the confirmation and was lost).
+    name: "newCartAfterOrder",
+    title: T("Start a new cart", "新建购物车", "Empezar un carrito nuevo"),
+    from: ["confirmation"],
+    to: ["cart", "challenge"],
+    steps: [
+      { do: "click", target: "cart.newCart", timeout: 15000 },
+      { do: "click", target: "cart.newCartCreate", when: "cart.newCartDialog", whenTimeout: 5000 },
+      { do: "wait", ms: 2500 },
+      { do: "goto", url: "{{cart}}" },
+    ],
+  },
+  {
     name: "goCart",
     title: T("Open the cart", "打开购物车", "Abrir el carrito"),
     from: "*",
