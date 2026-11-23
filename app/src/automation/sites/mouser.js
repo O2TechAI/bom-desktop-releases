@@ -221,6 +221,12 @@ const TARGETS = {
     title: T("Ship to this address too", "收货地址同上", "Enviar también a esta dirección"),
     any: [{ role: "radio", name: /^yes$/i }],
   },
+  // Shipping Information's "Address Type" (required once copied): Business
+  // for a ship-to with a company, Residential otherwise.
+  "addr.addressType": {
+    title: T("Address type", "地址类型", "Tipo de dirección"),
+    any: [{ role: "combobox", name: /^address type/i }],
+  },
   "addr.state": {
     title: T("State", "州", "Estado"),
     any: [{ role: "combobox", name: /^state/i }],
@@ -369,6 +375,7 @@ const TRANSITIONS = [
       { do: "select", target: "addr.state", option: "{{stateName}}" },
       { do: "fill", target: "addr.zip", value: "{{zip}}" },
       { do: "click", target: "addr.copyToShipping", when: "addr.copyToShipping", whenTimeout: 2000 },
+      { do: "select", target: "addr.addressType", option: /^(business|commercial)/i, when: "addr.addressType", whenTimeout: 3000 },
       { do: "click", target: "checkout.continue", navigates: true },
     ],
   },
