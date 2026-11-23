@@ -600,6 +600,21 @@ class BuyLabFlow {
     this.emit();
     try {
       const site = this.sites.find((entry) => entry.id === this.supplier);
+      // Continued past the cart (2026-11-23): another order may have taken this
+      // seller's cart since, or it was emptied. Lines no longer in it are added
+      // again (a fresh cart where the shop keeps the other one), not asked about.
+      if (this.progress >= STAGE.ADDED && this.progress < STAGE.PLACED) {
+        this.emit({ status: "running", message: "reading-cart" });
+        const cart = finished(await this.runTask("openCart"));
+        const rows = Array.isArray(cart.results?.cart) ? cart.results.cart : [];
+        if (compareCart(this.lines, rows).lines.some((line) => line.issue === "missing")) {
+          this.progress = STAGE.NEW;
+          this.confirmedCart = null;
+          this.save();
+        } else {
+          this.freshCart = rows;
+        }
+      }
       if (this.progress < STAGE.ADDED) {
         if (!(await this.addLines(site))) return;
         if (!(await this.settleCart(site))) return;
