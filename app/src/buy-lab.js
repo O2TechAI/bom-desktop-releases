@@ -342,6 +342,29 @@ class BuyLabWindow {
     return true;
   }
 
+  /** BOM's link to a step of an order (2026-11-23: "点进去可以看到每个状态对应
+   * 的页面"): that seller's page in front, at its cart, or at one placed
+   * order's own page (walked to the way tracking does, when no purchase is
+   * using the page; else the page as it is). */
+  async openSellerAt(id, { view, order = "" } = {}) {
+    const site = this.sites.find((entry) => entry.id === id);
+    if (this.closed || !site) return false;
+    await this.ensureSite(id);
+    const live = this.lives.get(id);
+    if (!live) return false;
+    if (!this.returnTo) this.hideOnBack = !this.window.isVisible();
+    this.returnTo = "site";
+    this.showView("live", id);
+    this.focus();
+    const flow = this.flows.get(id);
+    const free = !flow?.running && flow?.status !== "waiting";
+    if (free && view === "order" && order) void this.trackOrder(id, order);
+    else if (free && view === "cart" && site.urls?.cart) {
+      void live.page.goto(site.urls.cart).then(() => this.revealCart(id)).catch(() => {});
+    }
+    return true;
+  }
+
   /** The side-by-side view measured its right card: the shop is laid out at
    * that size (never narrower than 800, so it keeps its desktop layout). */
   async fitStage({ width, height } = {}) {

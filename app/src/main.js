@@ -477,10 +477,17 @@ function registerSiteIpc() {
   });
   // BOM's "Deal with it" on a seller being bought: that seller's own page
   // in the Buy lab (where the cart is), else its supplier window.
-  ipcMain.handle("desktop:open-seller-page", async (event, id) => {
+  ipcMain.handle("desktop:open-seller-page", async (event, id, options) => {
     if (!fromSite(event)) return { ok: false, message: "Not allowed" };
     const seller = String(id || "");
+    const view = ["cart", "order"].includes(options?.view) ? options.view : "";
+    const order = String(options?.order || "").replace(/[^0-9A-Za-z-]/g, "").slice(0, 40);
     try {
+      // A step of an order: the seller's cart, or that order's own page.
+      if (view) {
+        const lab = await openBuyLab();
+        if (await lab.openSellerAt(seller, { view, order })) return { ok: true, where: "buy_lab" };
+      }
       if (buyLabWindow?.openSellerPage(seller)) return { ok: true, where: "buy_lab" };
       if (!suppliers.some((site) => site.id === seller)) return { ok: false, message: "Unknown supplier" };
       await openSupplier(seller);
