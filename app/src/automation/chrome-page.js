@@ -219,6 +219,7 @@ class SupplierBrowser extends EventEmitter {
     this.downloadsPath = downloadsPath;
     this.mayGo = mayGo || (() => false);
     this.challengeMayGo = challengeMayGo || (() => false);
+    this.useGuard = profile?.guard !== false;
     this.openExternal = openExternal || (() => {});
     this.traffic = createTrafficWatch();
     this.closed = false;
@@ -248,10 +249,12 @@ class SupplierBrowser extends EventEmitter {
     } catch {
       this.mainFrameId = null;
     }
-    await this.guard.send("Fetch.enable", {
-      patterns: [{ resourceType: "Document", requestStage: "Request" }],
-    });
-    this.guard.on("Fetch.requestPaused", (event) => { void this.onDocument(event); });
+    if (this.useGuard) {
+      await this.guard.send("Fetch.enable", {
+        patterns: [{ resourceType: "Document", requestStage: "Request" }],
+      });
+      this.guard.on("Fetch.requestPaused", (event) => { void this.onDocument(event); });
+    }
 
     this.watchPage(this.page);
     this.context.on("page", (opened) => {
@@ -360,6 +363,7 @@ class SupplierBrowser extends EventEmitter {
    * supplier page again, that address goes to the main tab instead (sent once,
    * from there) and the tab closes. */
   async guardTab(page) {
+    if (!this.useGuard) return;
     const session = await this.context.newCDPSession(page);
     let mainFrameId = null;
     try {

@@ -864,7 +864,11 @@ class BuyLabFlow {
       this.emit({ status: "failed", message: "nothing-added" });
       return false;
     }
-    const left = rows.filter((row) => !wanted.has(partKey(row.part))).map((row) => row.part);
+    // A line bought by the MPN may show the seller's own number in the cart.
+    const wanted = new Set(this.lines.map((line) => partKey(line.mpn)));
+    const known = (row) => wanted.has(partKey(row.part))
+      || [...wanted].some((key) => key.length >= 6 && partKey(row.text).includes(key));
+    const left = rows.filter((row) => !known(row)).map((row) => row.part || row.text);
     if (left.length) throw new Error(`The cart still has other items: ${left.slice(0, 3).join(", ")}`);
     this.freshCart = rows;
     return true;

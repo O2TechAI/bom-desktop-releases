@@ -352,7 +352,20 @@ const TRANSITIONS = [
     title: T("Search for the part", "搜索型号", "Buscar la pieza"),
     from: "*",
     to: ["product", "results", "challenge"],
-    steps: [{ do: "goto", url: "{{search}}" }, { do: "click", target: "cookies.accept", optional: true, timeout: 2500 }],
+    // Search the way a person does: the shop's own page, the box, the term and
+    // the search button. A cold goto of the result URL is exactly what
+    // Cloudflare asks to verify first.
+    steps: [
+      { do: "goto", url: "{{home}}" },
+      { do: "wait", ms: 1500 },
+      { do: "click", target: "search.input" },
+      { do: "fill", target: "search.input", value: "{{part}}" },
+      { do: "wait", ms: 400 },
+      { do: "click", target: "search.submit", navigates: true },
+      { do: "waitForUrl", pattern: /products\/result|product-detail/i, timeout: 20000 },
+      { do: "wait", ms: 800 },
+      { do: "click", target: "cookies.accept", optional: true, timeout: 2500 },
+    ],
   },
   {
     name: "openExact",
@@ -570,6 +583,9 @@ module.exports = {
   name: "DigiKey",
   verified: false,
   hosts: ["*.digikey.com"],
+  // No Fetch domain here: Cloudflare scores that CDP footprint, and the flow
+  // keeps to the shop's own pages anyway.
+  guard: false,
   urls: {
     home: "https://www.digikey.com/",
     search: "https://www.digikey.com/en/products/result?keywords={{part|url}}",
