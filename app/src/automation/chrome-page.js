@@ -39,7 +39,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const { createTrafficWatch } = require("./traffic");
-const { keepSignedIn, restoreSessionCookies } = require("./kept-signin");
+const { keepSignedIn, restoreSessionCookies, signInAgain } = require("./kept-signin");
 
 const NAVIGATION_TIMEOUT = 45000;
 const ABORTED = /net::ERR_ABORTED|interrupted by another navigation|Navigation interrupted|frame was detached/i;
@@ -62,6 +62,11 @@ class ChromePage extends EventEmitter {
       detach: () => { this.detach(); },
       sendCommand: (method, params) => this.send(method, params),
     };
+  }
+
+  /** Sign in with the login kept for this seller (kept-signin.js). */
+  async signInAgain() {
+    return this.browser.signInAgain ? this.browser.signInAgain() : false;
   }
 
   async attach() {
@@ -192,7 +197,9 @@ class SupplierBrowser extends EventEmitter {
         // since last time goes back before the first page loads.
         await restoreSessionCookies(context, profilePath).catch(() => 0);
         const browser = new SupplierBrowser({ profile, context, downloadsPath, mayGo, challengeMayGo, openExternal });
-        browser.stopKeeping = keepSignedIn({ context, profilePath, siteId: profile?.id, page: () => browser.page });
+        browser.stopKeeping = keepSignedIn({ context, profilePath, siteId: profile?.id, home: profile?.urls?.home, page: () => browser.page });
+        // A sign-in page: the kept login first, the person only if that fails.
+        browser.signInAgain = () => signInAgain(browser.page, profilePath, profile?.urls?.home).catch(() => false);
         return await browser.start(bounds);
       } catch (error) {
         lastError = error;

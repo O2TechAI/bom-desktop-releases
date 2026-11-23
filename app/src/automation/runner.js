@@ -437,6 +437,29 @@ class Runner {
 
   /** Wait until `isDone()` says so or the person presses Continue. */
   async waitForPerson(message, view, isDone, timeout = 15 * 60 * 1000) {
+    // A sign-in: the login kept from the person's last one goes in first,
+    // once per run, and the person is asked only if it did not get through
+    // (2026-11-23: sign in once). A check or a code still comes to them.
+    if (message === "sign_in" && !this.signedInAgain && this.driver.contents.signInAgain) {
+      this.signedInAgain = true;
+      this.message = "signing-in";
+      this.emit();
+      const through = await this.driver.contents.signInAgain().catch(() => false);
+      if (this.controller.signal.aborted) throw new AutomationError("stopped", "Stopped");
+      this.message = null;
+      if (through) {
+        let done = !isDone;
+        try {
+          done = done || (await isDone());
+        } catch {
+          done = false;
+        }
+        if (done) {
+          this.metrics.signIns = (this.metrics.signIns || 0) + 1;
+          return;
+        }
+      }
+    }
     this.metrics.handoffs += 1;
     if (message === "challenge") this.metrics.checks += 1;
     await this.driver.clearMarks();

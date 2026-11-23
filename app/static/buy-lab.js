@@ -15,7 +15,7 @@ const COPY = {
     waitingPerson: "Sign in, or finish the security check, in the supplier page.",
     pending: "Pending", adding: "Adding", added: "Added",
     messages: {
-      adding: "Adding the next line", "reading-cart": "Reading the cart", "placing-order": "Going to the review page",
+      adding: "Adding the next line", "reading-cart": "Reading the cart", "signing-in": "Signing in with your saved login", "placing-order": "Going to the review page",
       "reading-orders": "Reading the orders", tracking: "Reading the shipments", approved: "Approved",
       "waiting-confirm": "Waiting for your yes", "waiting-person": "Waiting for you in the supplier page",
       "reloading-blocked": "Reloading the page once",
@@ -75,7 +75,7 @@ const COPY = {
     waitingPerson: "请在供应商页面里完成登录或安全验证。",
     pending: "待处理", adding: "加入中", added: "已加入",
     messages: {
-      adding: "正在加入下一行", "reading-cart": "正在读取购物车", "placing-order": "正在进入确认页",
+      adding: "正在加入下一行", "reading-cart": "正在读取购物车", "signing-in": "正在用保存的账号登录", "placing-order": "正在进入确认页",
       "reading-orders": "正在读取订单", tracking: "正在读取物流", approved: "已确认",
       "waiting-confirm": "等待你确认下单", "waiting-person": "等待你在供应商页面操作",
       "reloading-blocked": "正在刷新页面一次",
@@ -135,7 +135,7 @@ const COPY = {
     waitingPerson: "Inicia sesión o completa la comprobación en la página del proveedor.",
     pending: "Pendiente", adding: "Añadiendo", added: "Añadida",
     messages: {
-      adding: "Añadiendo la siguiente línea", "reading-cart": "Leyendo el carrito", "placing-order": "Yendo a la revisión",
+      adding: "Añadiendo la siguiente línea", "reading-cart": "Leyendo el carrito", "signing-in": "Iniciando sesión con tu acceso guardado", "placing-order": "Yendo a la revisión",
       "reading-orders": "Leyendo los pedidos", tracking: "Leyendo los envíos", approved: "Aprobado",
       "waiting-confirm": "Esperando tu confirmación", "waiting-person": "Esperándote en la página del proveedor",
       "reloading-blocked": "Recargando la página una vez",
