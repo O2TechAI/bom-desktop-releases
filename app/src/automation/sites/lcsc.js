@@ -204,7 +204,8 @@ module.exports = {
   },
   "compliance.setDefault": {
     title: T("Keep these answers", "设为默认", "Guardar como predeterminado"),
-    any: [{ role: "checkbox", name: /set as default/i }, { text: /^set as default$/i }],
+    // Like the radio: the checkbox input is hidden, its label takes the click.
+    any: [{ text: /^set as default$/i }, { role: "checkbox", name: /set as default/i }],
   },
   "checkout.addShipping": {
     title: T("Add a shipping address", "添加收货地址", "Añadir dirección"),
