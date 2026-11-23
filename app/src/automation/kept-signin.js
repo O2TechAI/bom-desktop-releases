@@ -38,7 +38,7 @@ const FILE = "kept-session.bin";
 const LOGIN_FILE = "kept-login.bin";
 const SAVE_EVERY_MS = 2 * 60 * 1000;
 const PING_EVERY_MS = 15 * 60 * 1000;
-const WATCH_EVERY_MS = 1500;
+const WATCH_EVERY_MS = 500;
 
 /* A page that counts as the person being there, per seller; else its home page. */
 const KEEP_ALIVE = {
@@ -200,7 +200,8 @@ function saveLogin(profilePath, login) {
  * replaces it).
  */
 function watchLogins(page, profilePath, home) {
-  let typed = null; // { username, password } on the form now
+  let typed = null; // { username, password } as the form was sent
+  let polled = null; // as it was last seen
   let username = ""; // from a first step that asks for the name alone
   let busy = false;
   /* Read at the person's click or Enter, before it reaches the page: the
@@ -221,15 +222,18 @@ function watchLogins(page, profilePath, home) {
     try {
       const found = await loginFrame(page(), home);
       if (found) await found.frame.evaluate(unmarkLoginFields).catch(() => {});
-      // While the form is up, only its name step is noted here; the password
-      // is read when it is sent (atSend), so a half-typed one is never kept.
+      // While the form is up it is read now and then too: a sign-in typed in
+      // Chrome's own window (a security check hands the person Chrome itself)
+      // never passes atSend. What atSend read wins over this.
       if (found?.fields.pass) {
         if (found.fields.user) username = found.fields.user;
+        polled = { username: found.fields.user || username || "", password: found.fields.pass };
       } else if (found?.fields.user) {
         username = found.fields.user;
-      } else if (!found && typed?.password) {
-        saveLogin(profilePath, typed);
+      } else if (!found && (typed?.password || polled?.password)) {
+        saveLogin(profilePath, typed?.password ? typed : polled);
         typed = null;
+        polled = null;
       }
     } finally {
       busy = false;
