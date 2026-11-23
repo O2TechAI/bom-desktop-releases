@@ -588,10 +588,12 @@ if (!app.requestSingleInstanceLock()) {
   // profile is not left locked by a browser nobody can see.
   let closingSuppliers = false;
   app.on("before-quit", (event) => {
-    if (closingSuppliers || supplierWindows.size === 0) return;
+    // The Buy lab's Chromes too: each keeps its sign-in as it closes
+    // (automation/kept-signin.js), which needs the app still running.
+    if (closingSuppliers || (supplierWindows.size === 0 && !buyLabWindow)) return;
     event.preventDefault();
     closingSuppliers = true;
-    Promise.allSettled([...supplierWindows.values()].map((opened) => opened.close()))
+    Promise.allSettled([...supplierWindows.values(), ...(buyLabWindow ? [buyLabWindow] : [])].map((opened) => opened.close()))
       .finally(() => { supplierWindows.clear(); app.quit(); });
   });
 
