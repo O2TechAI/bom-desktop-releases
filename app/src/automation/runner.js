@@ -642,6 +642,19 @@ class Runner {
         continue;
       }
       visits[state] = (visits[state] || 0) + 1;
+      // An unknown page, for the app's log: its address and the buttons on it,
+      // so a page the site changed can be told apart (2026-11-23: DigiKey's
+      // product page after a security check was not recognised).
+      if (state === UNKNOWN) {
+        try {
+          const contextId = await this.driver.world();
+          const { result } = await this.driver.send("Runtime.evaluate", {
+            contextId, returnByValue: true,
+            expression: `JSON.stringify({ url: location.href, h1: (document.querySelector("h1")?.innerText || "").slice(0, 80), buttons: [...document.querySelectorAll("button, input[type=submit], a[role=button]")].filter((b) => b.offsetParent !== null).map((b) => [b.id, b.getAttribute("data-testid"), (b.innerText || b.value || "").trim().slice(0, 30)].filter(Boolean).join("|")).filter(Boolean).slice(0, 25) })`,
+          });
+          console.warn(`[unknown ${this.profile.id}] ${String(result?.value || "").slice(0, 1500)}`);
+        } catch { /* only for the log */ }
+      }
       // Lost mid-way, or going round in circles: the person takes over.
       if ((state === UNKNOWN && moves > 0) || visits[state] > MAX_VISITS) {
         await this.personAt(state, info?.stuck || "lost", view);
