@@ -323,7 +323,11 @@ class ServiceLink {
         // can't be had this time (the order shows "Did not go through"). A
         // stop (the person, a page the app didn't know) can go on: BOM shows
         // it as stopped until the person presses Continue in the Buy lab.
-        if (status === "failed" && !run.cartSent) {
+        // Waiting on the person, not a part the seller lacks (2026-11-23: a
+        // security check nobody finished in 15 minutes marked the line as not
+        // to be had): such an end is a stop, continued from the Buy lab.
+        const forPerson = /in time|challenge|blocked|security|lost|stalled|sign.?in|stopped/i.test(String(message || ""));
+        if (status === "failed" && !run.cartSent && !forPerson) {
           const why = String(message || "The Buy lab could not build the cart").slice(0, 500);
           await this.post("cart", { purchase_request_id: run.job.purchase_request_id, seller: run.job.seller, failed: why });
           return;
