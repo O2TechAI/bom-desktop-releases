@@ -216,6 +216,11 @@ const TARGETS = {
     title: T("Postal code", "邮编", "Código postal"),
     any: [{ role: "textbox", name: /^(postal|zip) code/i }],
   },
+  // "Copy these details to my shipping information? Yes / No" (required).
+  "addr.copyToShipping": {
+    title: T("Ship to this address too", "收货地址同上", "Enviar también a esta dirección"),
+    any: [{ role: "radio", name: /^yes$/i }],
+  },
   "addr.state": {
     title: T("State", "州", "Estado"),
     any: [{ role: "combobox", name: /^state/i }],
@@ -363,6 +368,7 @@ const TRANSITIONS = [
       { do: "fill", target: "addr.city", value: "{{city}}" },
       { do: "select", target: "addr.state", option: "{{stateName}}" },
       { do: "fill", target: "addr.zip", value: "{{zip}}" },
+      { do: "click", target: "addr.copyToShipping", when: "addr.copyToShipping", whenTimeout: 2000 },
       { do: "click", target: "checkout.continue", navigates: true },
     ],
   },
