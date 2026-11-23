@@ -375,6 +375,9 @@ const TRANSITIONS = [
       { do: "select", target: "addr.state", option: "{{stateName}}" },
       { do: "fill", target: "addr.zip", value: "{{zip}}" },
       { do: "click", target: "addr.copyToShipping", when: "addr.copyToShipping", whenTimeout: 2000 },
+      // "Yes" rebuilds the Shipping Information section: wait for it to settle.
+      { do: "wait", ms: 2500 },
+      { do: "waitFor", target: "addr.addressType", optional: true, timeout: 10000 },
       { do: "select", target: "addr.addressType", option: /^(business|commercial)/i, when: "addr.addressType", whenTimeout: 3000 },
       { do: "click", target: "checkout.continue", navigates: true },
     ],
