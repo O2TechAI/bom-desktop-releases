@@ -223,7 +223,14 @@ class LiveBrowser {
     // A click or Enter may send a sign-in form: what it holds is read first,
     // whole (kept-signin.js keeps the person's login for next time).
     if (event.kind === "click" || (event.kind === "key" && /^(Enter|NumpadEnter)$/.test(String(event.key || "")))) {
-      await this.browser.beforeSend?.().catch(() => {});
+      // Never in the person's way: at most 400 ms, then the input goes on
+      // (2026-11-23: a slow frame on Mouser's sign-in held every click).
+      if (this.browser.beforeSend) {
+        await Promise.race([
+          this.browser.beforeSend().catch(() => {}),
+          new Promise((resolve) => setTimeout(resolve, 400)),
+        ]);
+      }
     }
     try {
       switch (event.kind) {

@@ -165,7 +165,11 @@ async function loginFrame(page, home) {
   if (!own || siteOf(page.url()) !== own) return null;
   for (const frame of page.frames()) {
     if (siteOf(frame.url()) !== own) continue;
-    const fields = await frame.evaluate(markLoginFields).catch(() => null);
+    // A frame still loading does not hold anything up.
+    const fields = await Promise.race([
+      frame.evaluate(markLoginFields).catch(() => null),
+      new Promise((resolve) => setTimeout(() => resolve(null), 1500)),
+    ]);
     if (fields) return { frame, fields };
   }
   return null;
