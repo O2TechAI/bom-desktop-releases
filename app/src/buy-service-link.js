@@ -26,7 +26,7 @@ const path = require("node:path");
 
 const TICK_MS = 15_000;
 /* At most this many supplier Chromes at once: each is 1-2 GB. */
-const MAX_RUNS = 2;
+const MAX_RUNS = 6;
 /* How long a paused order keeps its supplier from the next one. */
 const HOLD_MS = 6 * 60 * 60 * 1000;
 const BASE = "/api/v1/buy-lab-service/desk";
@@ -233,7 +233,7 @@ class ServiceLink {
         run.job = job;
         continue;
       }
-      // One purchase per supplier at a time, and at most two Chromes: the
+      // One purchase per supplier at a time, and at most MAX_RUNS Chromes: the
       // next waits for its turn. A paused order whose parts are in the cart
       // keeps its supplier too, until it is ordered or cancelled (2026-11-24).
       if (!this.lab && this.jobs.length) this.lab = await this.openBuyLab({ quiet: true }).catch(() => null);

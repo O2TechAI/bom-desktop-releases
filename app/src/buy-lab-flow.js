@@ -728,7 +728,11 @@ class BuyLabFlow {
     // batch tools (DigiKey's Bulk Add box, Mouser's and LCSC's BOM upload)
     // each led to a page the app doesn't know, and DigiKey's box doesn't take
     // a maker's part number (2026-11-23, an uploaded order of three lines).
-    const batch = this.lines.length > SHORT_LIST
+    // DigiKey takes the BOM file whatever its length (2026-11-24: "不应该直接
+    // BOM 导入让digikey 处理"): one upload instead of a search per part, each
+    // of which could meet a security check. What the upload leaves out is
+    // added part by part by settleCart.
+    const batch = (this.lines.length > SHORT_LIST || (this.supplier === "digikey" && site?.tasks.bulkAddBom))
       && (site?.tasks.bulkAddBom || site?.tasks.bulkAddPaa || site?.tasks.bulkAddList);
     if (batch) {
       // One page, one batch: a BOM file or the cart's own Bulk Add box.
