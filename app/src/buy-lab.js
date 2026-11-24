@@ -76,6 +76,7 @@ class BuyLabWindow {
     this.runs = new RunStore(userDataDir);
     /* The lists the BOM site handed over, by supplier, for the page's boxes. */
     this.listTexts = new Map();
+    this.liveOnly = false;
     this.idleTimers = new Map();
 
     this.window = new BaseWindow({
@@ -213,6 +214,9 @@ class BuyLabWindow {
    * "split": that supplier's cart check beside its live page. */
   showView(name, id = this.active) {
     if (this.closed) return;
+    // Opened from Orders: the supplier page is the only page this window
+    // shows; there is no list to go back to (2026-11-23).
+    if (this.liveOnly && name !== "live") name = "live";
     const was = this.view;
     this.view = name === "live" || name === "split" ? name : "flow";
     if (this.view !== "flow" && id && this.lives.has(id)) this.active = id;
@@ -610,7 +614,11 @@ class BuyLabWindow {
    * app's own window (the live view), the way Buy lab always showed it. */
   showSupplierPage(id) {
     if (!this.lives.has(id)) return false;
-    this.showFor(id);
+    this.liveOnly = true;
+    this.returnTo = "site";
+    this.showView("live", id);
+    const site = this.sites.find((entry) => entry.id === id);
+    if (site) this.window.setTitle(`O2 BOM - ${site.name}`);
     return true;
   }
 
