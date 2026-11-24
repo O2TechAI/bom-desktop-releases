@@ -306,7 +306,9 @@ class Runner {
         };
       }
       if (!stoppedNow) {
-        console.error(`Automation step failed: ${error.stack || error.message}`);
+        // Which step, for the app's log (2026-11-24: a packaging switch failed with no step named).
+        const last = this.lastStep ? `${this.lastStep.do}${this.lastStep.target ? ` ${this.lastStep.target}` : ""}${this.lastStep.name ? ` ${this.lastStep.name}` : ""}` : "?";
+        console.error(`Automation step failed (${this.task}: ${last}): ${error.stack || error.message}`);
         await this.logPage(`failed ${this.task}`);
       }
     } finally {
@@ -334,6 +336,7 @@ class Runner {
     view.status = "running";
     this.emit();
     try {
+      this.lastStep = step;
       const result = await this.perform(step, view, options);
       if (step.as) this.results[step.as] = result ?? null;
       view.status = "done";
