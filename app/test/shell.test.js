@@ -34,23 +34,18 @@ test("developer tools are only in development runs", () => {
 
 test("the Suppliers menu opens each supplier's window, and Buy lab its own", () => {
   const opened = [];
-  let buyLabs = 0;
   const template = buildMenuTemplate({
     platform: "linux",
     packaged: true,
     t: (key) => key,
     suppliers: [{ id: "digikey", name: "DigiKey" }, { id: "mouser", name: "Mouser" }],
     openSupplier: (id) => opened.push(id),
-    openBuyLab: () => { buyLabs += 1; },
   });
   const menu = template.find((entry) => entry.label === "suppliers");
   assert.deepEqual(menu.submenu.map((item) => item.label), ["DigiKey", "Mouser"]);
   menu.submenu[1].click();
   assert.deepEqual(opened, ["mouser"]);
-  const lab = template.find((entry) => entry.label === "buy_lab");
-  assert.ok(lab, "the menu opens Buy lab");
-  lab.click();
-  assert.equal(buyLabs, 1);
+  assert.equal(template.some((entry) => entry.label === "buy_lab"), false);
   assert.equal(buildMenuTemplate({ platform: "linux", packaged: true, t: (key) => key }).some((entry) => entry.label === "suppliers"), false);
 });
 

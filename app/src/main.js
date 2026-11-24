@@ -477,42 +477,15 @@ function registerSiteIpc() {
     }
   });
   // BOM's "Deal with it" on a seller being bought: that seller's own page
-  // in the Buy lab (where the cart is), else its supplier window.
-  ipcMain.handle("desktop:open-seller-page", async (event, id, options) => {
+  // BOM's "Deal with it" on a seller being bought: that seller's own window.
+  // (The Buy lab window is gone; the service keeps using it out of sight.)
+  ipcMain.handle("desktop:open-seller-page", async (event, id) => {
     if (!fromSite(event)) return { ok: false, message: "Not allowed" };
     const seller = String(id || "");
-    const view = ["cart", "order"].includes(options?.view) ? options.view : "";
-    const order = String(options?.order || "").replace(/[^0-9A-Za-z-]/g, "").slice(0, 40);
+    if (!suppliers.some((site) => site.id === seller)) return { ok: false, message: "Unknown supplier" };
     try {
-      // A step of an order: the seller's cart, or that order's own page.
-      if (view) {
-        const lab = await openBuyLab();
-        if (await lab.openSellerAt(seller, { view, order })) return { ok: true, where: "buy_lab" };
-      }
-      if (buyLabWindow?.openSellerPage(seller)) return { ok: true, where: "buy_lab" };
-      if (!suppliers.some((site) => site.id === seller)) return { ok: false, message: "Unknown supplier" };
       await openSupplier(seller);
       return { ok: true, where: "supplier" };
-    } catch (error) {
-      return { ok: false, message: error.message };
-    }
-  });
-  ipcMain.handle("desktop:open-buy-lab", async (event) => {
-    if (!fromSite(event)) return { ok: false, message: "Not allowed" };
-    try {
-      await openBuyLab();
-      return { ok: true };
-    } catch (error) {
-      return { ok: false, message: error.message };
-    }
-  });
-  // Buying on the BOM site hands its DigiKey / LCSC orders to the Buy lab,
-  // which runs them in the person's own Chrome (see buy-lab.js startFromSite).
-  ipcMain.handle("desktop:buy-lab-start", async (event, payload) => {
-    if (!fromSite(event)) return { ok: false, message: "Not allowed" };
-    try {
-      const lab = await openBuyLab();
-      return lab.startFromSite(payload && typeof payload === "object" ? payload : {});
     } catch (error) {
       return { ok: false, message: error.message };
     }
@@ -618,12 +591,6 @@ if (!app.requestSingleInstanceLock()) {
       packaged: app.isPackaged,
       t,
       openInBrowser: () => void openExternal(`${origin}/`),
-      // Opening a window from inside the menu click races the native menu
-      // closing on Windows and trips a Chromium CHECK (0x80000003), so both
-      // window entries run on the next tick.
-      openBuyLab: () => {
-        setImmediate(() => { void openBuyLab().catch((error) => dialog.showErrorBox("O2 BOM", error.message)); });
-      },
       suppliers: suppliers.map((site) => ({ id: site.id, name: site.name })),
       openSupplier: (id) => {
         setImmediate(() => {

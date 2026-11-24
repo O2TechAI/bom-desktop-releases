@@ -148,8 +148,7 @@ test("the suppliers Buying may hand over are the Buy lab's own profiles, not a l
   const main = fs.readFileSync(require.resolve("../src/main.js"), "utf8");
   const preload = fs.readFileSync(require.resolve("../src/preload.js"), "utf8");
   assert.match(main, /BUY_LAB_SUPPLIERS = SITES\.filter\(\(site\) => REQUIRED_TASKS\.every/);
-  assert.match(preload, /suppliers: Object\.freeze\(suppliers\)/);
-  assert.doesNotMatch(preload, /Object\.freeze\(\["digikey"/);
+  assert.doesNotMatch(preload, /openBuyLab|buy-lab-start|buyLab/);
   const { SITES } = require("../src/automation/sites");
   const { REQUIRED_TASKS } = require("../src/buy-lab-flow");
   assert.deepEqual(SITES.filter((site) => REQUIRED_TASKS.every((task) => site.tasks[task])).map((site) => site.id).sort(), ["digikey", "lcsc", "mouser"]);
