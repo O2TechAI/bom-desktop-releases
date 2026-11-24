@@ -295,6 +295,14 @@ function packOptions(text) {
   return [...clean.matchAll(re)].map((m) => ({ quantity: Number(m[1].replace(/,/g, "")), part: m[2], mpn: m[3], pack: m[4] }));
 }
 
+/* The seller's name for a packaging (on DigiKey's product page). */
+const PACK_NAMES = { cut_tape: "Cut Tape", tape_reel: "Tape & Reel", digi_reel: "Digi-Reel", tray: "Tray", tube: "Tube", bulk: "Bulk" };
+
+/** The packaging a line is added in: the order's, else Cut Tape. */
+function packWord(line) {
+  return PACK_NAMES[line.packaging] || "Cut Tape";
+}
+
 /** Which option a line takes: its packaging at its own quantity, or, when
  * the order named none, Cut Tape (what a small quantity is sold as; a reel's
  * minimum or Digi-Reel's fee is never chosen for it). -1 when none fits. */
@@ -866,7 +874,7 @@ class BuyLabFlow {
         line.status = "adding";
         this.emit();
         try {
-          const snapshot = await this.runTask("addToCart", { part: line.mpn, quantity: line.quantity });
+          const snapshot = await this.runTask("addToCart", { part: line.mpn, quantity: line.quantity, pack: packWord(line) });
           const failed = snapshot.steps.find((step) => step.status === "failed");
           if (snapshot.status !== "done") {
             line.status = "failed";
@@ -1017,7 +1025,7 @@ class BuyLabFlow {
         this.emit({ message: "adding" });
         line.status = "adding";
         this.emit();
-        line.error = await attempt("addToCart", { part: line.mpn, quantity: line.quantity }, line);
+        line.error = await attempt("addToCart", { part: line.mpn, quantity: line.quantity, pack: packWord(line) }, line);
         if (this.stopRequested) throw stoppedError();
       }
     }

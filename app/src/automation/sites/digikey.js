@@ -96,6 +96,13 @@ const TARGETS = {
       { css: "[id^='pack-type-radio']", hasText: "Cut Tape" },
     ],
   },
+  /* The packaging the order asked for, by its name on the page's options
+   * ("Cut Tape", "Digi-Reel® US$7.00", "Tape & Reel"; 2026-11-24). */
+  "product.packChosen": {
+    title: T("The order's packaging", "订单要求的包装", "El empaque del pedido"),
+    any: [{ css: "[id^='pack-type-radio']" }, { role: "radio" }, { role: "tab" }, { role: "button" }],
+    hasText: "{{pack}}",
+  },
   "cart.count": {
     title: T("Cart count", "购物车数量", "Cantidad en el carrito"),
     any: [{ css: ".toggle--cart-total" }, { css: "a[href*='shoppingcart' i] [class*='count' i]" }],
@@ -484,7 +491,7 @@ const TRANSITIONS = [
       { do: "peek", target: "cart.count", as: "cartBefore" },
       // Several packagings: cut tape, as a small quantity is sold.
       // No Cut Tape button (the word only in its specifications): the page's own choice stays (2026-11-24).
-      { do: "click", target: "product.packCutTape", when: "product.packaging", whenTimeout: 2000, optional: true, timeout: 3000 },
+      { do: "click", target: "product.packChosen", when: "product.packaging", whenTimeout: 2000, optional: true, timeout: 3000 },
       { do: "wait", ms: 800 },
       { do: "fill", target: "product.quantity", value: "{{quantity}}" },
       { do: "click", target: "product.addToCart", timeout: 15000 },
