@@ -295,6 +295,17 @@ function packOptions(text) {
   return [...clean.matchAll(re)].map((m) => ({ quantity: Number(m[1].replace(/,/g, "")), part: m[2], mpn: m[3], pack: m[4] }));
 }
 
+/** The packaging a DigiKey number is for, by its ending (CT-ND / -1-ND cut
+ * tape, DKR-ND / -6-ND Digi-Reel, TR-ND / -2-ND tape & reel); null when it
+ * doesn't say. */
+function packOfPart(part) {
+  const text = String(part || "").trim().toUpperCase();
+  if (/(DKR|-6)-ND$/.test(text)) return "digi_reel";
+  if (/(CT|-1)-ND$/.test(text)) return "cut_tape";
+  if (/(TR|-2)-ND$/.test(text)) return "tape_reel";
+  return null;
+}
+
 /* The seller's name for a packaging (on DigiKey's product page). */
 const PACK_NAMES = { cut_tape: "Cut Tape", tape_reel: "Tape & Reel", digi_reel: "Digi-Reel", tray: "Tray", tube: "Tube", bulk: "Bulk" };
 
@@ -336,6 +347,7 @@ function compareCart(lines, rows, expected = {}) {
     let issue = null;
     if (!row) issue = "missing";
     else if (amount(row.quantity) !== Number(line.buyQuantity || line.quantity)) issue = "quantity";
+    else if (line.packaging && packOfPart(row.part) && packOfPart(row.part) !== line.packaging) issue = "packaging";
     else if (unitPrice != null && expectedPrice != null && unitPrice > expectedPrice + 1e-9) issue = "price";
     return {
       part: line.mpn, quantity: String(line.quantity), cartQuantity: row ? String(amount(row.quantity) ?? "") : null,
@@ -711,7 +723,7 @@ class BuyLabFlow {
         const rows = Array.isArray(cart.results?.cart) ? cart.results.cart : [];
         // A quantity off too, while the person hasn't confirmed this cart: the
         // cart is set right again (2026-11-24: LCSC held twice each part).
-        const redo = (line) => line.issue === "missing" || (!this.confirmedCart && (line.issue === "quantity" || line.issue === "extra"));
+        const redo = (line) => line.issue === "missing" || (!this.confirmedCart && (line.issue === "quantity" || line.issue === "extra" || line.issue === "packaging"));
         if (compareCart(this.lines, rows).lines.some(redo)) {
           this.progress = STAGE.NEW;
           this.confirmedCart = null;
@@ -981,6 +993,9 @@ class BuyLabFlow {
     // the list's quantity, where the shop lets the app remove a line.
     const offCount = (found) => [...found].filter(([line, row]) => {
       const have = amount(row.quantity);
+      // Or in another packaging than the order's (DigiKey's number says).
+      const pack = packOfPart(row.part);
+      if (line.packaging && pack && pack !== line.packaging) return true;
       return have != null && have !== Number(line.buyQuantity || line.quantity);
     });
     this.emit({ status: "running", message: "checking-cart" });
@@ -1072,7 +1087,11 @@ class BuyLabFlow {
       const key = partKey(line.mpn);
       const row = rows.find((one) => /-ND$/i.test(String(one.part || "").trim())
         && key.length >= 6 && partKey(one.text).includes(key));
-      if (row) pairs.push([sellerPartKey(line), String(row.part).trim()]);
+      // Only a number in the packaging asked for (2026-11-24: a line for
+      // Digi-Reel bought as cut tape was kept as its Digi-Reel number).
+      const pack = row ? packOfPart(row.part) : null;
+      const fits = line.packaging ? pack === line.packaging : (pack === null || pack === "cut_tape");
+      if (row && fits) pairs.push([sellerPartKey(line), String(row.part).trim()]);
     }
     this.store.rememberSellerParts("digikey", pairs);
   }
