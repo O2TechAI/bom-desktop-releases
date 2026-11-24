@@ -673,6 +673,15 @@ class Runner {
         expression: `JSON.stringify({ url: location.href, title: document.title, h1: (document.querySelector("h1")?.innerText || "").slice(0, 80), buttons: [...document.querySelectorAll("button, input[type=submit], a[role=button]")].filter((b) => b.offsetParent !== null).map((b) => [b.id, b.getAttribute("data-testid"), (b.innerText || b.value || "").trim().slice(0, 30)].filter(Boolean).join("|")).filter(Boolean).slice(0, 30) })`,
       });
       console.warn(`[${label} ${this.profile.id}] ${String(result?.value || "").slice(0, 1800)}`);
+      // A packaging switch that failed: the elements that name a packaging,
+      // with their own markup and their row's, to tell the site's changes.
+      if (this.task === "setPack") {
+        const { result: packs } = await this.driver.send("Runtime.evaluate", {
+          contextId, returnByValue: true,
+          expression: `JSON.stringify([...document.querySelectorAll("body *")].filter((e) => e.children.length === 0 && /packaging|cut tape|mousereel|lcsc-reels|full reel/i.test(e.textContent || "") && e.offsetParent !== null).slice(0, 14).map((e) => { const row = e.closest("tr, [id^=cartItemBox_], li"); const up = e.parentElement; return [e.tagName, e.id, String(e.className).slice(0, 40), e.getAttribute("role"), (e.textContent || "").trim().slice(0, 30), up ? up.tagName + "." + String(up.className).slice(0, 30) + "#" + up.id : "", row ? row.tagName + "." + String(row.className).slice(0, 40) + "#" + row.id : "-"].join("|"); }))`,
+        });
+        console.warn(`[packs ${this.profile.id}] ${String(packs?.value || "").slice(0, 2500)}`);
+      }
     } catch { /* only for the log */ }
   }
 
