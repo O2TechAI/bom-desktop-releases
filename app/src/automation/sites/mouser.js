@@ -507,8 +507,12 @@ module.exports = {
       { do: "fill", target: "paa.text", value: "{{lines}}", js: true },
       { do: "click", target: "paa.check", js: true },
       { do: "waitForUrl", pattern: /price-availability\/Edit/ },
+      { do: "wait", ms: 2000 },
       { do: "click", target: "paa.selectAll", js: true },
-      { do: "click", target: "paa.buy", js: true },
+      // Buy turns on a moment after the rows are ticked (2026-11-24: it was
+      // still off when clicked).
+      { do: "wait", ms: 3000 },
+      { do: "click", target: "paa.buy", js: true, timeout: 15000 },
       { do: "waitForUrl", pattern: /\/cart/ },
     ],
     addToCart: [{ do: "walk", to: "product" }, { do: "act", name: "addToCart" }],
