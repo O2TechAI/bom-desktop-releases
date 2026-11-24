@@ -327,7 +327,9 @@ class Runner {
       view.status = "done";
     } catch (error) {
       // An optional step is skipped when its target isn't there or can't be reached.
-      const missing = error instanceof AutomationError && ["not_found", "not_visible", "covered"].includes(error.code);
+      // A wait for a change that did not come is skipped too (2026-11-24:
+      // Mouser goes to the cart instead of changing its count).
+      const missing = error instanceof AutomationError && ["not_found", "not_visible", "covered", "unchanged"].includes(error.code);
       if (!(step.optional && missing)) throw error;
       view.status = "skipped";
     }

@@ -309,7 +309,12 @@ const STATES = {
   cart: { title: T("Cart", "购物车", "Carrito"), match: { url: /\/cart\/?(\?|$)/i } },
   orderDetail: { title: T("Order", "订单详情", "Pedido"), match: { url: /\/account\/orders\/[^?]*\d{5,}/i } },
   orders: { title: T("Orders", "订单记录", "Pedidos"), match: [{ url: /\/account\/orders\/?(\?|$)/i }, { url: /orderhistory/i }] },
-  product: { title: T("Product page", "商品页", "Página del producto"), match: { url: /\/ProductDetail\//i, all: ["product.addToCart", "product.ofPart"] } },
+  // Its buy box can load after the rest of the page (2026-11-24): the part's
+  // own ProductDetail page counts, and the Buy click waits for the box.
+  product: { title: T("Product page", "商品页", "Página del producto"), match: [
+    { url: /\/ProductDetail\//i, all: ["product.addToCart", "product.ofPart"] },
+    { url: /\/ProductDetail\//i, all: ["product.ofPart"] },
+  ] },
   results: { title: T("Search results", "搜索结果", "Resultados"), match: { url: /\/c\//i, all: ["results.exact"] } },
 };
 
@@ -419,7 +424,7 @@ const TRANSITIONS = [
     steps: [
       { do: "peek", target: "cart.count", as: "cartBefore" },
       { do: "fill", target: "product.quantity", value: "{{quantity}}" },
-      { do: "click", target: "product.addToCart" },
+      { do: "click", target: "product.addToCart", timeout: 20000 },
       { do: "waitForChange", target: "cart.count", from: "cartBefore", or: "cart.added", optional: true, timeout: 10000 },
     ],
   },
