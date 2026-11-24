@@ -768,7 +768,27 @@ class BuyLabFlow {
       this.emit();
       if (this.stopRequested) { this.emit({ status: "stopped", message: "stopped" }); return false; }
     } else {
+      // What is in the cart already is not added again: a run that starts over
+      // (the app restarted, Continue) added each part once more and the cart
+      // held three times the quantity (2026-11-24). A different quantity is
+      // left to the cart check.
+      let present = new Set();
+      try {
+        const cart = finished(await this.runTask("openCart"));
+        const rows = Array.isArray(cart.results?.cart) ? cart.results.cart : [];
+        present = new Set(this.lines.filter((line) => {
+          const key = partKey(line.mpn);
+          return rows.some((row) => partKey(row.part) === key || (key.length >= 6 && partKey(row.text).includes(key)));
+        }));
+      } catch (error) {
+        if (error?.code === "stopped" || error?.code === "blocked") throw error;
+      }
       for (const line of this.lines) {
+        if (present.has(line)) {
+          line.status = "added";
+          this.emit();
+          continue;
+        }
         this.emit({ message: "adding" });
         line.status = "adding";
         this.emit();
