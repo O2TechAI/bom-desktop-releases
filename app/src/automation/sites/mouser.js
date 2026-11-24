@@ -62,6 +62,9 @@ const TARGETS = {
     any: [
       { css: "#btnBuy, [data-testid='PricingTableBuyButtonTrigger']" },
       { role: "button", name: /^(add to cart|buy)$/i },
+      // Other buy boxes of the product page (2026-11-24: GRM188R71H104KA93D's page was not recognised).
+      { css: "button[id*='btnBuy' i], input[id*='btnBuy' i], button[id*='AddToCart' i], button[data-testid*='Buy' i]" },
+      { role: "button", name: /add to cart/i },
     ],
   },
   "cart.count": {
@@ -410,12 +413,14 @@ const TRANSITIONS = [
     title: T("Add to cart", "加入购物车", "Añadir al carrito"),
     auto: false,
     from: ["product"],
-    to: ["product"],
+    // Mouser goes to the cart after a Buy (2026-11-24): that is an add too.
+    // The cart is read afterwards either way, so the count is not waited for.
+    to: ["product", "cart"],
     steps: [
       { do: "peek", target: "cart.count", as: "cartBefore" },
       { do: "fill", target: "product.quantity", value: "{{quantity}}" },
       { do: "click", target: "product.addToCart" },
-      { do: "waitForChange", target: "cart.count", from: "cartBefore", or: "cart.added" },
+      { do: "waitForChange", target: "cart.count", from: "cartBefore", or: "cart.added", optional: true, timeout: 10000 },
     ],
   },
   {
