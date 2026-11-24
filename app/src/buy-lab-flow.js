@@ -173,7 +173,7 @@ class AddressBook {
 
   list() {
     try {
-      const saved = JSON.parse(fs.readFileSync(this.file, "utf8"));
+      const saved = JSON.parse(fs.readFileSync(this.file, "utf8").replace(/^\uFEFF/, ""));
       return Array.isArray(saved) ? saved.filter((entry) => entry && typeof entry.id === "string") : [];
     } catch {
       return [];
@@ -333,7 +333,7 @@ class RunStore {
 
   load(supplier, key = "") {
     try {
-      return JSON.parse(fs.readFileSync(this.file(supplier, key), "utf8"));
+      return JSON.parse(fs.readFileSync(this.file(supplier, key), "utf8").replace(/^\uFEFF/, ""));
     } catch {
       return null;
     }

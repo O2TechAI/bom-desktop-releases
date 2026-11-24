@@ -104,7 +104,7 @@ class ServiceLink {
   loadState() {
     if (!this.stateFile) return;
     try {
-      const saved = JSON.parse(fs.readFileSync(this.stateFile, "utf8"));
+      const saved = JSON.parse(fs.readFileSync(this.stateFile, "utf8").replace(/^\uFEFF/, ""));
       for (const key of saved.ended || []) this.ended.add(String(key));
       for (const [key, stop] of Object.entries(saved.stops || {})) {
         if (stop?.job?.purchase_request_id && stop.job.seller) this.stops.set(key, { job: stop.job, message: stop.message || "stopped", at: Number(stop.at) || 0 });
