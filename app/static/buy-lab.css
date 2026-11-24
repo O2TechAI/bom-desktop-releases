@@ -437,6 +437,11 @@ table.lines td.n { width: 40px; color: var(--muted, #5b6b76); }
 }
 
 .live .tabs[hidden] { display: none; }
+/* The bar spans from the Back button's right on, wider than its tabs: only
+ * the tabs take clicks, so Back is never covered (2026-11-23: "back to the
+ * list" could not be clicked on its right half). */
+.live .tabs { pointer-events: none; }
+.live .tabs > * { pointer-events: auto; }
 
 .live .tab {
   display: flex;
