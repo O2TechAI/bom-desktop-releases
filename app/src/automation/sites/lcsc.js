@@ -26,10 +26,9 @@
 const { T } = require("./common");
 
 const RESULT_ROW = {
-  // A row whose Add button works first: a part listed twice had a first row
-  // whose Add was disabled, and the line was never added (2026-11-24,
-  // CL21A106KAYNNNE).
-  any: [{ css: "tr[id^='productId']:has(button:not([disabled]):not(.v-btn--disabled))" }, { css: "tr[id^='productId']" }, { role: "row" }, { css: "tr" }],
+  // The first row: a part can be listed again below as a flash sale with a
+  // minimum of 100,000 (2026-11-24, CL21A106KAYNNNE).
+  any: [{ css: "tr[id^='productId']:not([id$='flashSaleProduct'])" }, { css: "tr[id^='productId']" }, { role: "row" }, { css: "tr" }],
   hasText: "{{part}}",
 };
 
@@ -451,7 +450,7 @@ module.exports = {
         to: ["results"],
         steps: [
           { do: "peek", target: "cart.count", as: "cartBefore" },
-          { do: "fill", target: "product.quantity", value: "{{quantity}}" },
+          { do: "fill", target: "product.quantity", value: "{{quantity}}", roundBy: "results.row" },
           { do: "click", target: "product.addToCart" },
           { do: "waitForChange", target: "cart.count", from: "cartBefore", or: "cart.added", optional: true, timeout: 10000 },
         ],

@@ -267,6 +267,13 @@ function partKey(text) {
   return String(text || "").replace(/[‎‏\s]/g, "").toUpperCase();
 }
 
+/** The quantity a shop made a line into (its minimum or multiple, e.g. 50 to
+ * LCSC's 60): what its cart should hold. */
+function noteBought(line, snapshot) {
+  const bought = Number(snapshot?.results?.quantity);
+  if (bought && bought !== Number(line.quantity)) line.buyQuantity = bought;
+}
+
 function amount(text) {
   const match = String(text ?? "").replace(/,/g, "").match(/\d+(?:\.\d+)?/);
   return match ? Number(match[0]) : null;
@@ -291,7 +298,7 @@ function compareCart(lines, rows, expected = {}) {
     const expectedPrice = expected[partKey(line.mpn)] != null ? Number(expected[partKey(line.mpn)]) : null;
     let issue = null;
     if (!row) issue = "missing";
-    else if (amount(row.quantity) !== Number(line.quantity)) issue = "quantity";
+    else if (amount(row.quantity) !== Number(line.buyQuantity || line.quantity)) issue = "quantity";
     else if (unitPrice != null && expectedPrice != null && unitPrice > expectedPrice + 1e-9) issue = "price";
     return {
       part: line.mpn, quantity: String(line.quantity), cartQuantity: row ? String(amount(row.quantity) ?? "") : null,
@@ -838,6 +845,7 @@ class BuyLabFlow {
             this.bulkFailed = true;
           } else {
             line.status = "added";
+            noteBought(line, snapshot);
           }
         } catch (error) {
           if (error?.code === "blocked") {
@@ -897,7 +905,7 @@ class BuyLabFlow {
     // the list's quantity, where the shop lets the app remove a line.
     const offCount = (found) => [...found].filter(([line, row]) => {
       const have = amount(row.quantity);
-      return have != null && have !== Number(line.quantity);
+      return have != null && have !== Number(line.buyQuantity || line.quantity);
     });
     this.emit({ status: "running", message: "checking-cart" });
     let rows = await read();
@@ -910,9 +918,10 @@ class BuyLabFlow {
       this.freshCart = rows; // the cart check takes this read instead of reading again
       return true;
     }
-    const attempt = async (task, params) => {
+    const attempt = async (task, params, line = null) => {
       try {
         const snapshot = await this.runTask(task, params);
+        if (line && snapshot.status === "done") noteBought(line, snapshot);
         const failed = snapshot.steps?.find((step) => step.status === "failed");
         return snapshot.status === "done" ? null : (failed?.error?.message || snapshot.status);
       } catch (error) {
@@ -940,7 +949,7 @@ class BuyLabFlow {
         this.emit({ message: "adding" });
         line.status = "adding";
         this.emit();
-        line.error = await attempt("addToCart", { part: line.mpn, quantity: line.quantity });
+        line.error = await attempt("addToCart", { part: line.mpn, quantity: line.quantity }, line);
         if (this.stopRequested) throw stoppedError();
       }
     }

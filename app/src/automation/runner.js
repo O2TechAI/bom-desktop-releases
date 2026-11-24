@@ -39,6 +39,18 @@ const { AutomationError, Driver } = require("./driver");
 const { UNKNOWN, matchTargets, nextTransition, recognise } = require("./machine");
 const { fill } = require("./targets");
 
+/** The smallest quantity at least `wanted` that a "MOQ: 20, Mult: 20" rule
+ * allows; null when the text has no such rule. */
+function roundQuantity(wanted, text) {
+  const want = Number(String(wanted).replace(/,/g, ""));
+  const min = Number((String(text || "").match(/MOQ\s*:?\s*([\d,]+)/i) || [])[1]?.replace(/,/g, "") || 0);
+  const step = Number((String(text || "").match(/Mult\s*:?\s*([\d,]+)/i) || [])[1]?.replace(/,/g, "") || 0);
+  if (!want || (!min && !step)) return null;
+  let quantity = Math.max(want, min || 0);
+  if (step > 1) quantity = Math.ceil(quantity / step) * step;
+  return quantity;
+}
+
 const ACTIONS = new Set([
   "goto", "waitForLoad", "waitForUrl", "waitFor", "waitForHidden", "click", "hover", "fill", "type", "press",
   "select", "check", "uncheck", "upload", "read", "peek", "waitForChange", "extract", "handoff", "confirm", "wait",
@@ -357,7 +369,21 @@ class Runner {
       case "hover": return driver.hover(target, options).then(() => true);
       case "fill": {
         const value = fill(step.value ?? "", this.params);
-        return step.js ? driver.fillJs(target, value, options) : driver.fill(target, value, options);
+        const done = await (step.js ? driver.fillJs(target, value, options) : driver.fill(target, value, options));
+        // A quantity the shop sells only in steps (LCSC: "MOQ: 20, Mult: 20"
+        // under the box, and Add disabled for 50, 2026-11-24): the next
+        // quantity it sells, at least the one asked for. Kept as
+        // results.quantity for the cart check.
+        if (step.roundBy) {
+          await new Promise((resolve) => setTimeout(resolve, 800));
+          const rule = await driver.peek(this.target(step.roundBy), { params: this.params });
+          const rounded = roundQuantity(value, rule);
+          this.results.quantity = String(rounded ?? value);
+          if (rounded != null && String(rounded) !== String(value)) {
+            await (step.js ? driver.fillJs(target, String(rounded), options) : driver.fill(target, String(rounded), options));
+          }
+        }
+        return done;
       }
       case "type": return driver.type(fill(step.value ?? "", this.params));
       case "press": return driver.press(step.key);
