@@ -290,7 +290,8 @@ const PACK_WORDS = {
  * [{ quantity, part, mpn, pack }], in the order of its choices. */
 function packOptions(text) {
   const clean = String(text || "").replace(/[\u200e\u200f]/g, "");
-  const re = /(\d[\d,]*)\s+(\S+-ND)\s+(\S+)\s+(Cut Tape|Digi-Reel|Tape & Reel|Tray|Tube|Bulk|Box|Bag)/gi;
+  // "10*": an option on backorder is marked with a star (2026-11-24).
+  const re = /(\d[\d,]*)\*?\s+(\S+-ND)\s+(\S+)\s+(Cut Tape|Digi-Reel|Tape & Reel|Tray|Tube|Bulk|Box|Bag)/gi;
   return [...clean.matchAll(re)].map((m) => ({ quantity: Number(m[1].replace(/,/g, "")), part: m[2], mpn: m[3], pack: m[4] }));
 }
 
