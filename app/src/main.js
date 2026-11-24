@@ -414,7 +414,10 @@ async function openBuyLab({ quiet = false } = {}) {
     userDataDir: app.getPath("userData"),
     openExternal: (url) => void openExternal(url),
     downloadsPath: app.getPath("downloads"),
-    onClosed: () => { buyLabWindow = null; },
+    onClosed: () => {
+      buyLabWindow = null;
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.show();
+    },
     onBackToSite: () => focusMainWindow(),
   })).then(
     (opened) => {
@@ -487,7 +490,12 @@ function registerSiteIpc() {
       // sight) when it is not running yet, then show its live view in the app.
       const lab = await openBuyLab({ quiet: true });
       await lab.ensureSite(seller).catch(() => null);
-      if (lab.showSupplierPage(seller)) return { ok: true, where: "buy_lab" };
+      if (lab.showSupplierPage(seller)) {
+        // One window at a time: the person works in the supplier page; Back
+        // to BOM (or closing it) brings the BOM window back.
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide();
+        return { ok: true, where: "buy_lab" };
+      }
       if (!suppliers.some((site) => site.id === seller)) return { ok: false, message: "Unknown supplier" };
       await openSupplier(seller);
       return { ok: true, where: "supplier" };
