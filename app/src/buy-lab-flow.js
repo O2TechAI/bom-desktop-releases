@@ -969,11 +969,6 @@ class BuyLabFlow {
     // (2026-11-24: an earlier test's C1525 left in the LCSC cart failed all
     // three lines of a new order).
     this.leftInCart = rows.filter((row) => !known(row)).map((row) => row.part || row.text);
-    if (this.supplier === "digikey") {
-      this.store?.rememberSellerParts?.("digikey", [...after.found]
-        .filter(([, row]) => /-ND$/i.test(String(row.part || "")))
-        .map(([line, row]) => [partKey(line.mpn), String(row.part).trim()]));
-    }
     this.freshCart = rows;
     return true;
   }
@@ -983,6 +978,20 @@ class BuyLabFlow {
    * It always waits for their "correct"; "re-check" reads the cart again
    * after they changed it in the supplier's page. Continuing a purchase whose
    * cart was confirmed and has not changed since does not ask again. */
+  /** DigiKey's own number for each line its cart holds, kept for the next
+   * BOM file (2026-11-24). */
+  rememberSellerParts(rows) {
+    if (this.supplier !== "digikey" || !this.store?.rememberSellerParts) return;
+    const pairs = [];
+    for (const line of this.lines) {
+      const key = partKey(line.mpn);
+      const row = rows.find((one) => /-ND$/i.test(String(one.part || "").trim())
+        && key.length >= 6 && partKey(one.text).includes(key));
+      if (row) pairs.push([key, String(row.part).trim()]);
+    }
+    this.store.rememberSellerParts("digikey", pairs);
+  }
+
   async checkCart() {
     for (;;) {
       this.emit({ status: "running", message: "reading-cart" });
@@ -994,6 +1003,7 @@ class BuyLabFlow {
         this.cart = Array.isArray(cart.results?.cart) ? cart.results.cart : [];
       }
       if (this.link?.cart) await this.link.cart(this.cart).catch(() => {});
+      this.rememberSellerParts(this.cart);
       if (this.confirmedCart && sameCart(this.confirmedCart, this.cart)) {
         this.cartCheck = null;
         return;
