@@ -623,7 +623,7 @@ class BuyLabWindow {
     }
     const site = this.sites.find((entry) => entry.id === id);
     if (site && !this.window.isDestroyed()) this.window.setTitle(`O2 BOM - ${site.name}`);
-    return true;
+    return !this.window.isDestroyed() && this.window.isVisible();
   }
 
   /** The person's Continue on a paused purchase: confirm the order, accept
