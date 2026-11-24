@@ -322,9 +322,11 @@ class ServiceLink {
       const key = `${job.purchase_request_id}:${job.seller}`;
       if (this.running.has(key) || this.stops.has(key) || this.ended.has(key)) continue;
       const holder = this.holder(job.seller, key);
-      if (!holder) continue;
+      // Its supplier is free but every browser the app runs at once is busy
+      // with other suppliers: queued too, with no order named (2026-11-24).
+      if (!holder && this.running.size < MAX_RUNS) continue;
       out.push({ purchase_request_id: job.purchase_request_id, seller: job.seller, step: "queued", driver: "none",
-        message: holder.split(":")[0].slice(0, 64) });
+        message: holder ? holder.split(":")[0].slice(0, 64) : "" });
     }
     return out.slice(0, 40);
   }
