@@ -617,8 +617,12 @@ class BuyLabWindow {
     this.liveOnly = true;
     this.returnTo = "site";
     this.showView("live", id);
+    if (!this.window.isDestroyed()) {
+      this.window.show();
+      this.window.focus();
+    }
     const site = this.sites.find((entry) => entry.id === id);
-    if (site) this.window.setTitle(`O2 BOM - ${site.name}`);
+    if (site && !this.window.isDestroyed()) this.window.setTitle(`O2 BOM - ${site.name}`);
     return true;
   }
 
