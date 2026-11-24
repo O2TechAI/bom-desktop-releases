@@ -189,6 +189,13 @@ const TARGETS = {
     title: T("Packaging options", "包装选项", "Opciones de empaque"),
     any: [{ css: "#dialog-suggestions.visible .dk-modal__content" }],
   },
+  /* The same once its options have loaded: they come a moment after the
+   * dialog shows, and a read before then found none (2026-11-24). */
+  "cart.optionsLoaded": {
+    title: T("Packaging options", "包装选项", "Opciones de empaque"),
+    any: [{ css: "#dialog-suggestions.visible .dk-modal__content" }],
+    hasText: /valid options are[\s\S]*-ND/i,
+  },
   "cart.optionChoice": {
     title: T("The packaging", "该包装", "El empaque"),
     any: [{ css: "#dialog-suggestions.visible #suggestion{{option}}" }],
@@ -664,8 +671,8 @@ module.exports = {
     ],
     openOption: [
       { do: "click", target: "cart.viewOptions", timeout: 5000 },
-      { do: "waitFor", target: "cart.optionsDialog", timeout: 10000 },
-      { do: "read", target: "cart.optionsDialog", as: "options" },
+      { do: "waitFor", target: "cart.optionsLoaded", timeout: 15000 },
+      { do: "read", target: "cart.optionsLoaded", as: "options" },
     ],
     pickOption: [
       { do: "click", target: "cart.optionChoice", js: true },
