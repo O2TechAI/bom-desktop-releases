@@ -348,7 +348,10 @@ module.exports = {
     },
     "cart.deleteConfirm": {
       title: T("Confirm the delete", "确认删除", "Confirmar"),
-      any: [{ role: "button", name: /^(ok|confirm|delete|yes)$/i }],
+      // In the dialog only: "Delete" matched the covered button under it, so
+      // the Yes was never pressed (2026-11-24).
+      within: { any: [{ css: ".v-dialog--active" }, { css: "[role=dialog]" }, { css: ".v-dialog, .el-dialog, .el-message-box" }] },
+      any: [{ role: "button", name: /^(ok|confirm|yes)$/i }],
     },
     "checkout.start": {
       title: T("Secure Checkout", "去结算", "Pagar"),
@@ -539,7 +542,7 @@ module.exports = {
         steps: [
           { do: "click", target: "cart.select" },
           { do: "click", target: "cart.delete" },
-          { do: "click", target: "cart.deleteConfirm", optional: true, timeout: 3000 },
+          { do: "click", target: "cart.deleteConfirm", optional: true, timeout: 6000 },
           { do: "waitForHidden", target: "cart.row" },
         ],
       },
