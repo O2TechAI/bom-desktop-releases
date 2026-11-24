@@ -218,6 +218,17 @@ class ServiceLink {
       if (this.ended.has(key)) continue;
       const run = this.running.get(key);
       if (run) {
+        // Sent back to pricing (a line retried in BOM) while the run waits for
+        // the person at its cart: it starts again from the price, with the
+        // retried line (2026-11-24: Mouser sat at its cart check and the order
+        // stayed in pricing).
+        const waiting = this.lab?.activity?.(job.seller)?.driver === "person";
+        if (job.phase === "price" && run.phase !== "price" && waiting && !run.placed) {
+          this.running.delete(key);
+          run.stopped = true;
+          try { this.lab.stop(job.seller, { soft: false }); } catch { /* closed */ }
+          continue;
+        }
         run.phase = job.phase;
         run.job = job;
         continue;
