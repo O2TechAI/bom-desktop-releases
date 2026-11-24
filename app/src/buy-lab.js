@@ -250,6 +250,7 @@ class BuyLabWindow {
       view: this.view,
       // "site": the person came from BOM's Deal with it; Back returns there.
       returnTo: this.returnTo,
+      liveOnly: this.liveOnly,
       // BOM's purchasing service, as its last call answered.
       service: this.serviceStatus?.() || null,
       // A purchase that was interrupted, saved on this computer: it can go on
@@ -451,6 +452,16 @@ class BuyLabWindow {
   /** Back: to BOM when Deal with it brought the person here, else to the list. */
   back() {
     if (this.closed) return false;
+    // A supplier page opened from O2 BOM has nothing else to go back to:
+    // the window goes and O2 BOM comes forward, every time (2026-11-23: the
+    // first Back only raised BOM behind it, the next did nothing).
+    if (this.liveOnly) {
+      if (!this.window.isDestroyed()) this.window.hide();
+      this.surfaced = false;
+      this.hideOnBack = false;
+      this.onBackToSite?.();
+      return true;
+    }
     const toSite = this.returnTo === "site";
     this.returnTo = null;
     this.showView("flow");

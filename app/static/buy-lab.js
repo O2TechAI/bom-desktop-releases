@@ -8,7 +8,7 @@ const COPY = {
     start: "Start purchase", demo: "Demo", stop: "Stop",
     hint: "The app works through the suppliers' own websites in the background. It asks you only to finish a security check, sign in, or confirm an order.",
     confirmTitle: "Confirm the order", confirmText: "The order is on the supplier's review page. Place it now?",
-    confirm: "Place the order", live: "Open supplier page", external: "Open in browser", backToBom: "\u2190 Back to BOM", backToList: "\u2190 Back to the list",
+    confirm: "Place the order", live: "Open supplier page", external: "Open in browser", backToBom: "\u2190 Back to O2 BOM", backToList: "\u2190 Back to the list",
     lines: "Lines", part: "Part", qty: "Qty", state: "State", note: "Note",
     cart: "Cart", orders: "Orders", tracking: "Reading shipping updates…",
     ready: "Ready", working: "Working", waiting: "Waiting for you", done: "Done", failed: "Failed", stopped: "Stopped", blocked: "The website blocked the app (Access Denied). Try again later.",
@@ -68,7 +68,7 @@ const COPY = {
     start: "开始采购", demo: "一键演示", stop: "停止",
     hint: "app 在后台操作供应商自己的网站。只有需要你完成安全验证、登录或确认下单时才会叫你。",
     confirmTitle: "确认下单", confirmText: "订单已到供应商的确认页，现在下单吗？",
-    confirm: "确认下单", live: "打开供应商页面", external: "在浏览器中打开", backToBom: "\u2190 返回 BOM", backToList: "\u2190 返回清单",
+    confirm: "确认下单", live: "打开供应商页面", external: "在浏览器中打开", backToBom: "\u2190 返回 O2 BOM", backToList: "\u2190 返回清单",
     lines: "明细", part: "型号", qty: "数量", state: "状态", note: "说明",
     cart: "购物车", orders: "订单", tracking: "正在读取物流信息…",
     ready: "准备就绪", working: "进行中", waiting: "等待你操作", done: "完成", failed: "失败", stopped: "已停止", blocked: "网站拦住了 app（Access Denied），请稍后再试。",
@@ -128,7 +128,7 @@ const COPY = {
     start: "Iniciar compra", demo: "Demostración", stop: "Detener",
     hint: "La app trabaja en las webs de los proveedores en segundo plano. Solo te pide terminar una verificación de seguridad, iniciar sesión o confirmar un pedido.",
     confirmTitle: "Confirmar el pedido", confirmText: "El pedido está en la página de revisión del proveedor. ¿Lo haces ahora?",
-    confirm: "Realizar el pedido", live: "Abrir página del proveedor", external: "Abrir en el navegador", backToBom: "\u2190 Volver a BOM", backToList: "\u2190 Volver a la lista",
+    confirm: "Realizar el pedido", live: "Abrir página del proveedor", external: "Abrir en el navegador", backToBom: "\u2190 Volver a O2 BOM", backToList: "\u2190 Volver a la lista",
     lines: "Líneas", part: "Pieza", qty: "Cant.", state: "Estado", note: "Nota",
     cart: "Carrito", orders: "Pedidos", tracking: "Leyendo el seguimiento…",
     ready: "Listo", working: "En curso", waiting: "Esperándote", done: "Hecho", failed: "Falló", stopped: "Detenido", blocked: "La web bloqueó la app (Access Denied). Inténtalo más tarde.",
@@ -476,7 +476,7 @@ function render(state) {
   renderService(state.service);
   // Opened by BOM's Deal with it: Back (here and on the seller's page) goes to BOM.
   elements.backSite.hidden = state.returnTo !== "site";
-  if (elements.liveBack) elements.liveBack.textContent = state.returnTo === "site" ? copy.backToBom : copy.backToList;
+  if (elements.liveBack) elements.liveBack.textContent = state.returnTo === "site" || state.liveOnly ? copy.backToBom : copy.backToList;
   renderHold(state);
   const anyRunning = Object.values(state.flows).some((flow) => flow.running);
   elements.stopAll.disabled = !anyRunning;
