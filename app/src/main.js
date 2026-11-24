@@ -482,10 +482,26 @@ function registerSiteIpc() {
   // BOM's "Deal with it" on a seller being bought: that seller's own page
   // BOM's "Deal with it" on a seller being bought: the Chrome that is running
   // that purchase (out of sight), else the seller's own window.
-  ipcMain.handle("desktop:open-seller-page", async (event, id) => {
+  ipcMain.handle("desktop:open-seller-page", async (event, id, options) => {
     if (!fromSite(event)) return { ok: false, message: "Not allowed" };
     const seller = String(id || "");
+    // Which order the card is (2026-11-24): a placed one opens its own page on
+    // the seller's site; one the supplier is not working on says so instead of
+    // showing another order's page.
+    const order = String(options?.order || "").slice(0, 64);
+    const number = String(options?.number || "").replace(/[^0-9A-Za-z-]/g, "").slice(0, 40);
     try {
+      if (number) {
+        const lab = await openBuyLab({ quiet: true });
+        if (await lab.openSellerAt(seller, { view: "order", order: number })) {
+          if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide();
+          return { ok: true, where: "order" };
+        }
+      }
+      if (order && serviceLink) {
+        const holder = serviceLink.holder(seller, `${order}:${seller}`);
+        if (holder) return { ok: false, reason: "busy", holder: holder.split(":")[0] };
+      }
       // The page must be the Chrome that runs this purchase: start it (out of
       // sight) when it is not running yet, then show its live view in the app.
       const lab = await openBuyLab({ quiet: true });
@@ -508,6 +524,10 @@ function registerSiteIpc() {
   ipcMain.handle("desktop:continue-purchase", async (event, code) => {
     if (!fromSite(event)) return { ok: false, message: "Not allowed" };
     try {
+      // That order and no other (2026-11-24): BOM's link decides whether the
+      // supplier is free for it, and starts it from its own saved place.
+      const routed = serviceLink ? await serviceLink.continueOrder(String(code || "")) : null;
+      if (routed) return routed;
       if (!buyLabWindow) return { ok: false, message: "Nothing to continue" };
       return buyLabWindow.continuePurchase(String(code || ""));
     } catch (error) {

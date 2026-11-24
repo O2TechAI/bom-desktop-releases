@@ -408,7 +408,9 @@ class BuyLabWindow {
     if (!live) return false;
     if (!this.returnTo) this.hideOnBack = !this.window.isVisible();
     this.returnTo = "site";
+    this.liveOnly = true;
     this.showView("live", id);
+    if (!this.window.isDestroyed()) this.window.show();
     this.focus();
     const flow = this.flows.get(id);
     const free = !flow?.running && flow?.status !== "waiting";
@@ -644,6 +646,11 @@ class BuyLabWindow {
     const seller = String(code || "").split(":").pop();
     const flow = this.flows.get(seller);
     if (!flow) return { ok: false, message: "Unknown supplier" };
+    // Only the order it was asked for (2026-11-24): another order in hand is
+    // not continued in its place.
+    if (code.includes(":") && flow.resumeKey && flow.resumeKey !== code) {
+      return { ok: false, reason: "busy", holder: String(flow.resumeKey).split(":")[0] };
+    }
     const state = flow.state();
     if (state.confirm) return { ok: Boolean(flow.approve()), where: "order" };
     if (state.cartCheck) return { ok: Boolean(flow.confirmCart()), where: "cart" };

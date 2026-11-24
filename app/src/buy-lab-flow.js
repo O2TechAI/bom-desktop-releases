@@ -321,13 +321,19 @@ class RunStore {
     this.dir = userDataDir ? path.join(userDataDir, "buy-lab", "runs") : null;
   }
 
-  file(supplier) {
-    return this.dir ? path.join(this.dir, `${String(supplier).replace(/[^a-z0-9-]/gi, "")}.json`) : null;
+  /* One file per supplier for its latest run (the Continue of a run saved
+   * before the app closed), and one per order (`key`, its resumeKey), so each
+   * order of a supplier goes on from its own place (2026-11-24). */
+  file(supplier, key = "") {
+    if (!this.dir) return null;
+    const name = String(supplier).replace(/[^a-z0-9-]/gi, "");
+    const own = key ? `--${String(key).replace(/[^a-z0-9_-]/gi, "_").slice(0, 120)}` : "";
+    return path.join(this.dir, `${name}${own}.json`);
   }
 
-  load(supplier) {
+  load(supplier, key = "") {
     try {
-      return JSON.parse(fs.readFileSync(this.file(supplier), "utf8"));
+      return JSON.parse(fs.readFileSync(this.file(supplier, key), "utf8"));
     } catch {
       return null;
     }
@@ -336,10 +342,16 @@ class RunStore {
   save(supplier, record) {
     if (!this.dir) return;
     fs.mkdirSync(this.dir, { recursive: true });
-    fs.writeFileSync(this.file(supplier), JSON.stringify({ ...record, savedAt: new Date().toISOString() }, null, 2));
+    const text = JSON.stringify({ ...record, savedAt: new Date().toISOString() }, null, 2);
+    fs.writeFileSync(this.file(supplier), text);
+    if (record?.resumeKey) fs.writeFileSync(this.file(supplier, record.resumeKey), text);
   }
 
-  clear(supplier) {
+  clear(supplier, key = "") {
+    if (key) {
+      try { fs.unlinkSync(this.file(supplier, key)); } catch { /* none */ }
+      if (this.load(supplier)?.resumeKey !== key) return;
+    }
     try { fs.unlinkSync(this.file(supplier)); } catch { /* none */ }
   }
 }
@@ -570,7 +582,7 @@ class BuyLabFlow {
     this.placed = null;
     this.cartCheck = null;
     this.freshCart = null;
-    const saved = resumeKey ? this.store?.load(supplier) : null;
+    const saved = resumeKey ? this.store?.load(supplier, resumeKey) : null;
     if (saved && saved.resumeKey === resumeKey && saved.progress > STAGE.NEW && saved.progress < STAGE.PLACED) {
       // The same purchase, interrupted earlier: go on from where it got to.
       this.progress = saved.progress;
@@ -651,7 +663,7 @@ class BuyLabFlow {
         this.save();
         await this.placeOrder(site);
         this.progress = STAGE.PLACED;
-        this.store?.clear(this.supplier);
+        this.store?.clear(this.supplier, this.resumeKey);
       }
 
       // Bought for BOM (2026-11-23: "这个不应该跳提示"): the confirmation stays on

@@ -201,8 +201,12 @@ class ServiceLink {
         this.running.delete(key);
         run.stopped = true;
         try {
-          // Finish the line in hand first, so the cart isn't left half changed.
-          (await this.openBuyLab({ quiet: true })).stop(run.job.seller, { soft: true });
+          // Finish the line in hand first, so the cart isn't left half changed;
+          // a run waiting for the person stops at once (a soft stop never came,
+          // 2026-11-24: a cancelled order sat at its cart check).
+          const lab = await this.openBuyLab({ quiet: true });
+          const driving = Boolean(lab.flows?.get(run.job.seller)?.state()?.driving);
+          lab.stop(run.job.seller, { soft: driving });
         } catch { /* the Buy lab is closed */ }
       }
     }
@@ -216,8 +220,10 @@ class ServiceLink {
         continue;
       }
       // One purchase per supplier at a time, and at most two Chromes: the
-      // next waits for its turn.
-      if ([...this.running.values()].some((other) => other.job.seller === job.seller)) continue;
+      // next waits for its turn. A paused order whose parts are in the cart
+      // keeps its supplier too, until it is ordered or cancelled (2026-11-24).
+      if (!this.lab && this.jobs.length) this.lab = await this.openBuyLab({ quiet: true }).catch(() => null);
+      if (this.holder(job.seller, key)) continue;
       if (this.running.size >= MAX_RUNS) break;
       // Out of sight: BOM's Placing tab follows it (2026-11-21).
       const lab = await this.openBuyLab({ quiet: true });
@@ -266,6 +272,35 @@ class ServiceLink {
     }
   }
 
+  /**
+   * The order a supplier is busy with: the one running there, else a paused
+   * one whose parts are already in that supplier's cart (it holds the cart
+   * until it is ordered or cancelled, so the next order doesn't remove its
+   * parts, 2026-11-24). Null when the supplier is free.
+   */
+  holder(seller, except = "") {
+    for (const [key, run] of this.running) if (run.job.seller === seller && key !== except) return key;
+    for (const [key, { job }] of this.stops) {
+      if (job.seller !== seller || key === except) continue;
+      if (!this.jobs.some((live) => `${live.purchase_request_id}:${live.seller}` === key)) continue;
+      const saved = this.lab?.runs?.load?.(seller, key);
+      if (saved && saved.progress >= 1) return key; // in the cart already
+    }
+    return null;
+  }
+
+  /** The person's Continue on one order (`<purchase_request_id>:<seller>`):
+   * that order, not whichever the supplier has in hand. */
+  async continueOrder(code) {
+    const key = String(code || "");
+    const seller = key.split(":").pop();
+    const holder = this.holder(seller, key);
+    if (holder) return { ok: false, reason: "busy", holder: holder.split(":")[0] };
+    if (this.running.has(key)) return null; // its own run: the Buy lab goes on with it
+    if (await this.continueSaved(seller, key)) return { ok: true, where: "resume" };
+    return { ok: false, reason: "unknown" };
+  }
+
   /** What each of BOM's runs is doing right now, for its Orders page: the step,
    * who has the supplier page (the app or the person), lines done of total.
    * BOM locks a seller the app is working on (2026-11-21). */
@@ -282,7 +317,16 @@ class ServiceLink {
       if (!now) continue;
       out.push({ purchase_request_id: run.job.purchase_request_id, seller: run.job.seller, ...now });
     }
-    return out.slice(0, 20);
+    // Waiting for their turn, with the order the supplier is busy with.
+    for (const job of this.jobs) {
+      const key = `${job.purchase_request_id}:${job.seller}`;
+      if (this.running.has(key) || this.stops.has(key) || this.ended.has(key)) continue;
+      const holder = this.holder(job.seller, key);
+      if (!holder) continue;
+      out.push({ purchase_request_id: job.purchase_request_id, seller: job.seller, step: "queued", driver: "none",
+        message: holder.split(":")[0].slice(0, 64) });
+    }
+    return out.slice(0, 40);
   }
 
   /** A run changed step or who drives: tell BOM soon, not at the next tick. */
