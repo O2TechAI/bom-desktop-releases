@@ -606,12 +606,11 @@ class BuyLabWindow {
     return Boolean(this.flows.get(id)?.approve());
   }
 
-  /** Bring the Chrome that runs this supplier's purchase to the front (the
-   * window is otherwise off screen), without showing the Buy lab's page. */
-  showSupplierChrome(id) {
-    const live = this.lives.get(id);
-    if (!live) return false;
-    void live.handToPerson?.();
+  /** Show the page of the Chrome that runs this supplier's purchase in the
+   * app's own window (the live view), the way Buy lab always showed it. */
+  showSupplierPage(id) {
+    if (!this.lives.has(id)) return false;
+    this.showFor(id);
     return true;
   }
 

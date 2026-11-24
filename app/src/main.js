@@ -483,7 +483,7 @@ function registerSiteIpc() {
     if (!fromSite(event)) return { ok: false, message: "Not allowed" };
     const seller = String(id || "");
     try {
-      if (buyLabWindow?.showSupplierChrome(seller)) return { ok: true, where: "purchase" };
+      if (buyLabWindow?.showSupplierPage(seller)) return { ok: true, where: "buy_lab" };
       if (!suppliers.some((site) => site.id === seller)) return { ok: false, message: "Unknown supplier" };
       await openSupplier(seller);
       return { ok: true, where: "supplier" };
