@@ -930,7 +930,7 @@ class BuyLabFlow {
       const line = this.lines.find((one) => options.some((option) => partKey(option.mpn) === partKey(one.mpn)));
       const choice = line && !tried.has(line) ? pickPackOption(options, line) : -1;
       if (line) tried.add(line);
-      console.warn(`[options ${this.supplier}] ${line?.mpn || "?"} (${line?.packaging || "no packaging"}) -> ${choice} of ${JSON.stringify(options)}`);
+      console.warn(`[options ${this.supplier}] ${line?.mpn || "?"} (${line?.packaging || "no packaging"}) -> ${choice} of ${JSON.stringify(options)} | read: ${JSON.stringify(text.slice(0, 400))} | results: ${Object.keys(snapshot.results || {}).join(",")}`);
       if (choice < 0) {
         await this.runTask("closeOption", {}).catch(() => {});
         // Its row stays: the next one is reached only past it, so stop here.
