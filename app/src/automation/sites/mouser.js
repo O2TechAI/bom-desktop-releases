@@ -30,6 +30,24 @@ const CART_ROW = {
 };
 
 const TARGETS = {
+  /* A cart line's packaging (2026-11-24, live): its "Packaging: **Cut Tape"
+   * link opens "Packaging Choice", radios with labels (Cut Tape, MouseReel™,
+   * Full Reels: only for the reel's quantity), then Submit. */
+  "cart.packLink": {
+    title: T("Packaging", "包装", "Empaque"),
+    within: CART_ROW,
+    any: [{ role: "link", name: /cut tape|mousereel|reel/i }, { css: "a" }],
+    hasText: /cut tape|mousereel|reel/i,
+  },
+  "cart.packChoice": {
+    title: T("The packaging", "该包装", "El empaque"),
+    any: [{ css: "label" }],
+    hasText: "{{pack}}",
+  },
+  "cart.packSubmit": {
+    title: T("Submit", "提交", "Enviar"),
+    any: [{ role: "button", name: /^submit$/i }],
+  },
   "search.input": {
     title: T("Search box", "搜索框", "Cuadro de búsqueda"),
     any: [
@@ -499,6 +517,14 @@ module.exports = {
       { do: "extract", target: "cart.rows", fields: CART_FIELDS, as: "cart", optional: true, timeout: 5000 },
     ],
     removeFromCart: [{ do: "walk", to: "cart" }, { do: "act", name: "removeLine" }],
+    setPack: [
+      { do: "walk", to: "cart" },
+      { do: "click", target: "cart.packLink", timeout: 10000 },
+      { do: "wait", ms: 1500 },
+      { do: "click", target: "cart.packChoice", timeout: 5000 },
+      { do: "click", target: "cart.packSubmit", timeout: 5000 },
+      { do: "wait", ms: 6000 },
+    ],
     checkout: [{ do: "walk", to: "cart" }, { do: "walk", to: "review" }],
     placeOrder: [{ do: "walk", to: "cart" }, { do: "walk", to: "confirmation" }],
     // The same with the BOM's ship-to: filled into the address form when it comes.
@@ -539,7 +565,7 @@ module.exports = {
       },
     ],
   },
-  taskParams: { bulkAddPaa: ["lines"], removeFromCart: ["part"], checkout: [], placeOrder: [], placeOrderWithAddress: ["firstName", "lastName", "phoneDigits", "company", "line1", "line2", "city", "stateName", "zip"], orders: [], track: ["order"] },
+  taskParams: { bulkAddPaa: ["lines"], removeFromCart: ["part"], setPack: ["part", "pack"], checkout: [], placeOrder: [], placeOrderWithAddress: ["firstName", "lastName", "phoneDigits", "company", "line1", "line2", "city", "stateName", "zip"], orders: [], track: ["order"] },
   taskDefaults: {
     addToCart: { part: "GRM155R71C104KA88D", quantity: "10" },
     removeFromCart: { part: "GRM155R71C104KA88D" },

@@ -309,6 +309,28 @@ function packOfPart(part) {
 /* The seller's name for a packaging (on DigiKey's product page). */
 const PACK_NAMES = { cut_tape: "Cut Tape", tape_reel: "Tape & Reel", digi_reel: "Digi-Reel", tray: "Tray", tube: "Tube", bulk: "Bulk" };
 
+/* Each seller's words for the packagings a cart line can be switched between
+ * (2026-11-24, live): its custom reel is DigiKey's Digi-Reel, LCSC's
+ * LCSC-Reels, Mouser's MouseReel; a whole reel needs the reel's quantity. */
+const SITE_PACKS = {
+  digikey: { cut_tape: "Cut Tape", digi_reel: "Digi-Reel", tape_reel: "Tape & Reel" },
+  lcsc: { cut_tape: "Cut Tape", digi_reel: "LCSC-Reels", tape_reel: "Full Reel" },
+  mouser: { cut_tape: "Cut Tape", digi_reel: "MouseReel", tape_reel: "Full Reels" },
+};
+
+/** A cart line's packaging: by DigiKey's number, else by the words on the
+ * line (LCSC "Cut Tape" / "LCSC-Reels" / "Full Reel", Mouser "Packaging:
+ * Cut Tape" / "MouseReel"); null when neither says. */
+function rowPack(row) {
+  if (!row) return null;
+  if (/-ND\s*$/i.test(String(row.part || ""))) return packOfPart(row.part);
+  const text = String(row.text || "");
+  if (/mousereel|lcsc-reels|digi-?reel/i.test(text)) return "digi_reel";
+  if (/full reel/i.test(text)) return "tape_reel";
+  if (/cut tape/i.test(text)) return "cut_tape";
+  return null;
+}
+
 /** The packaging a line is added in: Cut Tape, which every quantity can be
  * bought in; the cart's own packaging list then sets the order's (2026-11-24:
  * a Digi-Reel chosen on the product page was never added). */
@@ -351,7 +373,7 @@ function compareCart(lines, rows, expected = {}) {
     let issue = null;
     if (!row) issue = "missing";
     else if (amount(row.quantity) !== Number(line.buyQuantity || line.quantity)) issue = "quantity";
-    else if (line.packaging && packOfPart(row.part) && packOfPart(row.part) !== line.packaging) issue = "packaging";
+    else if (line.packaging && rowPack(row) && rowPack(row) !== line.packaging) issue = "packaging";
     else if (unitPrice != null && expectedPrice != null && unitPrice > expectedPrice + 1e-9) issue = "price";
     return {
       part: line.mpn, quantity: String(line.quantity), cartQuantity: row ? String(amount(row.quantity) ?? "") : null,
@@ -1102,28 +1124,28 @@ class BuyLabFlow {
    * minimum) is switched back and left to the cart check. True when the cart
    * changed. */
   async setPackaging(rows) {
-    if (this.supplier !== "digikey") return false;
+    const names = SITE_PACKS[this.supplier];
     const site = this.sites.find((entry) => entry.id === this.supplier);
-    if (!site?.tasks.setPack) return false;
+    if (!names || !site?.tasks.setPack) return false;
     const rowOf = (all, line) => {
       const key = partKey(line.mpn);
       return all.find((one) => partKey(one.part) === key || (key.length >= 6 && partKey(one.text).includes(key)));
     };
     let changed = false;
     for (const line of this.lines) {
-      if (!PACK_NAMES[line.packaging]) continue;
+      if (!names[line.packaging]) continue;
       const row = rowOf(rows, line);
-      const pack = row ? packOfPart(row.part) : null;
+      const pack = rowPack(row);
       if (!row || !pack || pack === line.packaging) continue;
       this.emit({ status: "running", message: "choosing-packaging" });
-      const tried = await this.runTask("setPack", { part: line.mpn, pack: PACK_NAMES[line.packaging] }).catch(() => null);
+      const tried = await this.runTask("setPack", { part: line.mpn, pack: names[line.packaging] }).catch(() => null);
       if (tried?.status !== "done") continue;
       changed = true;
       const cart = finished(await this.runTask("openCart"));
       const now = rowOf(Array.isArray(cart.results?.cart) ? cart.results.cart : [], line);
       if (now && amount(now.quantity) !== Number(line.buyQuantity || line.quantity)) {
         // The packaging needs another quantity: back to what it was.
-        await this.runTask("setPack", { part: line.mpn, pack: PACK_NAMES[pack] || "Cut Tape" }).catch(() => null);
+        await this.runTask("setPack", { part: line.mpn, pack: names[pack] || "Cut Tape" }).catch(() => null);
       }
       if (this.stopRequested) throw stoppedError();
     }

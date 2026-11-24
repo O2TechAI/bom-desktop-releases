@@ -348,6 +348,20 @@ module.exports = {
         { css: "button.v2-button-outlined-primary" },
       ],
     },
+    /* A cart line's packaging (2026-11-24, live): its "Cut Tape" button opens
+     * a menu of Cut Tape, LCSC-Reels(+$3) and "2000 | Full Reel" (a whole
+     * reel sets the quantity to the reel's). */
+    "cart.packMenu": {
+      title: T("Packaging", "包装", "Empaque"),
+      within: CART_ROW,
+      any: [{ css: "span[role=button]" }],
+      hasText: /cut tape|lcsc-reels|full reel/i,
+    },
+    "cart.packOption": {
+      title: T("The packaging", "该包装", "El empaque"),
+      any: [{ css: ".v-menu__content.menuable__content__active [role=option]" }],
+      hasText: "{{pack}}",
+    },
     "cart.deleteConfirm": {
       title: T("Confirm the delete", "确认删除", "Confirmar"),
       // In the dialog only: "Delete" matched the covered button under it, so
@@ -605,6 +619,12 @@ module.exports = {
       { do: "walk", to: "cart" },
       { do: "act", name: "removeLine" },
     ],
+    setPack: [
+      { do: "walk", to: "cart" },
+      { do: "click", target: "cart.packMenu", timeout: 10000 },
+      { do: "click", target: "cart.packOption", timeout: 5000 },
+      { do: "wait", ms: 5000 },
+    ],
     checkout: [
       { do: "walk", to: "cart" },
       { do: "walk", to: "review" },
@@ -658,6 +678,7 @@ module.exports = {
   taskParams: {
     bulkAddBom: ["file"],
     removeFromCart: ["part"],
+    setPack: ["part", "pack"],
     checkout: [],
     placeOrder: [],
     placeOrderWithAddress: ["firstName", "lastName", "phoneDigits", "line1", "line2", "city", "stateName", "zip"],
