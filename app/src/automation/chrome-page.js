@@ -170,6 +170,13 @@ class SupplierBrowser extends EventEmitter {
     }
     fs.mkdirSync(profilePath, { recursive: true });
     if (downloadsPath) fs.mkdirSync(downloadsPath, { recursive: true });
+    // A Chrome ended mid-write (the app closed hard) can leave its page cache
+    // broken: the shop's pages came without their styles, and buttons could
+    // not be found or clicked (2026-11-24: LCSC, then Mouser). The caches only
+    // are cleared at each start; sign-ins, cookies and site storage stay.
+    for (const dir of ["Default/Cache", "Default/Code Cache", "Default/GPUCache", "GrShaderCache", "ShaderCache", "GraphiteDawnCache"]) {
+      try { fs.rmSync(path.join(profilePath, dir), { recursive: true, force: true }); } catch { /* in use or gone */ }
+    }
 
     let lastError = null;
     for (const choice of choices) {
