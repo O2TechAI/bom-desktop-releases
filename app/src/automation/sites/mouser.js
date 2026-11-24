@@ -40,10 +40,25 @@ const TARGETS = {
     any: [{ css: "button[id^='lnkMouseReel']" }, { role: "button", name: /cut tape|mousereel|reel/i }, { role: "link", name: /cut tape|mousereel|reel/i }],
     hasText: /cut tape|mousereel|reel/i,
   },
+  /* The dialog (a jQuery UI one, "Packaging Choice"): the smallest box that
+   * holds a radio and the packaging's name, then that radio. */
+  "cart.packChoiceBox": {
+    title: T("The packaging", "该包装", "El empaque"),
+    within: { any: [{ css: ".ui-dialog" }, { role: "dialog" }], hasText: /packaging choice/i },
+    any: [
+      { css: "label:has(input[type=radio])" },
+      { css: "li:has(input[type=radio])" },
+      { css: "div:has(> input[type=radio])" },
+      { css: "p:has(input[type=radio])" },
+      { css: "td:has(input[type=radio])" },
+      { css: "div:has(> * > input[type=radio])" },
+    ],
+    hasText: "{{pack}}",
+  },
   "cart.packChoice": {
     title: T("The packaging", "该包装", "El empaque"),
-    any: [{ css: "label" }],
-    hasText: "{{pack}}",
+    within: { any: [{ css: ".ui-dialog" }, { role: "dialog" }], hasText: /packaging choice/i },
+    any: [{ css: "input[type=radio]" }],
   },
   "cart.packSubmit": {
     title: T("Submit", "提交", "Enviar"),
@@ -526,7 +541,7 @@ module.exports = {
       { do: "walk", to: "cart" },
       { do: "click", target: "cart.packLink", timeout: 10000 },
       { do: "wait", ms: 1500 },
-      { do: "click", target: "cart.packChoice", timeout: 5000 },
+      { do: "click", target: "cart.packChoiceBox", timeout: 8000 },
       { do: "click", target: "cart.packSubmit", timeout: 5000 },
       { do: "wait", ms: 6000 },
     ],

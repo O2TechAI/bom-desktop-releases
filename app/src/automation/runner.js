@@ -681,6 +681,11 @@ class Runner {
           expression: `JSON.stringify([...document.querySelectorAll("body *")].filter((e) => e.children.length === 0 && /packaging|cut tape|mousereel|lcsc-reels|full reel/i.test(e.textContent || "") && e.offsetParent !== null).slice(0, 14).map((e) => { const row = e.closest("tr, [id^=cartItemBox_], li"); const up = e.parentElement; return [e.tagName, e.id, String(e.className).slice(0, 40), e.getAttribute("role"), (e.textContent || "").trim().slice(0, 30), up ? up.tagName + "." + String(up.className).slice(0, 30) + "#" + up.id : "", row ? row.tagName + "." + String(row.className).slice(0, 40) + "#" + row.id : "-"].join("|"); }))`,
         });
         console.warn(`[packs ${this.profile.id}] ${String(packs?.value || "").slice(0, 2500)}`);
+        const { result: radios } = await this.driver.send("Runtime.evaluate", {
+          contextId, returnByValue: true,
+          expression: `JSON.stringify([...document.querySelectorAll("input[type=radio]")].filter((r) => r.offsetParent !== null).slice(0, 10).map((r) => [r.id, r.name, r.value, r.disabled, r.parentElement?.tagName + "." + String(r.parentElement?.className).slice(0, 30), (r.parentElement?.textContent || "").trim().replace(/\s+/g, " ").slice(0, 50), r.nextElementSibling?.tagName || "", r.labels?.length || 0].join("|")))`,
+        });
+        console.warn(`[radios ${this.profile.id}] ${String(radios?.value || "").slice(0, 2500)}`);
       }
     } catch { /* only for the log */ }
   }
