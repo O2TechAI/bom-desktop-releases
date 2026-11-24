@@ -215,8 +215,15 @@ class BuyLabWindow {
   showView(name, id = this.active) {
     if (this.closed) return;
     // Opened from Orders: the supplier page is the only page this window
-    // shows; there is no list to go back to (2026-11-23).
-    if (this.liveOnly && name !== "live") name = "live";
+    // shows; there is no list to go back to (2026-11-23). Its cart check is
+    // still the two halves (2026-11-24: "购物车检查要分为左右两半").
+    if (this.liveOnly && name === "flow") name = "live";
+    // A supplier waiting at its cart check (or for the order's yes) is shown
+    // as its check on the left and its page on the right, however it was
+    // opened: a tab, Open website, or the app coming forward.
+    const target = id && this.lives.has(id) ? id : this.active;
+    const waitingState = target ? this.flows.get(target)?.state() : null;
+    if (name === "live" && (waitingState?.cartCheck || waitingState?.confirm)) name = "split";
     const was = this.view;
     this.view = name === "live" || name === "split" ? name : "flow";
     if (this.view !== "flow" && id && this.lives.has(id)) this.active = id;
@@ -277,6 +284,10 @@ class BuyLabWindow {
     }
     this.publish();
     this.notifyIfWaiting(id, state);
+    // The check is over (confirmed, or the run went on): its page alone again.
+    if (this.view === "split" && this.active === id && !state.cartCheck && !state.confirm) this.showView("live", id);
+    // The check began while its page was open: the two halves.
+    else if (this.view === "live" && this.active === id && (state.cartCheck || state.confirm)) this.showView("split", id);
     // A check is handed to Chrome's own window (onChallenge); the canvas is
     // only for sign-ins and refusals that the person handles in the app,
     // shown for the supplier that is waiting.

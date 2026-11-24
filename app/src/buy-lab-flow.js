@@ -238,8 +238,6 @@ const STAGE = { NEW: 0, ADDED: 1, CART_CONFIRMED: 2, PLACED: 3 };
  * the person takes over (2026-11-21: 机器操作的环节不能让人干预, with a timeout). */
 const STALL_MS = 3 * 60 * 1000;
 
-/* Up to this many lines, a list is added part by part rather than in one batch. */
-const SHORT_LIST = 5;
 
 /** The order number in what a confirmation page said around it (2026-11-23:
  * Mouser's whole sentence reached BOM as the number). DigiKey's sales order
@@ -839,8 +837,11 @@ class BuyLabFlow {
     // BOM 导入让digikey 处理"): one upload instead of a search per part, each
     // of which could meet a security check. What the upload leaves out is
     // added part by part by settleCart.
-    const batch = (this.lines.length > SHORT_LIST || (this.supplier === "digikey" && site?.tasks.bulkAddBom))
-      && (site?.tasks.bulkAddBom || site?.tasks.bulkAddPaa || site?.tasks.bulkAddList);
+    // Every supplier takes the list the way the site takes a BOM, whatever
+    // its length (2026-11-24: "所有的流程都是走给网站上传BOM 网站自动添加的路径"):
+    // DigiKey's and LCSC's BOM upload, Mouser's part list. What the site
+    // leaves out is added part by part by settleCart.
+    const batch = Boolean(site?.tasks.bulkAddBom || site?.tasks.bulkAddPaa || site?.tasks.bulkAddList);
     if (batch) {
       // One page, one batch: a BOM file or the cart's own Bulk Add box.
       this.emit({ message: "bulk-adding" });
@@ -1133,7 +1134,9 @@ class BuyLabFlow {
     };
     let changed = false;
     for (const line of this.lines) {
-      if (!names[line.packaging]) continue;
+      // A whole reel changes the quantity (2026-11-24: LCSC made 40 into
+      // 2,000): never switched to by the app; the cart check shows it.
+      if (!names[line.packaging] || line.packaging === "tape_reel") continue;
       const row = rowOf(rows, line);
       const pack = rowPack(row);
       if (!row || !pack || pack === line.packaging) continue;
