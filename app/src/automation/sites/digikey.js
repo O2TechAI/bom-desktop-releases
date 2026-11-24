@@ -69,6 +69,12 @@ const TARGETS = {
   },
   /* A part sold in several packagings (cut tape, tape & reel, Digi-Reel):
    * the options on its page (2026-11-23: "根据描述来进行选择"). */
+  /* The "added to your cart" window after Add to Cart (2026-11-23): it
+   * covers the page until closed. */
+  "product.continueShopping": {
+    title: T("Continue Shopping", "继续购物", "Seguir comprando"),
+    any: [{ css: "#continue-shopping-btn, [data-testid='continue-shopping-btn']" }, { role: "button", name: /^continue shopping$/i }],
+  },
   "product.packaging": {
     title: T("Packaging options", "包装选项", "Opciones de empaque"),
     any: [
@@ -338,7 +344,9 @@ const STATES = {
     // the page of a part in several packagings was not recognised).
     match: [{ all: ["product.addToCart", "product.ofPart"] }, { all: ["product.packaging", "product.ofPart"] }],
   },
-  results: { title: T("Search results", "搜索结果", "Resultados"), match: { url: /\/products\/result/i, all: ["results.exact"] } },
+  // A search can also land on a category page with an Exact Match card
+  // (2026-11-23: 1N4148W-7-F opened /products/category/diodes/rectifiers).
+  results: { title: T("Search results", "搜索结果", "Resultados"), match: { url: /\/products\/(result|category)/i, all: ["results.exact"] } },
   // The home page Buy lab's Chrome opens on. Known by its address only, and
   // last, so it never shadows a page above. Unknown, a walk from here waited
   // out the whole recognition time (20 s) before setting off.
@@ -365,7 +373,7 @@ const TRANSITIONS = [
       // A search with one match goes straight to its page, /products/detail/
       // (2026-11-23: RC0603FR-07100KL); a security check keeps the address,
       // so the page itself is told apart after this wait.
-      { do: "waitForUrl", pattern: /products\/(result|detail)|product-detail/i, optional: true, timeout: 20000 },
+      { do: "waitForUrl", pattern: /products\/(result|detail|category)|product-detail/i, optional: true, timeout: 20000 },
       { do: "wait", ms: 800 },
       { do: "click", target: "cookies.accept", optional: true, timeout: 2500 },
     ],
@@ -451,6 +459,8 @@ const TRANSITIONS = [
       { do: "fill", target: "product.quantity", value: "{{quantity}}" },
       { do: "click", target: "product.addToCart", timeout: 15000 },
       { do: "waitForChange", target: "cart.count", from: "cartBefore", or: "cart.added", optional: true, timeout: 10000 },
+      { do: "click", target: "product.continueShopping", optional: true, timeout: 5000 },
+      { do: "wait", ms: 500 },
     ],
   },
   {
