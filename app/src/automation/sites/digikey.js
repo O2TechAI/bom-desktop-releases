@@ -333,6 +333,14 @@ const TARGETS = {
     any: [{ css: "tr.mud-table-row" }, { css: "table tbody tr" }, { role: "row" }],
     hasText: /\d{6,}/,
   },
+  /* A part DigiKey no longer sells: "Unavailable. This product is no longer
+   * carried by DigiKey" where the buy box would be (2026-11-24,
+   * GRM188R61A106KE69D). */
+  "product.unavailable": {
+    title: T("No longer sold", "已不再销售", "Ya no se vende"),
+    any: [{ css: "h2, h3, h4, p, span, div" }],
+    hasText: /no longer carried by digikey/i,
+  },
   "product.ofPart": {
     title: T("The part's page", "该型号的页面", "La página de la pieza"),
     any: [{ css: "[data-testid='mfr-number'], [data-testid='product-overview'] h1" }, { css: "h1" }],
@@ -385,6 +393,12 @@ const STATES = {
   cart: { title: T("Cart", "购物车", "Carrito"), match: { url: /\/ordering\/shoppingcart/i } },
   orderDetail: { title: T("Order", "订单详情", "Pedido"), match: { url: /\/orderhistory\/(?!list)[^?]*\d{5,}/i } },
   orders: { title: T("Orders", "订单记录", "Pedidos"), match: [{ url: /\/orderhistory\/list/i }, { url: /orderhistory/i, all: ["orders.rows"] }] },
+  // Known on its own, so the walk ends there at once: a line that can't be
+  // had, not a page for the person (it waited as "lost").
+  notSold: {
+    title: T("No longer sold", "已不再销售", "Ya no se vende"),
+    match: { url: /\/products\/detail\//i, all: ["product.unavailable", "product.ofPart"] },
+  },
   product: {
     title: T("Product page", "商品页", "Página del producto"),
     // Its buy box, or its packaging options before one is chosen (2026-11-23:
@@ -664,7 +678,8 @@ module.exports = {
       { do: "handoff", message: "sign_in", until: "account.signedIn" },
     ],
     addToCart: [
-      { do: "walk", to: "product" },
+      // A part no longer sold ends the walk too, and the add fails at once.
+      { do: "walk", to: ["product", "notSold"] },
       { do: "act", name: "addToCart" },
     ],
     // The same, without the search page: everything happens in the cart.
