@@ -36,7 +36,8 @@ const TARGETS = {
   "cart.packLink": {
     title: T("Packaging", "包装", "Empaque"),
     within: CART_ROW,
-    any: [{ role: "link", name: /cut tape|mousereel|reel/i }, { css: "a" }],
+    // A button, lnkMouseReel_<n>, reading "**Cut Tape" (2026-11-24, live).
+    any: [{ css: "button[id^='lnkMouseReel']" }, { role: "button", name: /cut tape|mousereel|reel/i }, { role: "link", name: /cut tape|mousereel|reel/i }],
     hasText: /cut tape|mousereel|reel/i,
   },
   "cart.packChoice": {
