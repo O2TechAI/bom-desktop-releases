@@ -357,6 +357,13 @@ module.exports = {
       any: [{ css: "span[role=button]" }],
       hasText: /cut tape|lcsc-reels|full reel/i,
     },
+    /* "Packaging Method: Update the remaining N eligible items to LCSC-Reels
+     * as well?" (2026-11-24, signed in): No, only this line changes. */
+    "cart.packOnlyThis": {
+      title: T("Only this line", "只改这一行", "Solo esta línea"),
+      within: { any: [{ css: ".v-dialog--active" }, { role: "dialog" }], hasText: /packaging method/i },
+      any: [{ role: "button", name: /^no$/i }],
+    },
     "cart.packOption": {
       title: T("The packaging", "该包装", "El empaque"),
       any: [{ css: ".v-menu__content.menuable__content__active [role=option]" }],
@@ -623,6 +630,7 @@ module.exports = {
       { do: "walk", to: "cart" },
       { do: "click", target: "cart.packMenu", timeout: 10000 },
       { do: "click", target: "cart.packOption", timeout: 5000 },
+      { do: "click", target: "cart.packOnlyThis", optional: true, timeout: 5000 },
       { do: "wait", ms: 5000 },
     ],
     checkout: [
