@@ -849,21 +849,30 @@ class BuyLabFlow {
     // was taken for a stranger and removed from the cart).
     const match = (rows) => {
       const used = new Set();
-      const found = new Set();
+      const found = new Map(); // line -> its row
       for (const line of this.lines) {
         const key = partKey(line.mpn);
         let index = rows.findIndex((row, at) => !used.has(at) && partKey(row.part) === key);
         if (index < 0 && key.length >= 6) index = rows.findIndex((row, at) => !used.has(at) && partKey(row.text).includes(key));
-        if (index >= 0) { used.add(index); found.add(line); }
+        if (index >= 0) { used.add(index); found.set(line, rows[index]); }
       }
       return { used, found };
     };
+    // A line in the cart with another quantity (2026-11-24: LCSC held twice
+    // each part after restarts re-added them): taken out and added again with
+    // the list's quantity, where the shop lets the app remove a line.
+    const offCount = (found) => [...found].filter(([line, row]) => {
+      const have = amount(row.quantity);
+      return have != null && have !== Number(line.quantity);
+    });
     this.emit({ status: "running", message: "checking-cart" });
     let rows = await read();
     const first = match(rows);
     const extras = rows.filter((_, at) => !first.used.has(at));
+    const canRedo = Boolean(site?.tasks.removeFromCart && site?.tasks.addToCart);
+    const recount = canRedo ? offCount(first.found) : [];
     const missing = this.lines.filter((line) => !first.found.has(line));
-    if (!extras.length && !missing.length) {
+    if (!extras.length && !missing.length && !recount.length) {
       this.freshCart = rows; // the cart check takes this read instead of reading again
       return true;
     }
@@ -883,6 +892,14 @@ class BuyLabFlow {
         await attempt("removeFromCart", { part: row.part });
         if (this.stopRequested) throw stoppedError();
       }
+    }
+    for (const [line, row] of recount) {
+      this.emit({ message: "fixing-quantity" });
+      line.status = "adding";
+      this.emit();
+      const removed = await attempt("removeFromCart", { part: row.part });
+      if (this.stopRequested) throw stoppedError();
+      if (!removed) missing.push(line); // out: added below with the list's quantity
     }
     if (site?.tasks.addToCart) {
       for (const line of missing) {
