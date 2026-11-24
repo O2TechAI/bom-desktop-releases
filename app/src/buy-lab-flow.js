@@ -238,6 +238,9 @@ const STAGE = { NEW: 0, ADDED: 1, CART_CONFIRMED: 2, PLACED: 3 };
  * the person takes over (2026-11-21: 机器操作的环节不能让人干预, with a timeout). */
 const STALL_MS = 3 * 60 * 1000;
 
+/* Up to this many lines, a list is added part by part rather than in one batch. */
+const SHORT_LIST = 5;
+
 /** The order number in what a confirmation page said around it (2026-11-23:
  * Mouser's whole sentence reached BOM as the number). DigiKey's sales order
  * id is the one its order history and tracking use, before its web id. */
@@ -706,7 +709,13 @@ class BuyLabFlow {
 
   /** Stage 1: the list into the cart. False when the purchase ends here. */
   async addLines(site) {
-    if (site?.tasks.bulkAddBom || site?.tasks.bulkAddPaa || site?.tasks.bulkAddList) {
+    // A short list goes in part by part, from each part's own page: the
+    // batch tools (DigiKey's Bulk Add box, Mouser's and LCSC's BOM upload)
+    // each led to a page the app doesn't know, and DigiKey's box doesn't take
+    // a maker's part number (2026-11-23, an uploaded order of three lines).
+    const batch = this.lines.length > SHORT_LIST
+      && (site?.tasks.bulkAddBom || site?.tasks.bulkAddPaa || site?.tasks.bulkAddList);
+    if (batch) {
       // One page, one batch: a BOM file or the cart's own Bulk Add box.
       this.emit({ message: "bulk-adding" });
       for (const line of this.lines) line.status = "adding";

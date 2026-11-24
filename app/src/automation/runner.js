@@ -293,7 +293,10 @@ class Runner {
           detail: error.detail || null,
         };
       }
-      if (!stoppedNow) console.error(`Automation step failed: ${error.stack || error.message}`);
+      if (!stoppedNow) {
+        console.error(`Automation step failed: ${error.stack || error.message}`);
+        await this.logPage(`failed ${this.task}`);
+      }
     } finally {
       this.message = null;
       this.confirming = null;
@@ -621,6 +624,18 @@ class Runner {
       await this.runStep(step, this.addRow(parent, step));
     }
     return this.identify({ not: transition.to.includes(from) ? null : from });
+  }
+
+  /** The page's address and visible buttons, for the app's log (2026-11-23). */
+  async logPage(label) {
+    try {
+      const contextId = await this.driver.world();
+      const { result } = await this.driver.send("Runtime.evaluate", {
+        contextId, returnByValue: true,
+        expression: `JSON.stringify({ url: location.href, title: document.title, h1: (document.querySelector("h1")?.innerText || "").slice(0, 80), buttons: [...document.querySelectorAll("button, input[type=submit], a[role=button]")].filter((b) => b.offsetParent !== null).map((b) => [b.id, b.getAttribute("data-testid"), (b.innerText || b.value || "").trim().slice(0, 30)].filter(Boolean).join("|")).filter(Boolean).slice(0, 30) })`,
+      });
+      console.warn(`[${label} ${this.profile.id}] ${String(result?.value || "").slice(0, 1800)}`);
+    } catch { /* only for the log */ }
   }
 
   /** Go from whatever page this is to a goal state, one transition at a time. */
