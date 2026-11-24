@@ -309,17 +309,21 @@ function packOfPart(part) {
 /* The seller's name for a packaging (on DigiKey's product page). */
 const PACK_NAMES = { cut_tape: "Cut Tape", tape_reel: "Tape & Reel", digi_reel: "Digi-Reel", tray: "Tray", tube: "Tube", bulk: "Bulk" };
 
-/** The packaging a line is added in: the order's, else Cut Tape. */
-function packWord(line) {
-  return PACK_NAMES[line.packaging] || "Cut Tape";
+/** The packaging a line is added in: Cut Tape, which every quantity can be
+ * bought in; the cart's own packaging list then sets the order's (2026-11-24:
+ * a Digi-Reel chosen on the product page was never added). */
+function packWord() {
+  return "Cut Tape";
 }
 
 /** Which option a line takes: its packaging at its own quantity, or, when
  * the order named none, Cut Tape (what a small quantity is sold as; a reel's
  * minimum or Digi-Reel's fee is never chosen for it). -1 when none fits. */
 function pickPackOption(options, line) {
-  const wanted = PACK_WORDS[line.packaging] || PACK_WORDS.cut_tape;
-  return options.findIndex((option) => wanted.test(option.pack) && option.quantity === Number(line.quantity));
+  const at = (pattern) => options.findIndex((option) => pattern.test(option.pack) && option.quantity === Number(line.quantity));
+  const own = PACK_WORDS[line.packaging] ? at(PACK_WORDS[line.packaging]) : -1;
+  // Not to be had at this quantity: Cut Tape, and the cart check says so.
+  return own >= 0 ? own : at(PACK_WORDS.cut_tape);
 }
 
 function amount(text) {
@@ -723,7 +727,7 @@ class BuyLabFlow {
         const rows = Array.isArray(cart.results?.cart) ? cart.results.cart : [];
         // A quantity off too, while the person hasn't confirmed this cart: the
         // cart is set right again (2026-11-24: LCSC held twice each part).
-        const redo = (line) => line.issue === "missing" || (!this.confirmedCart && (line.issue === "quantity" || line.issue === "extra" || line.issue === "packaging"));
+        const redo = (line) => line.issue === "missing" || (!this.confirmedCart && (line.issue === "quantity" || line.issue === "extra"));
         if (compareCart(this.lines, rows).lines.some(redo)) {
           this.progress = STAGE.NEW;
           this.confirmedCart = null;
@@ -951,7 +955,7 @@ class BuyLabFlow {
       const line = this.lines.find((one) => options.some((option) => partKey(option.mpn) === partKey(one.mpn)));
       const choice = line && !tried.has(line) ? pickPackOption(options, line) : -1;
       if (line) tried.add(line);
-      console.warn(`[options ${this.supplier}] ${line?.mpn || "?"} (${line?.packaging || "no packaging"}) -> ${choice} of ${JSON.stringify(options)} | read: ${JSON.stringify(text.slice(0, 400))} | results: ${Object.keys(snapshot.results || {}).join(",")}`);
+      console.warn(`[options ${this.supplier}] ${line?.mpn || "?"} (${line?.packaging || "no packaging"}) -> ${choice} of ${JSON.stringify(options)}`);
       if (choice < 0) {
         await this.runTask("closeOption", {}).catch(() => {});
         // Its row stays: the next one is reached only past it, so stop here.
@@ -993,9 +997,6 @@ class BuyLabFlow {
     // the list's quantity, where the shop lets the app remove a line.
     const offCount = (found) => [...found].filter(([line, row]) => {
       const have = amount(row.quantity);
-      // Or in another packaging than the order's (DigiKey's number says).
-      const pack = packOfPart(row.part);
-      if (line.packaging && pack && pack !== line.packaging) return true;
       return have != null && have !== Number(line.buyQuantity || line.quantity);
     });
     this.emit({ status: "running", message: "checking-cart" });
@@ -1096,6 +1097,39 @@ class BuyLabFlow {
     this.store.rememberSellerParts("digikey", pairs);
   }
 
+  /** DigiKey: each line in another packaging than its order's is switched in
+   * the cart's own packaging list. One whose quantity that changes (a reel's
+   * minimum) is switched back and left to the cart check. True when the cart
+   * changed. */
+  async setPackaging(rows) {
+    if (this.supplier !== "digikey") return false;
+    const site = this.sites.find((entry) => entry.id === this.supplier);
+    if (!site?.tasks.setPack) return false;
+    const rowOf = (all, line) => {
+      const key = partKey(line.mpn);
+      return all.find((one) => partKey(one.part) === key || (key.length >= 6 && partKey(one.text).includes(key)));
+    };
+    let changed = false;
+    for (const line of this.lines) {
+      if (!PACK_NAMES[line.packaging]) continue;
+      const row = rowOf(rows, line);
+      const pack = row ? packOfPart(row.part) : null;
+      if (!row || !pack || pack === line.packaging) continue;
+      this.emit({ status: "running", message: "choosing-packaging" });
+      const tried = await this.runTask("setPack", { part: line.mpn, pack: PACK_NAMES[line.packaging] }).catch(() => null);
+      if (tried?.status !== "done") continue;
+      changed = true;
+      const cart = finished(await this.runTask("openCart"));
+      const now = rowOf(Array.isArray(cart.results?.cart) ? cart.results.cart : [], line);
+      if (now && amount(now.quantity) !== Number(line.buyQuantity || line.quantity)) {
+        // The packaging needs another quantity: back to what it was.
+        await this.runTask("setPack", { part: line.mpn, pack: PACK_NAMES[pack] || "Cut Tape" }).catch(() => null);
+      }
+      if (this.stopRequested) throw stoppedError();
+    }
+    return changed;
+  }
+
   async checkCart() {
     for (;;) {
       this.emit({ status: "running", message: "reading-cart" });
@@ -1103,6 +1137,10 @@ class BuyLabFlow {
         this.cart = this.freshCart;
         this.freshCart = null;
       } else {
+        const cart = finished(await this.runTask("openCart"));
+        this.cart = Array.isArray(cart.results?.cart) ? cart.results.cart : [];
+      }
+      if (!this.confirmedCart && await this.setPackaging(this.cart)) {
         const cart = finished(await this.runTask("openCart"));
         this.cart = Array.isArray(cart.results?.cart) ? cart.results.cart : [];
       }

@@ -215,6 +215,16 @@ const TARGETS = {
     title: T("Cancel", "取消", "Cancelar"),
     any: [{ css: "#dialog-suggestions.visible #secondary-cancel" }],
   },
+  /* A cart line's packaging (2026-11-24, live): a select named
+   * Details[n].PartNumber whose options are that part's packagings ("Cut
+   * Tape (CT)", "Digi-Reel®", "Tape & Reel") by their DigiKey numbers.
+   * Choosing one keeps the quantity, unless the packaging needs more (a reel:
+   * 10 became 3,000). */
+  "cart.packSelect": {
+    title: T("Packaging", "包装", "Empaque"),
+    within: { any: [{ css: "tr.detailRow" }, { css: "tbody tr" }], hasText: "{{part}}" },
+    any: [{ css: "select[name$='PartNumber']" }],
+  },
   "cart.mapAdd": {
     title: T("Add to Current Cart", "加入当前购物车", "Añadir al carrito actual"),
     any: [{ css: "#dialog-mapper span[data-button='addToCurrent']:not(.disabled)" }],
@@ -676,6 +686,11 @@ module.exports = {
       { do: "waitFor", target: "cart.empty", optional: true, timeout: 20000 },
       { do: "act", name: "uploadToCart" },
     ],
+    setPack: [
+      { do: "walk", to: "cart" },
+      { do: "select", target: "cart.packSelect", option: "{{pack}}", timeout: 10000 },
+      { do: "wait", ms: 6000 },
+    ],
     openOption: [
       { do: "click", target: "cart.viewOptions", timeout: 5000 },
       { do: "waitFor", target: "cart.optionsLoaded", timeout: 15000 },
@@ -761,6 +776,7 @@ module.exports = {
     bulkAdd: ["part", "quantity"],
     bulkAddList: ["lines"],
     bulkAddBom: ["file", "partColumn"],
+    setPack: ["part", "pack"],
     openOption: [],
     pickOption: ["option"],
     closeOption: [],
