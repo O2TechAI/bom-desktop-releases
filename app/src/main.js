@@ -477,15 +477,27 @@ function registerSiteIpc() {
     }
   });
   // BOM's "Deal with it" on a seller being bought: that seller's own page
-  // BOM's "Deal with it" on a seller being bought: that seller's own window.
-  // (The Buy lab window is gone; the service keeps using it out of sight.)
+  // BOM's "Deal with it" on a seller being bought: the Chrome that is running
+  // that purchase (out of sight), else the seller's own window.
   ipcMain.handle("desktop:open-seller-page", async (event, id) => {
     if (!fromSite(event)) return { ok: false, message: "Not allowed" };
     const seller = String(id || "");
-    if (!suppliers.some((site) => site.id === seller)) return { ok: false, message: "Unknown supplier" };
     try {
+      if (buyLabWindow?.showSupplierChrome(seller)) return { ok: true, where: "purchase" };
+      if (!suppliers.some((site) => site.id === seller)) return { ok: false, message: "Unknown supplier" };
       await openSupplier(seller);
       return { ok: true, where: "supplier" };
+    } catch (error) {
+      return { ok: false, message: error.message };
+    }
+  });
+  // The person's Continue on a paused order: confirm the order, accept the
+  // cart, or go on from where the run stopped.
+  ipcMain.handle("desktop:continue-purchase", async (event, code) => {
+    if (!fromSite(event)) return { ok: false, message: "Not allowed" };
+    try {
+      if (!buyLabWindow) return { ok: false, message: "Nothing to continue" };
+      return buyLabWindow.continuePurchase(String(code || ""));
     } catch (error) {
       return { ok: false, message: error.message };
     }
