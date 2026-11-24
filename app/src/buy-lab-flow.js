@@ -640,7 +640,10 @@ class BuyLabFlow {
         this.emit({ status: "running", message: "reading-cart" });
         const cart = finished(await this.runTask("openCart"));
         const rows = Array.isArray(cart.results?.cart) ? cart.results.cart : [];
-        if (compareCart(this.lines, rows).lines.some((line) => line.issue === "missing")) {
+        // A quantity off too, while the person hasn't confirmed this cart: the
+        // cart is set right again (2026-11-24: LCSC held twice each part).
+        const redo = (line) => line.issue === "missing" || (!this.confirmedCart && (line.issue === "quantity" || line.issue === "extra"));
+        if (compareCart(this.lines, rows).lines.some(redo)) {
           this.progress = STAGE.NEW;
           this.confirmedCart = null;
           this.save();
