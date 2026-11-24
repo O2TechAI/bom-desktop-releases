@@ -75,7 +75,7 @@ const TARGETS = {
       { role: "radio", name: /cut tape|tape & reel|digi-?reel/i },
       { role: "tab", name: /cut tape|tape & reel|digi-?reel/i },
       { role: "option", name: /cut tape|tape & reel|digi-?reel/i },
-      { text: /^(cut tape|tape & reel|digi-?reel)/i },
+      { css: "[id^='pack-type-radio']" },
     ],
   },
   /* Cut tape: what a small quantity is sold as. Tape & reel is a whole reel,
@@ -87,7 +87,7 @@ const TARGETS = {
       { role: "tab", name: /cut tape/i },
       { role: "option", name: /cut tape/i },
       { role: "button", name: /cut tape/i },
-      { text: /^cut tape( \(ct\))?$/i },
+      { css: "[id^='pack-type-radio']", hasText: "Cut Tape" },
     ],
   },
   "cart.count": {
@@ -442,7 +442,8 @@ const TRANSITIONS = [
     steps: [
       { do: "peek", target: "cart.count", as: "cartBefore" },
       // Several packagings: cut tape, as a small quantity is sold.
-      { do: "click", target: "product.packCutTape", when: "product.packaging", whenTimeout: 2000 },
+      // No Cut Tape button (the word only in its specifications): the page's own choice stays (2026-11-24).
+      { do: "click", target: "product.packCutTape", when: "product.packaging", whenTimeout: 2000, optional: true, timeout: 3000 },
       { do: "wait", ms: 800 },
       { do: "fill", target: "product.quantity", value: "{{quantity}}" },
       { do: "click", target: "product.addToCart", timeout: 15000 },
