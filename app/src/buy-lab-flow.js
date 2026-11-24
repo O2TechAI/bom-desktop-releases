@@ -42,9 +42,9 @@ function parseLines(text) {
 
 
 /** A CSV the supplier's BOM tool can read: part and quantity per line. */
-function writeBomFile(siteId, lines) {
+function writeBomFile(siteId, lines, numberFor = (line) => line.mpn) {
   const header = siteId === "lcsc" ? "LCSC Part Number,Quantity" : "Part Number,Quantity";
-  const body = lines.map((line) => `${line.mpn},${line.quantity}`).join("\n");
+  const body = lines.map((line) => `${numberFor(line)},${line.quantity}`).join("\n");
   const file = path.join(os.tmpdir(), `o2-bom-${siteId}-${process.pid}-${Date.now()}.csv`);
   fs.writeFileSync(file, `${header}\n${body}\n`, "utf8");
   return file;
@@ -52,8 +52,8 @@ function writeBomFile(siteId, lines) {
 
 /** Which column an uploaded file's part numbers are, for a mapping dialog:
  * the supplier's own numbers (DigiKey's end in "-ND") or the makers'. */
-function partColumnFor(lines) {
-  return lines.length && lines.every((line) => /-ND$/i.test(line.mpn))
+function partColumnFor(lines, numberFor = (line) => line.mpn) {
+  return lines.length && lines.every((line) => /-ND$/i.test(numberFor(line)))
     ? "DigiKey Part Number"
     : "Manufacturer Part Number";
 }
@@ -345,6 +345,29 @@ class RunStore {
     const text = JSON.stringify({ ...record, savedAt: new Date().toISOString() }, null, 2);
     fs.writeFileSync(this.file(supplier), text);
     if (record?.resumeKey) fs.writeFileSync(this.file(supplier, record.resumeKey), text);
+  }
+
+  /* DigiKey's own number for a maker's part, as its cart showed it (Cut Tape,
+   * what a small quantity is bought as): a BOM file of these needs no
+   * packaging chosen by hand (2026-11-24: an upload of makers' numbers left
+   * every line at "View Options"). */
+  sellerParts(supplier) {
+    try {
+      const file = path.join(this.dir, "..", `${String(supplier).replace(/[^a-z0-9-]/gi, "")}-parts.json`);
+      return JSON.parse(fs.readFileSync(file, "utf8").replace(/^\uFEFF/, "")) || {};
+    } catch {
+      return {};
+    }
+  }
+
+  rememberSellerParts(supplier, pairs) {
+    if (!this.dir || !pairs.length) return;
+    const known = this.sellerParts(supplier);
+    for (const [mpn, part] of pairs) known[mpn] = part;
+    try {
+      fs.mkdirSync(path.join(this.dir, ".."), { recursive: true });
+      fs.writeFileSync(path.join(this.dir, "..", `${String(supplier).replace(/[^a-z0-9-]/gi, "")}-parts.json`), JSON.stringify(known, null, 1));
+    } catch { /* only a help for next time */ }
   }
 
   clear(supplier, key = "") {
@@ -741,9 +764,13 @@ class BuyLabFlow {
       this.emit();
       let snapshot;
       if (site.tasks.bulkAddBom) {
-        const file = writeBomFile(this.supplier, this.lines);
+        // DigiKey's own numbers when every line has one from an earlier cart.
+        const known = this.supplier === "digikey" ? (this.store?.sellerParts?.("digikey") || {}) : {};
+        const own = this.lines.every((line) => known[partKey(line.mpn)]);
+        const numberFor = own ? (line) => known[partKey(line.mpn)] : (line) => line.mpn;
+        const file = writeBomFile(this.supplier, this.lines, numberFor);
         try {
-          snapshot = await this.runTask("bulkAddBom", { file, partColumn: partColumnFor(this.lines) });
+          snapshot = await this.runTask("bulkAddBom", { file, partColumn: partColumnFor(this.lines, numberFor) });
         } finally {
           try { fs.unlinkSync(file); } catch { /* already gone */ }
         }
@@ -942,6 +969,11 @@ class BuyLabFlow {
     // (2026-11-24: an earlier test's C1525 left in the LCSC cart failed all
     // three lines of a new order).
     this.leftInCart = rows.filter((row) => !known(row)).map((row) => row.part || row.text);
+    if (this.supplier === "digikey") {
+      this.store?.rememberSellerParts?.("digikey", [...after.found]
+        .filter(([, row]) => /-ND$/i.test(String(row.part || "")))
+        .map(([line, row]) => [partKey(line.mpn), String(row.part).trim()]));
+    }
     this.freshCart = rows;
     return true;
   }
