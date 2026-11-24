@@ -545,8 +545,11 @@ class BuyLabWindow {
     // The link keeps one job per supplier at a time (buy-service-link.js).
     const expected = Object.fromEntries((job.lines || []).filter((line) => line.unit_price != null)
       .map((line) => [line.sku || line.mpn, line.unit_price]));
+    // How each line is to be packed, when the order said (2026-11-24).
+    const packaging = Object.fromEntries((job.lines || []).filter((line) => line.packaging)
+      .map((line) => [line.sku || line.mpn, String(line.packaging)]));
     const resumeKey = `${job.purchase_request_id}:${supplier}`;
-    void this.startPurchase({ supplier, text, address, link, resumeKey, expected }).catch((error) => {
+    void this.startPurchase({ supplier, text, address, link, resumeKey, expected, packaging }).catch((error) => {
       this.failStart(supplier, error.message);
       link?.ended?.({ status: "failed", message: error.message });
     });
@@ -554,7 +557,7 @@ class BuyLabWindow {
     return true;
   }
 
-  async startPurchase({ supplier, text, addressId = "", address: given = null, link = null, rehearsal = false, resumeKey = null, expected = null }) {
+  async startPurchase({ supplier, text, addressId = "", address: given = null, link = null, rehearsal = false, resumeKey = null, expected = null, packaging = null }) {
     // A chosen address that is gone stops here, rather than run without it.
     const address = given || (addressId ? this.addresses.find(addressId) : null);
     if (addressId && !given && !address) throw new Error("That address is no longer in the address book");
@@ -563,7 +566,7 @@ class BuyLabWindow {
     await this.ensureSite(supplier);
     if (!this.lives.has(supplier)) throw new Error("The supplier page did not start");
     if (!this.active) this.active = supplier;
-    await flow.start({ supplier, text, address, link, rehearsal, resumeKey, expected });
+    await flow.start({ supplier, text, address, link, rehearsal, resumeKey, expected, packaging });
     return true;
   }
 

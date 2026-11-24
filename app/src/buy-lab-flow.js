@@ -274,6 +274,34 @@ function noteBought(line, snapshot) {
   if (bought && bought !== Number(line.quantity)) line.buyQuantity = bought;
 }
 
+/** The key a seller's own number is kept under: the maker's part and, when
+ * the order named one, its packaging. */
+function sellerPartKey(line) {
+  return line.packaging ? `${partKey(line.mpn)}|${line.packaging}` : partKey(line.mpn);
+}
+
+/* DigiKey's words for BOM's packaging codes. */
+const PACK_WORDS = {
+  cut_tape: /cut tape/i, tape_reel: /tape\s*&\s*reel/i, digi_reel: /digi-?reel/i,
+  tray: /tray/i, tube: /tube/i, bulk: /bulk/i,
+};
+
+/** The options DigiKey's "View Options" lists for a line it didn't take:
+ * [{ quantity, part, mpn, pack }], in the order of its choices. */
+function packOptions(text) {
+  const clean = String(text || "").replace(/[\u200e\u200f]/g, "");
+  const re = /(\d[\d,]*)\s+(\S+-ND)\s+(\S+)\s+(Cut Tape|Digi-Reel|Tape & Reel|Tray|Tube|Bulk|Box|Bag)/gi;
+  return [...clean.matchAll(re)].map((m) => ({ quantity: Number(m[1].replace(/,/g, "")), part: m[2], mpn: m[3], pack: m[4] }));
+}
+
+/** Which option a line takes: its packaging at its own quantity, or, when
+ * the order named none, Cut Tape (what a small quantity is sold as; a reel's
+ * minimum or Digi-Reel's fee is never chosen for it). -1 when none fits. */
+function pickPackOption(options, line) {
+  const wanted = PACK_WORDS[line.packaging] || PACK_WORDS.cut_tape;
+  return options.findIndex((option) => wanted.test(option.pack) && option.quantity === Number(line.quantity));
+}
+
 function amount(text) {
   const match = String(text ?? "").replace(/,/g, "").match(/\d+(?:\.\d+)?/);
   return match ? Number(match[0]) : null;
@@ -593,7 +621,7 @@ class BuyLabFlow {
    * `resumeKey`: the purchase this is. When this supplier's saved progress has
    * the same key, the stages already done are not done again. `expected`:
    * part -> the unit price BOM showed, for the cart check. */
-  async start({ supplier, text, address = null, link = null, rehearsal = false, resumeKey = null, expected = null }) {
+  async start({ supplier, text, address = null, link = null, rehearsal = false, resumeKey = null, expected = null, packaging = null }) {
     if (this.running) throw new Error("A purchase is already running");
     const lines = parseLines(text);
     if (!lines.length) throw new Error("Paste at least one line: part number and quantity");
@@ -604,7 +632,9 @@ class BuyLabFlow {
     this.link = link;
     this.rehearsal = Boolean(rehearsal) && !link;
     this.expected = Object.fromEntries(Object.entries(expected || {}).map(([part, price]) => [partKey(part), Number(price)]));
-    this.lines = lines.map((line, index) => ({ ...line, index, status: "pending", error: null, price: null }));
+    const packs = Object.fromEntries(Object.entries(packaging || {}).map(([part, pack]) => [partKey(part), pack]));
+    this.lines = lines.map((line, index) => ({ ...line, index, status: "pending", error: null, price: null,
+      packaging: packs[partKey(line.mpn)] || null }));
     this.cart = null;
     this.orderNumber = null;
     this.orders = [];
@@ -773,8 +803,8 @@ class BuyLabFlow {
       if (site.tasks.bulkAddBom) {
         // DigiKey's own numbers when every line has one from an earlier cart.
         const known = this.supplier === "digikey" ? (this.store?.sellerParts?.("digikey") || {}) : {};
-        const own = this.lines.every((line) => known[partKey(line.mpn)]);
-        const numberFor = own ? (line) => known[partKey(line.mpn)] : (line) => line.mpn;
+        const own = this.lines.every((line) => known[sellerPartKey(line)]);
+        const numberFor = own ? (line) => known[sellerPartKey(line)] : (line) => line.mpn;
         const file = writeBomFile(this.supplier, this.lines, numberFor);
         try {
           snapshot = await this.runTask("bulkAddBom", { file, partColumn: partColumnFor(this.lines, numberFor) });
@@ -786,6 +816,7 @@ class BuyLabFlow {
       } else {
         snapshot = await this.runTask("bulkAddList", { lines: bulkLines(this.lines) });
       }
+      if (this.supplier === "digikey" && site.tasks.openOption) await this.settlePackOptions();
       const failed = snapshot.steps.find((step) => step.status === "failed");
       if (snapshot.status === "stopped") {
         // The person stopped it: not a failure of the lines.
@@ -873,6 +904,37 @@ class BuyLabFlow {
       return false;
     }
     return true;
+  }
+
+  /** DigiKey took the BOM file but left lines at "View Options" (a part sold
+   * in several packagings, 2026-11-24): each is opened and given the line's
+   * packaging. One with no option that fits is left for settleCart and the
+   * cart check to name. */
+  async settlePackOptions() {
+    const tried = new Set();
+    for (let round = 0; round < this.lines.length + 2; round += 1) {
+      let snapshot;
+      try {
+        snapshot = await this.runTask("openOption", {});
+      } catch (error) {
+        if (error?.code === "stopped" || error?.code === "blocked") throw error;
+        return;
+      }
+      if (snapshot.status !== "done") return; // no row left to settle
+      const text = String(snapshot.results?.options || "");
+      const options = packOptions(text);
+      const line = this.lines.find((one) => options.some((option) => partKey(option.mpn) === partKey(one.mpn)));
+      const choice = line && !tried.has(line) ? pickPackOption(options, line) : -1;
+      if (line) tried.add(line);
+      if (choice < 0) {
+        await this.runTask("closeOption", {}).catch(() => {});
+        // Its row stays: the next one is reached only past it, so stop here.
+        return;
+      }
+      this.emit({ message: "choosing-packaging" });
+      await this.runTask("pickOption", { option: String(choice) }).catch(() => {});
+      if (this.stopRequested) throw stoppedError();
+    }
   }
 
   /** Stage 1b (2026-11-21): the cart holds this list and nothing else. A
@@ -996,7 +1058,7 @@ class BuyLabFlow {
       const key = partKey(line.mpn);
       const row = rows.find((one) => /-ND$/i.test(String(one.part || "").trim())
         && key.length >= 6 && partKey(one.text).includes(key));
-      if (row) pairs.push([key, String(row.part).trim()]);
+      if (row) pairs.push([sellerPartKey(line), String(row.part).trim()]);
     }
     this.store.rememberSellerParts("digikey", pairs);
   }

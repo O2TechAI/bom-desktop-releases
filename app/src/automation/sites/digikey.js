@@ -178,6 +178,29 @@ const TARGETS = {
     title: T("First part row", "首行料号所在行", "Primera fila de piezas"),
     any: [{ css: "#dialog-mapper input#StartRow" }],
   },
+  /* A line the BOM file left at "View Options" (2026-11-24, live): its
+   * button, the options dialog (#dialog-suggestions), one radio per option
+   * (#suggestion0...), and Add / Cancel. */
+  "cart.viewOptions": {
+    title: T("View Options", "查看选项", "Ver opciones"),
+    any: [{ role: "button", name: /^view options$/i }],
+  },
+  "cart.optionsDialog": {
+    title: T("Packaging options", "包装选项", "Opciones de empaque"),
+    any: [{ css: "#dialog-suggestions.visible .dk-modal__content" }],
+  },
+  "cart.optionChoice": {
+    title: T("The packaging", "该包装", "El empaque"),
+    any: [{ css: "#dialog-suggestions.visible #suggestion{{option}}" }],
+  },
+  "cart.optionsAdd": {
+    title: T("Add", "加入", "Añadir"),
+    any: [{ css: "#dialog-suggestions.visible #primary-add" }],
+  },
+  "cart.optionsCancel": {
+    title: T("Cancel", "取消", "Cancelar"),
+    any: [{ css: "#dialog-suggestions.visible #secondary-cancel" }],
+  },
   "cart.mapAdd": {
     title: T("Add to Current Cart", "加入当前购物车", "Añadir al carrito actual"),
     any: [{ css: "#dialog-mapper span[data-button='addToCurrent']:not(.disabled)" }],
@@ -639,6 +662,18 @@ module.exports = {
       { do: "waitFor", target: "cart.empty", optional: true, timeout: 20000 },
       { do: "act", name: "uploadToCart" },
     ],
+    openOption: [
+      { do: "click", target: "cart.viewOptions", timeout: 5000 },
+      { do: "waitFor", target: "cart.optionsDialog", timeout: 10000 },
+      { do: "read", target: "cart.optionsDialog", as: "options" },
+    ],
+    pickOption: [
+      { do: "click", target: "cart.optionChoice", js: true },
+      { do: "click", target: "cart.optionsAdd" },
+      { do: "waitForHidden", target: "cart.optionsDialog", timeout: 15000 },
+      { do: "wait", ms: 2500 },
+    ],
+    closeOption: [{ do: "click", target: "cart.optionsCancel" }, { do: "waitForHidden", target: "cart.optionsDialog", timeout: 10000 }],
     openCart: [
       { do: "walk", to: "cart" },
       {
@@ -712,6 +747,9 @@ module.exports = {
     bulkAdd: ["part", "quantity"],
     bulkAddList: ["lines"],
     bulkAddBom: ["file", "partColumn"],
+    openOption: [],
+    pickOption: ["option"],
+    closeOption: [],
     removeFromCart: ["part"],
     checkout: [],
     placeOrder: [],
