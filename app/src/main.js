@@ -483,7 +483,11 @@ function registerSiteIpc() {
     if (!fromSite(event)) return { ok: false, message: "Not allowed" };
     const seller = String(id || "");
     try {
-      if (buyLabWindow?.showSupplierPage(seller)) return { ok: true, where: "buy_lab" };
+      // The page must be the Chrome that runs this purchase: start it (out of
+      // sight) when it is not running yet, then show its live view in the app.
+      const lab = await openBuyLab({ quiet: true });
+      await lab.ensureSite(seller).catch(() => null);
+      if (lab.showSupplierPage(seller)) return { ok: true, where: "buy_lab" };
       if (!suppliers.some((site) => site.id === seller)) return { ok: false, message: "Unknown supplier" };
       await openSupplier(seller);
       return { ok: true, where: "supplier" };
