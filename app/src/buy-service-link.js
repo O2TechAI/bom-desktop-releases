@@ -27,6 +27,8 @@ const path = require("node:path");
 const TICK_MS = 15_000;
 /* At most this many supplier Chromes at once: each is 1-2 GB. */
 const MAX_RUNS = 2;
+/* How long a paused order keeps its supplier from the next one. */
+const HOLD_MS = 6 * 60 * 60 * 1000;
 const BASE = "/api/v1/buy-lab-service/desk";
 
 function money(text) {
@@ -105,7 +107,7 @@ class ServiceLink {
       const saved = JSON.parse(fs.readFileSync(this.stateFile, "utf8"));
       for (const key of saved.ended || []) this.ended.add(String(key));
       for (const [key, stop] of Object.entries(saved.stops || {})) {
-        if (stop?.job?.purchase_request_id && stop.job.seller) this.stops.set(key, { job: stop.job, message: stop.message || "stopped" });
+        if (stop?.job?.purchase_request_id && stop.job.seller) this.stops.set(key, { job: stop.job, message: stop.message || "stopped", at: Number(stop.at) || 0 });
       }
     } catch {
       // none yet
@@ -116,9 +118,10 @@ class ServiceLink {
     if (!this.stateFile) return;
     try {
       fs.mkdirSync(path.dirname(this.stateFile), { recursive: true });
-      const stops = Object.fromEntries([...this.stops].map(([key, { job, message }]) => [key, {
+      const stops = Object.fromEntries([...this.stops].map(([key, { job, message, at }]) => [key, {
         job: { purchase_request_id: job.purchase_request_id, seller: job.seller, supplier_order_id: job.supplier_order_id || null },
         message,
+        at: at || 0,
       }]));
       fs.writeFileSync(this.stateFile, JSON.stringify({ ended: [...this.ended], stops }, null, 2));
     } catch (error) {
@@ -280,8 +283,12 @@ class ServiceLink {
    */
   holder(seller, except = "") {
     for (const [key, run] of this.running) if (run.job.seller === seller && key !== except) return key;
-    for (const [key, { job }] of this.stops) {
+    for (const [key, { job, at }] of this.stops) {
       if (job.seller !== seller || key === except) continue;
+      // Only an order paused lately: one left for hours (or from before the
+      // pause time was kept) does not keep the supplier from the next order
+      // (2026-11-24: an order paused for days held DigiKey).
+      if (!at || Date.now() - at > HOLD_MS) continue;
       if (!this.jobs.some((live) => `${live.purchase_request_id}:${live.seller}` === key)) continue;
       const saved = this.lab?.runs?.load?.(seller, key);
       if (saved && saved.progress >= 1) return key; // in the cart already
@@ -388,7 +395,7 @@ class ServiceLink {
           await this.post("cart", { purchase_request_id: run.job.purchase_request_id, seller: run.job.seller, failed: why });
           return;
         }
-        this.stops.set(key, { job: run.job, message: message || status || "stopped" });
+        this.stops.set(key, { job: run.job, message: message || status || "stopped", at: Date.now() });
         this.saveState();
         this.nudge?.();
       },
