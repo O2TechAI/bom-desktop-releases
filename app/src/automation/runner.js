@@ -37,7 +37,7 @@ const { randomUUID } = require("node:crypto");
 
 const { AutomationError, Driver } = require("./driver");
 const { UNKNOWN, matchTargets, nextTransition, recognise } = require("./machine");
-const { fill } = require("./targets");
+const { escapeRegExp, fill } = require("./targets");
 
 /** The smallest quantity at least `wanted` that a "MOQ: 20, Mult: 20" rule
  * allows; null when the text has no such rule. */
@@ -387,7 +387,13 @@ class Runner {
       }
       case "type": return driver.type(fill(step.value ?? "", this.params));
       case "press": return driver.press(step.key);
-      case "select": return driver.select(target, step.option instanceof RegExp ? step.option : fill(step.option, this.params), options);
+      case "select": {
+        // `contains`: an option whose words include the value ("Digi-Reel" for
+        // "Digi-Reel®", 2026-11-24), else one that reads exactly so.
+        const wanted = step.option instanceof RegExp ? step.option : fill(step.option, this.params);
+        const option = step.contains && typeof wanted === "string" ? new RegExp(escapeRegExp(wanted), "i") : wanted;
+        return driver.select(target, option, options);
+      }
       case "check": return driver.check(target, true, options);
       case "uncheck": return driver.check(target, false, options);
       case "upload": return driver.upload(target, [].concat(step.files ?? this.params[step.filesParam]), options).then(() => true);

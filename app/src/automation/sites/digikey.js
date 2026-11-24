@@ -688,7 +688,7 @@ module.exports = {
     ],
     setPack: [
       { do: "walk", to: "cart" },
-      { do: "select", target: "cart.packSelect", option: "{{pack}}", timeout: 10000 },
+      { do: "select", target: "cart.packSelect", option: "{{pack}}", contains: true, timeout: 10000 },
       { do: "wait", ms: 6000 },
     ],
     openOption: [
