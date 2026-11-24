@@ -778,6 +778,10 @@ class BuyLabFlow {
           if (snapshot.status !== "done") {
             line.status = "failed";
             line.error = failed?.error?.message || snapshot.status;
+            // The cart is read before anything is given up (2026-11-24: a part
+            // already in the cart left its count unchanged and was taken for
+            // not added): settleCart matches what is really there.
+            this.bulkFailed = true;
           } else {
             line.status = "added";
           }

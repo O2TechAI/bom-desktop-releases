@@ -447,7 +447,7 @@ module.exports = {
           { do: "peek", target: "cart.count", as: "cartBefore" },
           { do: "fill", target: "product.quantity", value: "{{quantity}}" },
           { do: "click", target: "product.addToCart" },
-          { do: "waitForChange", target: "cart.count", from: "cartBefore", or: "cart.added" },
+          { do: "waitForChange", target: "cart.count", from: "cartBefore", or: "cart.added", optional: true, timeout: 10000 },
         ],
       },
       {
@@ -460,7 +460,7 @@ module.exports = {
           { do: "peek", target: "cart.count", as: "cartBefore" },
           { do: "fill", target: "detail.quantity", value: "{{quantity}}" },
           { do: "click", target: "detail.addToCart" },
-          { do: "waitForChange", target: "cart.count", from: "cartBefore", or: "cart.added" },
+          { do: "waitForChange", target: "cart.count", from: "cartBefore", or: "cart.added", optional: true, timeout: 10000 },
         ],
       },
       {

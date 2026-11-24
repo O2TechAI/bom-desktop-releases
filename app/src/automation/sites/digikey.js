@@ -446,7 +446,7 @@ const TRANSITIONS = [
       { do: "wait", ms: 800 },
       { do: "fill", target: "product.quantity", value: "{{quantity}}" },
       { do: "click", target: "product.addToCart", timeout: 15000 },
-      { do: "waitForChange", target: "cart.count", from: "cartBefore", or: "cart.added" },
+      { do: "waitForChange", target: "cart.count", from: "cartBefore", or: "cart.added", optional: true, timeout: 10000 },
     ],
   },
   {
