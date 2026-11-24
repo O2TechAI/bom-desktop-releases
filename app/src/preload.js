@@ -17,8 +17,10 @@ contextBridge.exposeInMainWorld("o2Desktop", Object.freeze({
   platform: process.platform,
   version: versionArg ? versionArg.slice("--bom-desktop-version=".length) : "",
   openSupplier: (id) => ipcRenderer.invoke("desktop:open-supplier", String(id)),
-  // A seller being bought: its own supplier window.
+  // A seller being bought: the Chrome running that purchase, else its supplier window.
   openSellerPage: (id) => ipcRenderer.invoke("desktop:open-seller-page", String(id)),
+  // Continue a paused order (`<purchase_request_id>:<seller>`).
+  continuePurchase: (code) => ipcRenderer.invoke("desktop:continue-purchase", String(code)),
   updates: Object.freeze({
     status: () => ipcRenderer.invoke("desktop:update-status"),
     check: () => ipcRenderer.invoke("desktop:update-check"),

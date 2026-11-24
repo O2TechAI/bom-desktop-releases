@@ -25,6 +25,8 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const TICK_MS = 15_000;
+/* At most this many supplier Chromes at once: each is 1-2 GB. */
+const MAX_RUNS = 2;
 const BASE = "/api/v1/buy-lab-service/desk";
 
 function money(text) {
@@ -213,8 +215,10 @@ class ServiceLink {
         run.job = job;
         continue;
       }
-      // One purchase per supplier at a time: the next waits for its turn.
+      // One purchase per supplier at a time, and at most two Chromes: the
+      // next waits for its turn.
       if ([...this.running.values()].some((other) => other.job.seller === job.seller)) continue;
+      if (this.running.size >= MAX_RUNS) break;
       // Out of sight: BOM's Placing tab follows it (2026-11-21).
       const lab = await this.openBuyLab({ quiet: true });
       this.lab = lab;

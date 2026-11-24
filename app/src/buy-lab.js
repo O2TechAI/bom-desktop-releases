@@ -23,6 +23,8 @@ const { Runner } = require("./automation/runner");
 
 /* Behind the flow page (its own ground); the live overlay paints dark. */
 const BACKGROUND = "#ecf0f3";
+/* A supplier Chrome is closed when its work has been idle this long. */
+const IDLE_CLOSE_MS = 10 * 60 * 1000;
 const LAB_SITES = ["digikey", "mouser", "lcsc"];
 
 /* Where each shop's cart starts on its cart page (the sites' own markup, see
@@ -74,6 +76,7 @@ class BuyLabWindow {
     this.runs = new RunStore(userDataDir);
     /* The lists the BOM site handed over, by supplier, for the page's boxes. */
     this.listTexts = new Map();
+    this.idleTimers = new Map();
 
     this.window = new BaseWindow({
       width: 1280,
@@ -261,6 +264,12 @@ class BuyLabWindow {
 
   publishFlow(id, state) {
     if (this.closed) return;
+    if (state.running || !["done", "failed", "stopped"].includes(state.status)) {
+      const timer = this.idleTimers.get(id);
+      if (timer) { clearTimeout(timer); this.idleTimers.delete(id); }
+    } else {
+      this.scheduleIdleClose(id);
+    }
     this.publish();
     this.notifyIfWaiting(id, state);
     // A check is handed to Chrome's own window (onChallenge); the canvas is
@@ -597,6 +606,33 @@ class BuyLabWindow {
     return Boolean(this.flows.get(id)?.approve());
   }
 
+  /** Bring the Chrome that runs this supplier's purchase to the front (the
+   * window is otherwise off screen), without showing the Buy lab's page. */
+  showSupplierChrome(id) {
+    const live = this.lives.get(id);
+    if (!live) return false;
+    void live.handToPerson?.();
+    return true;
+  }
+
+  /** The person's Continue on a paused purchase: confirm the order, accept
+   * the cart, or go on from where a stopped run ended. `code` is the order's
+   * `<purchase_request_id>:<seller>`. */
+  continuePurchase(code) {
+    const seller = String(code || "").split(":").pop();
+    const flow = this.flows.get(seller);
+    if (!flow) return { ok: false, message: "Unknown supplier" };
+    const state = flow.state();
+    if (state.confirm) return { ok: Boolean(flow.approve()), where: "order" };
+    if (state.cartCheck) return { ok: Boolean(flow.confirmCart()), where: "cart" };
+    if (state.canResume) {
+      void flow.resume().catch((error) => this.failStart(seller, error.message));
+      return { ok: true, where: "resume" };
+    }
+    if (state.running) return { ok: false, message: "It is still working" };
+    return { ok: false, message: "Nothing to continue" };
+  }
+
   /** Stop one supplier's purchase, or every one without an id. `soft`: while
    * the app works, finish the line it is on first (a second Stop is at once). */
   stop(id = "", { soft = false } = {}) {
@@ -728,6 +764,23 @@ class BuyLabWindow {
     this.surfaced = false;
     this.window.show();
     this.window.focus();
+  }
+
+  /** Close a supplier's Chrome after the work has been idle for a while. */
+  scheduleIdleClose(id) {
+    if (this.idleTimers.has(id)) return;
+    this.idleTimers.set(id, setTimeout(() => void this.closeSite(id), IDLE_CLOSE_MS));
+  }
+
+  async closeSite(id) {
+    const flow = this.flows.get(id);
+    if (flow?.running) { this.scheduleIdleClose(id); return; }
+    const live = this.lives.get(id);
+    if (!live) return;
+    this.lives.delete(id);
+    this.idleTimers.delete(id);
+    await live.close().catch(() => {});
+    this.publish();
   }
 
   async close() {

@@ -2,7 +2,7 @@
   "name": "bom-desktop",
   "productName": "O2 BOM",
   "private": true,
-  "version": "0.0.33",
+  "version": "0.0.34",
   "description": "O2 BOM desktop app: a secure Electron shell around the hosted BOM web app.",
   "author": "O2 Tech AI",
   "type": "commonjs",
