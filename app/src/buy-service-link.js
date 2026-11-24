@@ -227,7 +227,7 @@ class ServiceLink {
       // keeps its supplier too, until it is ordered or cancelled (2026-11-24).
       if (!this.lab && this.jobs.length) this.lab = await this.openBuyLab({ quiet: true }).catch(() => null);
       if (this.holder(job.seller, key)) continue;
-      if (this.running.size >= MAX_RUNS) break;
+      if (this.busyRuns() >= MAX_RUNS) break;
       // Out of sight: BOM's Placing tab follows it (2026-11-21).
       const lab = await this.openBuyLab({ quiet: true });
       this.lab = lab;
@@ -296,6 +296,17 @@ class ServiceLink {
     return null;
   }
 
+  /** Runs the app is driving. One waiting for the person (a cart to check, a
+   * security check) does not keep another supplier from starting (2026-11-24:
+   * Mouser waited while DigiKey and LCSC sat at their cart checks). */
+  busyRuns() {
+    let busy = 0;
+    for (const run of this.running.values()) {
+      if (this.lab?.activity?.(run.job.seller)?.driver !== "person") busy += 1;
+    }
+    return busy;
+  }
+
   /** The person's Continue on one order (`<purchase_request_id>:<seller>`):
    * that order, not whichever the supplier has in hand. */
   async continueOrder(code) {
@@ -331,7 +342,7 @@ class ServiceLink {
       const holder = this.holder(job.seller, key);
       // Its supplier is free but every browser the app runs at once is busy
       // with other suppliers: queued too, with no order named (2026-11-24).
-      if (!holder && this.running.size < MAX_RUNS) continue;
+      if (!holder && this.busyRuns() < MAX_RUNS) continue;
       out.push({ purchase_request_id: job.purchase_request_id, seller: job.seller, step: "queued", driver: "none",
         message: holder ? holder.split(":")[0].slice(0, 64) : "" });
     }
