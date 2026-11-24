@@ -918,14 +918,19 @@ class BuyLabFlow {
         snapshot = await this.runTask("openOption", {});
       } catch (error) {
         if (error?.code === "stopped" || error?.code === "blocked") throw error;
+        console.warn(`[options ${this.supplier}] open: ${error?.message || error}`);
         return;
       }
-      if (snapshot.status !== "done") return; // no row left to settle
+      if (snapshot.status !== "done") { // no row left to settle
+        console.warn(`[options ${this.supplier}] open ended ${snapshot.status}`);
+        return;
+      }
       const text = String(snapshot.results?.options || "");
       const options = packOptions(text);
       const line = this.lines.find((one) => options.some((option) => partKey(option.mpn) === partKey(one.mpn)));
       const choice = line && !tried.has(line) ? pickPackOption(options, line) : -1;
       if (line) tried.add(line);
+      console.warn(`[options ${this.supplier}] ${line?.mpn || "?"} (${line?.packaging || "no packaging"}) -> ${choice} of ${JSON.stringify(options)}`);
       if (choice < 0) {
         await this.runTask("closeOption", {}).catch(() => {});
         // Its row stays: the next one is reached only past it, so stop here.
