@@ -12,27 +12,13 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 const versionArg = process.argv.find((arg) => arg.startsWith("--bom-desktop-version="));
-// Every supplier the Buy lab has a profile for (main.js BUY_LAB_SUPPLIERS).
-const suppliersArg = process.argv.find((arg) => arg.startsWith("--bom-desktop-suppliers="));
-const suppliers = suppliersArg ? suppliersArg.slice("--bom-desktop-suppliers=".length).split(",").filter(Boolean) : [];
 
 contextBridge.exposeInMainWorld("o2Desktop", Object.freeze({
   platform: process.platform,
   version: versionArg ? versionArg.slice("--bom-desktop-version=".length) : "",
   openSupplier: (id) => ipcRenderer.invoke("desktop:open-supplier", String(id)),
-  openBuyLab: () => ipcRenderer.invoke("desktop:open-buy-lab"),
-  // A seller being bought: its own page with the cart (the Buy lab's), else its supplier window.
-  // With { view: "cart" } or { view: "order", order }: at that step of the order.
-  openSellerPage: (id, options) => ipcRenderer.invoke("desktop:open-seller-page", String(id),
-    options && typeof options === "object" ? { view: String(options.view || ""), order: String(options.order || "") } : null),
-  // Buying hands the orders of these suppliers to the Buy lab, which runs
-  // them in the person's own Chrome: start({ orders: [{ supplier, lines:
-  // [{ part, quantity }] }], address, reference }) -> { ok, started, skipped,
-  // addressUsed, addressNote }.
-  buyLab: Object.freeze({
-    suppliers: Object.freeze(suppliers),
-    start: (payload) => ipcRenderer.invoke("desktop:buy-lab-start", payload),
-  }),
+  // A seller being bought: its own supplier window.
+  openSellerPage: (id) => ipcRenderer.invoke("desktop:open-seller-page", String(id)),
   updates: Object.freeze({
     status: () => ipcRenderer.invoke("desktop:update-status"),
     check: () => ipcRenderer.invoke("desktop:update-check"),

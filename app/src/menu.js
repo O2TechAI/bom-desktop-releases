@@ -5,7 +5,7 @@
  * an unpacked development run. Suppliers opens a supplier's own window
  * (automation/window.js). */
 
-function buildMenuTemplate({ platform, packaged, t, openInBrowser, suppliers = [], openSupplier = () => {}, openBuyLab = () => {} }) {
+function buildMenuTemplate({ platform, packaged, t, openInBrowser, suppliers = [], openSupplier = () => {} }) {
   const isMac = platform === "darwin";
   const view = [
     { role: "reload" },
@@ -22,7 +22,6 @@ function buildMenuTemplate({ platform, packaged, t, openInBrowser, suppliers = [
     ...(isMac ? [{ role: "appMenu" }] : [{ role: "fileMenu" }]),
     { role: "editMenu" },
     { role: "viewMenu", submenu: view },
-    { label: t("buy_lab"), click: () => openBuyLab() },
     ...(suppliers.length ? [{
       label: t("suppliers"),
       submenu: suppliers.map((site) => ({ label: site.name, click: () => openSupplier(site.id) })),
