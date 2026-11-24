@@ -362,7 +362,10 @@ const TRANSITIONS = [
       { do: "fill", target: "search.input", value: "{{part}}" },
       { do: "wait", ms: 400 },
       { do: "click", target: "search.submit", navigates: true },
-      { do: "waitForUrl", pattern: /products\/result|product-detail/i, timeout: 20000 },
+      // A search with one match goes straight to its page, /products/detail/
+      // (2026-11-23: RC0603FR-07100KL); a security check keeps the address,
+      // so the page itself is told apart after this wait.
+      { do: "waitForUrl", pattern: /products\/(result|detail)|product-detail/i, optional: true, timeout: 20000 },
       { do: "wait", ms: 800 },
       { do: "click", target: "cookies.accept", optional: true, timeout: 2500 },
     ],

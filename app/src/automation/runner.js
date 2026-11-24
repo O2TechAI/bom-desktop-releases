@@ -329,7 +329,8 @@ class Runner {
       // An optional step is skipped when its target isn't there or can't be reached.
       // A wait for a change that did not come is skipped too (2026-11-24:
       // Mouser goes to the cart instead of changing its count).
-      const missing = error instanceof AutomationError && ["not_found", "not_visible", "covered", "unchanged"].includes(error.code);
+      const missing = error instanceof AutomationError && (["not_found", "not_visible", "covered", "unchanged"].includes(error.code)
+        || (step.do === "waitForUrl" && error.code === "timeout"));
       if (!(step.optional && missing)) throw error;
       view.status = "skipped";
     }
