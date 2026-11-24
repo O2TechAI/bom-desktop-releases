@@ -1146,6 +1146,9 @@ class BuyLabFlow {
       changed = true;
       const cart = finished(await this.runTask("openCart"));
       const now = rowOf(Array.isArray(cart.results?.cart) ? cart.results.cart : [], line);
+      if (rowPack(now) !== line.packaging) {
+        console.warn(`[packaging ${this.supplier}] ${line.mpn} still ${rowPack(now)} after switching to ${names[line.packaging]}: ${String(now?.text || "").replace(/\s+/g, " ").slice(0, 300)}`);
+      }
       if (now && amount(now.quantity) !== Number(line.buyQuantity || line.quantity)) {
         // The packaging needs another quantity: back to what it was.
         await this.runTask("setPack", { part: line.mpn, pack: names[pack] || "Cut Tape" }).catch(() => null);
