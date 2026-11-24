@@ -889,8 +889,11 @@ class BuyLabFlow {
     const wanted = new Set(this.lines.map((line) => partKey(line.mpn)));
     const known = (row) => wanted.has(partKey(row.part))
       || [...wanted].some((key) => key.length >= 6 && partKey(row.text).includes(key));
-    const left = rows.filter((row) => !known(row)).map((row) => row.part || row.text);
-    if (left.length) throw new Error(`The cart still has other items: ${left.slice(0, 3).join(", ")}`);
+    // Lines the app could not remove stay for the person: the cart check
+    // shows them as not on the list, rather than the whole supplier failing
+    // (2026-11-24: an earlier test's C1525 left in the LCSC cart failed all
+    // three lines of a new order).
+    this.leftInCart = rows.filter((row) => !known(row)).map((row) => row.part || row.text);
     this.freshCart = rows;
     return true;
   }

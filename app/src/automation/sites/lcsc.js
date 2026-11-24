@@ -335,7 +335,9 @@ module.exports = {
     "cart.select": {
       title: T("Tick this line", "勾选这一行", "Marcar esta línea"),
       within: CART_ROW,
-      any: [{ role: "checkbox" }, { css: "input[type=checkbox]" }, { css: ".v-input--checkbox" }],
+      // The visible box first: the input behind it is hidden (2026-11-24).
+      any: [{ css: ".v-input--checkbox .v-input--selection-controls__input" }, { css: ".v-input--checkbox" },
+        { css: "[class*='checkbox' i]:not(input)" }, { role: "checkbox" }, { css: "input[type=checkbox]" }],
     },
     "cart.delete": {
       title: T("Delete", "删除", "Eliminar"),
