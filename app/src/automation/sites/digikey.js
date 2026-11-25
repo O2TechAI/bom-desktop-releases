@@ -445,7 +445,11 @@ const STATES = {
   // Any part's own page, its buy box not (yet, or any more) known: after an
   // Add to Cart it was "unknown", and each walk on from it waited out the 20 s
   // of recognising a page (2026-11-25).
-  productPage: { title: T("Product page", "商品页", "Página del producto"), match: { url: /\/products\/detail\//i } },
+  // This part's own page only: any part's page taken as the goal added the
+  // last part again under the next one's quantity (2026-11-25).
+  productPage: { title: T("Product page", "商品页", "Página del producto"), match: { url: /\/products\/detail\//i, all: ["product.ofPart"] } },
+  // Another part's page: known (no 20 s of recognising), but no goal.
+  otherProduct: { title: T("Product page", "商品页", "Página del producto"), match: { url: /\/products\/detail\//i } },
   results: { title: T("Search results", "搜索结果", "Resultados"), match: { url: /\/products\/(result|category)/i, all: ["results.exact"] } },
   // The home page Buy lab's Chrome opens on. Known by its address only, and
   // last, so it never shadows a page above. Unknown, a walk from here waited
