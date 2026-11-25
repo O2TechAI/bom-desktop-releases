@@ -236,6 +236,28 @@ const TARGETS = {
     title: T("Shipping address form", "收货地址表单", "Formulario de dirección"),
     any: [{ css: "input#ShippingAddress_AddressLine1" }],
   },
+  /* Signed in, the address page lists the account's saved addresses, one
+   * radio each, and "+ Add a New Shipping Address" (2026-11-24, live). The
+   * order's ship-to is the saved one with its postal code, else a new one. */
+  "addr.savedAny": {
+    title: T("Saved addresses", "已保存的地址", "Direcciones guardadas"),
+    any: [{ css: "tr:has(input[type=radio])" }],
+    hasText: /\d{5}/,
+  },
+  "addr.savedRow": {
+    title: T("The order's address", "订单的收货地址", "La dirección del pedido"),
+    any: [{ css: "tr:has(input[type=radio])" }],
+    hasText: "{{zip}}",
+  },
+  "addr.savedPick": {
+    title: T("The order's address", "订单的收货地址", "La dirección del pedido"),
+    within: { any: [{ css: "tr:has(input[type=radio])" }], hasText: "{{zip}}" },
+    any: [{ css: "input[type=radio]" }],
+  },
+  "addr.addNew": {
+    title: T("Add a New Shipping Address", "新增收货地址", "Añadir una dirección"),
+    any: [{ role: "link", name: /add a new shipping address/i }, { role: "button", name: /add a new shipping address/i }, { text: /add a new shipping address/i }],
+  },
   "addr.email": { title: T("Email", "邮箱", "Correo"), any: [{ css: "input#ShippingContactInfo_ShippingEmail" }] },
   "addr.phone": { title: T("Telephone", "电话", "Teléfono"), any: [{ css: "input#ShippingContactInfo_ShippingPhone" }] },
   "addr.firstName": { title: T("First name", "名", "Nombre"), any: [{ css: "input#ShippingAddress_FirstName" }] },
@@ -752,7 +774,12 @@ module.exports = {
     placeOrderWithAddress: [
       { do: "walk", to: "cart" },
       { do: "walk", to: ["shipping", "payment", "review", "confirmation"] },
-      { do: "act", name: "fillAddress", when: "addr.form" },
+      // Signed in: the saved address with the order's postal code, then on.
+      { do: "click", target: "addr.savedPick", js: true, when: "addr.savedRow", whenTimeout: 4000, optional: true },
+      { do: "click", target: "addr.continue", when: "addr.savedRow", navigates: true, optional: true, timeout: 8000 },
+      // None saved for it: a new address, filled in below.
+      { do: "click", target: "addr.addNew", when: "addr.savedAny", unless: "addr.savedRow", optional: true, timeout: 5000 },
+      { do: "act", name: "fillAddress", when: "addr.form", whenTimeout: 5000 },
       { do: "walk", to: "confirmation" },
     ],
     orders: [
