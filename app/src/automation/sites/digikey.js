@@ -677,7 +677,13 @@ const TRANSITIONS = [
     from: ["cart"],
     to: ["cart"],
     steps: [
+      // Right after a new cart the page is still settling, and a file given
+      // then was not taken (2026-11-25): a moment first, and once more if
+      // the mapping dialog doesn't come.
+      { do: "wait", ms: 1500 },
       { do: "upload", target: "cart.uploadFile", filesParam: "file" },
+      { do: "waitFor", target: "cart.mapper", optional: true, timeout: 10000 },
+      { do: "upload", target: "cart.uploadFile", filesParam: "file", unless: "cart.mapper" },
       { do: "waitFor", target: "cart.mapper", timeout: 20000 },
       { do: "select", target: "cart.mapPartColumn", option: "{{partColumn}}" },
       { do: "select", target: "cart.mapQtyColumn", option: "Quantity" },
