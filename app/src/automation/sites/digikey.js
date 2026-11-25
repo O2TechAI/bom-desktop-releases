@@ -199,6 +199,14 @@ const TARGETS = {
     title: T("Loading", "加载中", "Cargando"),
     any: [{ css: "#loadingDiv.ui-widget-overlay, #loadingDiv" }],
   },
+  /* The Value Calculator after Add to Cart: "A lower extended price is
+   * available at a higher quantity", the asked quantity chosen, and Add
+   * (2026-11-25: without it the part never went in, and nothing said so). */
+  "product.valueCalcAdd": {
+    title: T("Add", "加入", "Añadir"),
+    within: { any: [{ css: ".dk-modal.visible" }, { role: "dialog" }], hasText: /value calculator|lower extended price/i },
+    any: [{ css: "#primary-add" }, { role: "button", name: /^add$/i }],
+  },
   "cart.viewOptions": {
     title: T("View Options", "查看选项", "Ver opciones"),
     any: [{ role: "button", name: /^view options$/i }],
@@ -212,7 +220,9 @@ const TARGETS = {
   "cart.optionsLoaded": {
     title: T("Packaging options", "包装选项", "Opciones de empaque"),
     any: [{ css: "#dialog-suggestions.visible .dk-modal__content" }],
-    hasText: /valid options are[\s\S]*-ND/i,
+    // Also DigiKey's Value Calculator ("A lower extended price is available
+    // at a higher quantity", 2026-11-25): the list's own quantity is kept.
+    hasText: /(valid options are|lower extended price)[\s\S]*-ND/i,
   },
   "cart.optionChoice": {
     title: T("The packaging", "该包装", "El empaque"),
@@ -577,6 +587,7 @@ const TRANSITIONS = [
       { do: "click", target: "product.packChosen", when: "product.packaging", whenTimeout: 2000, optional: true, timeout: 3000 },
       { do: "wait", ms: 1000 },
       { do: "click", target: "product.addToCart", timeout: 15000 },
+      { do: "click", target: "product.valueCalcAdd", optional: true, timeout: 2500 },
       { do: "waitForChange", target: "cart.count", from: "cartBefore", or: "cart.added", optional: true, timeout: 10000 },
       { do: "click", target: "product.continueShopping", optional: true, timeout: 5000 },
       { do: "wait", ms: 500 },
