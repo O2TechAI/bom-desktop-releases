@@ -179,6 +179,11 @@ class SupplierBrowser extends EventEmitter {
     }
 
     let lastError = null;
+    // The last Chrome on this profile may still be closing (the app was
+    // restarted, 2026-11-25: Mouser did not start and its order stopped):
+    // a few seconds, and again.
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (attempt) await new Promise((resolve) => setTimeout(resolve, 4000));
     for (const choice of choices) {
       try {
         const context = await chromium.launchPersistentContext(profilePath, {
@@ -215,6 +220,8 @@ class SupplierBrowser extends EventEmitter {
         // already in use is not fixed by switching, so stop there.
         if (/ProcessSingleton|profile.*in use|already in use/i.test(`${error.message}`)) break;
       }
+    }
+    if (!/ProcessSingleton|in use|has been closed/i.test(`${lastError?.message}`)) break;
     }
     throw lastError || new Error("Chrome did not start");
   }

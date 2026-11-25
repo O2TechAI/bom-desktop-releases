@@ -372,7 +372,8 @@ function compareCart(lines, rows, expected = {}) {
     if (!row) issue = "missing";
     else if (amount(row.quantity) !== Number(line.buyQuantity || line.quantity)) issue = "quantity";
     // No price for it (2026-11-24: a reel-only number at 10 showed 0.00000).
-    else if (unitPrice === 0) issue = "unpriced";
+    // (A sample at $0 beside its price, LCSC's "$0 $0.0021", is priced.)
+    else if (unitPrice === 0 && !/[1-9]/.test(String(row.unitPrice || ""))) issue = "unpriced";
     else if (line.packaging && rowPack(row) && rowPack(row) !== line.packaging) issue = "packaging";
     else if (unitPrice != null && expectedPrice != null && unitPrice > expectedPrice + 1e-9) issue = "price";
     return {
