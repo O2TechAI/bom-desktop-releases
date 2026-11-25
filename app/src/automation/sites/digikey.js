@@ -537,9 +537,13 @@ const TRANSITIONS = [
       { do: "peek", target: "cart.count", as: "cartBefore" },
       // Several packagings: cut tape, as a small quantity is sold.
       // No Cut Tape button (the word only in its specifications): the page's own choice stays (2026-11-24).
-      { do: "click", target: "product.packChosen", when: "product.packaging", whenTimeout: 2000, optional: true, timeout: 3000 },
-      { do: "wait", ms: 800 },
+      // The quantity first: on a narrow page the packaging options only show
+      // once it is typed, and they push Add to Cart down; a click aimed
+      // before they showed hit nothing (2026-11-24, MMBT2222ALT1G).
       { do: "fill", target: "product.quantity", value: "{{quantity}}" },
+      { do: "wait", ms: 1500 },
+      { do: "click", target: "product.packChosen", when: "product.packaging", whenTimeout: 2000, optional: true, timeout: 3000 },
+      { do: "wait", ms: 1000 },
       { do: "click", target: "product.addToCart", timeout: 15000 },
       { do: "waitForChange", target: "cart.count", from: "cartBefore", or: "cart.added", optional: true, timeout: 10000 },
       { do: "click", target: "product.continueShopping", optional: true, timeout: 5000 },
