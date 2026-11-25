@@ -665,7 +665,35 @@ class Runner {
   }
 
   /** The page's address and visible buttons, for the app's log (2026-11-23). */
+  /** A page the app did not know, or a step that failed on it: its address,
+   * outline (the operable parts) and a picture, kept on disk by seller so the
+   * site maps can be brought up to date in one go (2026-11-24: "把所有可能的
+   * 页面都看一遍"). The last 300 per seller are kept. */
+  async capturePage(label) {
+    const root = process.env.O2_PAGE_LOG_DIR;
+    if (!root) return;
+    try {
+      const fs = require("node:fs");
+      const path = require("node:path");
+      const dir = path.join(root, String(this.profile.id || "site"));
+      fs.mkdirSync(dir, { recursive: true });
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const name = `${stamp}-${String(label).replace(/[^a-z0-9]+/gi, "-").slice(0, 40)}`;
+      const outline = await this.driver.outline(400).catch(() => null);
+      const url = this.driver.contents.getURL?.() || "";
+      const step = this.lastStep ? { do: this.lastStep.do, target: this.lastStep.target || null, name: this.lastStep.name || null } : null;
+      fs.writeFileSync(path.join(dir, `${name}.json`), JSON.stringify({ label, task: this.task, state: this.state || null, step, url, outline }, null, 1));
+      const png = await this.driver.screenshot().catch(() => null);
+      if (png) fs.writeFileSync(path.join(dir, `${name}.png`), png);
+      const files = fs.readdirSync(dir).filter((file) => file.endsWith(".json")).sort();
+      for (const old of files.slice(0, Math.max(0, files.length - 300))) {
+        for (const ext of [".json", ".png"]) { try { fs.unlinkSync(path.join(dir, old.replace(/\.json$/, ext))); } catch { /* gone */ } }
+      }
+    } catch { /* only a record */ }
+  }
+
   async logPage(label) {
+    void this.capturePage(label);
     try {
       const contextId = await this.driver.world();
       const { result } = await this.driver.send("Runtime.evaluate", {
@@ -734,6 +762,7 @@ class Runner {
             expression: `JSON.stringify({ url: location.href, h1: (document.querySelector("h1")?.innerText || "").slice(0, 80), buttons: [...document.querySelectorAll("button, input[type=submit], a[role=button]")].filter((b) => b.offsetParent !== null).map((b) => [b.id, b.getAttribute("data-testid"), (b.innerText || b.value || "").trim().slice(0, 30)].filter(Boolean).join("|")).filter(Boolean).slice(0, 25) })`,
           });
           console.warn(`[unknown ${this.profile.id}] ${String(result?.value || "").slice(0, 1500)}`);
+          void this.capturePage("unknown");
         } catch { /* only for the log */ }
       }
       // Lost mid-way, or going round in circles: the person takes over.

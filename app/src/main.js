@@ -623,6 +623,8 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.whenReady().then(() => {
+    // Where the Buy lab keeps pages it did not know (runner.capturePage).
+    process.env.O2_PAGE_LOG_DIR = path.join(app.getPath("userData"), "buy-lab", "pages");
     language = languageFor(app.getLocale());
     t = translator(app.getLocale());
     const ses = configureSession();
