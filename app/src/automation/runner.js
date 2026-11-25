@@ -686,6 +686,11 @@ class Runner {
           expression: `JSON.stringify([...document.querySelectorAll("input[type=radio]")].filter((r) => r.offsetParent !== null).slice(0, 10).map((r) => [r.id, r.name, r.value, r.disabled, r.parentElement?.tagName + "." + String(r.parentElement?.className).slice(0, 30), (r.parentElement?.textContent || "").trim().replace(/\s+/g, " ").slice(0, 50), r.nextElementSibling?.tagName || "", r.labels?.length || 0].join("|")))`,
         });
         console.warn(`[radios ${this.profile.id}] ${String(radios?.value || "").slice(0, 2500)}`);
+        const { result: dialogs } = await this.driver.send("Runtime.evaluate", {
+          contextId, returnByValue: true,
+          expression: `JSON.stringify([...document.querySelectorAll(".ui-dialog, [role=dialog]")].filter((d) => d.offsetParent !== null).map((d) => ({ cls: String(d.className).slice(0, 60), frames: [...d.querySelectorAll("iframe")].map((f) => f.src), html: d.innerHTML.replace(/\s+/g, " ").slice(0, 1500) })))`,
+        });
+        console.warn(`[dialogs ${this.profile.id}] ${String(dialogs?.value || "").slice(0, 3000)}`);
       }
     } catch { /* only for the log */ }
   }
