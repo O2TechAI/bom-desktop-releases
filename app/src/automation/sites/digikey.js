@@ -193,6 +193,12 @@ const TARGETS = {
   /* A line the BOM file left at "View Options" (2026-11-24, live): its
    * button, the options dialog (#dialog-suggestions), one radio per option
    * (#suggestion0...), and Add / Cancel. */
+  /* The cart's loading cover while it refreshes after a change (2026-11-25:
+   * it covered View Options and the rest of the lines went by search). */
+  "cart.busy": {
+    title: T("Loading", "加载中", "Cargando"),
+    any: [{ css: "#loadingDiv.ui-widget-overlay, #loadingDiv" }],
+  },
   "cart.viewOptions": {
     title: T("View Options", "查看选项", "Ver opciones"),
     any: [{ role: "button", name: /^view options$/i }],
@@ -768,6 +774,7 @@ module.exports = {
       { do: "wait", ms: 6000 },
     ],
     openOption: [
+      { do: "waitForHidden", target: "cart.busy", optional: true, timeout: 20000 },
       { do: "click", target: "cart.viewOptions", timeout: 1500 },
       { do: "waitFor", target: "cart.optionsLoaded", timeout: 15000 },
       { do: "read", target: "cart.optionsLoaded", as: "options" },
@@ -776,7 +783,8 @@ module.exports = {
       { do: "click", target: "cart.optionChoice", js: true },
       { do: "click", target: "cart.optionsAdd" },
       { do: "waitForHidden", target: "cart.optionsDialog", timeout: 15000 },
-      { do: "wait", ms: 1000 },
+      { do: "wait", ms: 800 },
+      { do: "waitForHidden", target: "cart.busy", optional: true, timeout: 20000 },
     ],
     closeOption: [{ do: "click", target: "cart.optionsCancel" }, { do: "waitForHidden", target: "cart.optionsDialog", timeout: 10000 }],
     openCart: [

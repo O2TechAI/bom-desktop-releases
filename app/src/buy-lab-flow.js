@@ -987,6 +987,12 @@ class BuyLabFlow {
         console.warn(`[options ${this.supplier}] open: ${error?.message || error}`);
         return;
       }
+      // Covered while the cart refreshed: a moment, and again (2026-11-25).
+      const covered = snapshot.status !== "done" && snapshot.steps?.some((step) => step.error?.code === "covered");
+      if (covered && round < this.lines.length + 1) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        continue;
+      }
       if (snapshot.status !== "done") { // no row left to settle
         console.warn(`[options ${this.supplier}] open ended ${snapshot.status}`);
         return;
