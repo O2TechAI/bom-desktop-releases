@@ -181,6 +181,11 @@ const TARGETS = {
     title: T("Quantity column", "数量列", "Columna de cantidad"),
     any: [{ css: "#dialog-mapper select[name=column1]" }],
   },
+  /* The file is DigiKey number, maker's number, quantity (2026-11-25). */
+  "cart.mapColumn2": {
+    title: T("Quantity column", "数量列", "Columna de cantidad"),
+    any: [{ css: "#dialog-mapper select[name=column2]" }],
+  },
   "cart.mapStartRow": {
     title: T("First part row", "首行料号所在行", "Primera fila de piezas"),
     any: [{ css: "#dialog-mapper input#StartRow" }],
@@ -685,8 +690,9 @@ const TRANSITIONS = [
       { do: "waitFor", target: "cart.mapper", optional: true, timeout: 10000 },
       { do: "upload", target: "cart.uploadFile", filesParam: "file", unless: "cart.mapper" },
       { do: "waitFor", target: "cart.mapper", timeout: 20000 },
-      { do: "select", target: "cart.mapPartColumn", option: "{{partColumn}}" },
-      { do: "select", target: "cart.mapQtyColumn", option: "Quantity" },
+      { do: "select", target: "cart.mapPartColumn", option: "DigiKey Part Number" },
+      { do: "select", target: "cart.mapQtyColumn", option: "Manufacturer Part Number" },
+      { do: "select", target: "cart.mapColumn2", option: "Quantity" },
       // The file's first row is its header; the parts start on row 2.
       { do: "fill", target: "cart.mapStartRow", value: "2" },
       { do: "click", target: "cart.mapAdd" },

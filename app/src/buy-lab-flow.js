@@ -42,7 +42,16 @@ function parseLines(text) {
 
 
 /** A CSV the supplier's BOM tool can read: part and quantity per line. */
-function writeBomFile(siteId, lines, numberFor = (line) => line.mpn) {
+function writeBomFile(siteId, lines, numberFor = (line) => line.mpn, ownFor = null) {
+  // DigiKey: its own number where one is known, beside the maker's
+  // (2026-11-25: a maker's number two sellers list was refused as a
+  // "Duplicate manufacturer part"; its own number is not).
+  if (siteId === "digikey" && ownFor) {
+    const rows = lines.map((line) => `${ownFor(line) || ""},${line.mpn},${line.quantity}`).join("\n");
+    const own = path.join(os.tmpdir(), `o2-bom-${siteId}-${process.pid}-${Date.now()}.csv`);
+    fs.writeFileSync(own, `DigiKey Part Number,Manufacturer Part Number,Quantity\n${rows}\n`, "utf8");
+    return own;
+  }
   const header = siteId === "lcsc" ? "LCSC Part Number,Quantity" : "Part Number,Quantity";
   const body = lines.map((line) => `${numberFor(line)},${line.quantity}`).join("\n");
   const file = path.join(os.tmpdir(), `o2-bom-${siteId}-${process.pid}-${Date.now()}.csv`);
@@ -860,9 +869,9 @@ class BuyLabFlow {
       if (site.tasks.bulkAddBom) {
         // DigiKey's own numbers when every line has one from an earlier cart.
         const known = this.supplier === "digikey" ? (this.store?.sellerParts?.("digikey") || {}) : {};
-        const own = this.lines.every((line) => known[sellerPartKey(line)]);
-        const numberFor = own ? (line) => known[sellerPartKey(line)] : (line) => line.mpn;
-        const file = writeBomFile(this.supplier, this.lines, numberFor);
+        const numberFor = (line) => line.mpn;
+        const ownFor = this.supplier === "digikey" ? (line) => known[sellerPartKey(line)] || null : null;
+        const file = writeBomFile(this.supplier, this.lines, numberFor, ownFor);
         try {
           snapshot = await this.runTask("bulkAddBom", { file, partColumn: partColumnFor(this.lines, numberFor) });
         } finally {
