@@ -230,6 +230,10 @@ function install(theme) {
     // A same-origin iframe found by `within` is searched inside (2026-11-24:
     // Mouser's Packaging Choice is a page in a dialog's iframe).
     const roots = spec.within ? candidates(spec.within, root).filter(isVisible).map(insideFrame) : [root];
+    // The first strategy that finds something visible; else the first that
+    // finds anything (2026-11-24: Mouser's hidden "See Shipping Options" was
+    // taken over the Continue under it).
+    let hidden = null;
     for (const part of spec.any) {
       let found = [];
       for (const scope of roots) found.push(...strategy(scope, part));
@@ -238,9 +242,11 @@ function install(theme) {
         const test = containing(spec.hasText);
         found = found.filter((element) => test(textOf(element)));
       }
-      if (found.length) return found;
+      if (!found.length) continue;
+      if (spec.hidden || found.some(isVisible)) return found;
+      hidden ||= found;
     }
-    return [];
+    return hidden || [];
   }
 
   function remember(element) {
