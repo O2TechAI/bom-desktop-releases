@@ -145,6 +145,11 @@ function install(theme) {
     return normalize(element.getAttribute("title") || element.getAttribute("placeholder") || "");
   }
 
+  function insideFrame(element) {
+    if (element.localName !== "iframe") return element;
+    try { return element.contentDocument || element; } catch { return element; }
+  }
+
   function isVisible(element) {
     if (!element.isConnected) return false;
     if (typeof element.checkVisibility === "function" &&
@@ -222,7 +227,9 @@ function install(theme) {
   /* Every element a target spec matches, in the order its strategies are
    * listed: the first strategy that finds something wins. */
   function candidates(spec, root = document) {
-    const roots = spec.within ? candidates(spec.within, root).filter(isVisible) : [root];
+    // A same-origin iframe found by `within` is searched inside (2026-11-24:
+    // Mouser's Packaging Choice is a page in a dialog's iframe).
+    const roots = spec.within ? candidates(spec.within, root).filter(isVisible).map(insideFrame) : [root];
     for (const part of spec.any) {
       let found = [];
       for (const scope of roots) found.push(...strategy(scope, part));
