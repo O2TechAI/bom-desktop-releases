@@ -212,7 +212,7 @@ class BuyLabWindow {
 
   /** The list, the live page of one supplier (`id`, else the active one), or
    * "split": that supplier's cart check beside its live page. */
-  showView(name, id = this.active) {
+  showView(name, id = this.active, { plain = false } = {}) {
     if (this.closed) return;
     // Opened from Orders: the supplier page is the only page this window
     // shows; there is no list to go back to (2026-11-23). Its cart check is
@@ -223,9 +223,19 @@ class BuyLabWindow {
     // opened: a tab, Open website, or the app coming forward.
     const target = id && this.lives.has(id) ? id : this.active;
     const waitingState = target ? this.flows.get(target)?.state() : null;
-    if (name === "live" && (waitingState?.cartCheck || waitingState?.confirm)) name = "split";
+    // Not for a placed order's own page, opened from its card (2026-11-24):
+    // that page alone, though another order waits at this seller's cart.
+    this.plainView = plain && name === "live" ? target : null;
+    if (name === "live" && !plain && (waitingState?.cartCheck || waitingState?.confirm)) name = "split";
     const was = this.view;
     this.view = name === "live" || name === "split" ? name : "flow";
+    // Back at a cart check after the page went to an order's page: the cart.
+    if (this.view === "split" && target && this.awayFromCart?.has(target)) {
+      this.awayFromCart.delete(target);
+      const site = this.sites.find((entry) => entry.id === target);
+      const live = this.lives.get(target);
+      if (site?.urls?.cart && live) void live.page.goto(site.urls.cart).then(() => this.revealCart(target)).catch(() => {});
+    }
     if (this.view !== "flow" && id && this.lives.has(id)) this.active = id;
     // Leaving the side-by-side view: the shop goes back to its usual size.
     if (was === "split" && this.view !== "split") void this.lives.get(this.active)?.setSize();
@@ -287,7 +297,7 @@ class BuyLabWindow {
     // The check is over (confirmed, or the run went on): its page alone again.
     if (this.view === "split" && this.active === id && !state.cartCheck && !state.confirm) this.showView("live", id);
     // The check began while its page was open: the two halves.
-    else if (this.view === "live" && this.active === id && (state.cartCheck || state.confirm)) this.showView("split", id);
+    else if (this.view === "live" && this.active === id && this.plainView !== id && (state.cartCheck || state.confirm)) this.showView("split", id);
     // A check is handed to Chrome's own window (onChallenge); the canvas is
     // only for sign-ins and refusals that the person handles in the app,
     // shown for the supplier that is waiting.
@@ -420,11 +430,11 @@ class BuyLabWindow {
     if (!this.returnTo) this.hideOnBack = !this.window.isVisible();
     this.returnTo = "site";
     this.liveOnly = true;
-    this.showView("live", id);
+    this.showView("live", id, { plain: view === "order" && Boolean(order) });
     if (!this.window.isDestroyed()) this.window.show();
     this.focus();
     const flow = this.flows.get(id);
-    const free = !flow?.running && flow?.status !== "waiting";
+    const free = this.pageFree(flow);
     if (free && view === "order" && order) void this.trackOrder(id, order);
     else if (free && view === "cart" && site.urls?.cart) {
       void live.page.goto(site.urls.cart).then(() => this.revealCart(id)).catch(() => {});
@@ -713,18 +723,31 @@ class BuyLabWindow {
    * null when it is busy. A page that wants the person (signed out) is left
    * alone and reported as such: tracking never asks anything of anyone.
    */
+  /** Whether the seller's page may be taken to another page: no purchase
+   * there, or one only waiting at its cart check (the app isn't using the
+   * page then; 2026-11-24: an order's page did not open while another order
+   * sat at the cart). Never while it waits for the order's yes at checkout. */
+  pageFree(flow) {
+    if (!flow) return true;
+    if (!flow.running && flow.status !== "waiting") return true;
+    const state = flow.state();
+    return state.status === "waiting" && Boolean(state.cartCheck) && !state.confirm && !flow.driving?.();
+  }
+
   async trackOrder(seller, number) {
     const flow = this.flows.get(seller);
     const site = this.sites.find((entry) => entry.id === seller);
     if (!flow || !site?.tasks?.track || !number) return null;
     this.tracking = this.tracking || new Set();
-    if (flow.running || flow.status === "waiting" || this.tracking.has(seller)) return null;
+    if (!this.pageFree(flow) || this.tracking.has(seller)) return null;
     this.tracking.add(seller);
     let runner = null;
     let timer = null;
     try {
       const live = await this.ensureSite(seller);
-      if (!live || flow.running) return null;
+      if (!live || !this.pageFree(flow)) return null;
+      // A cart check waits on this page: it goes back to the cart when shown.
+      if (flow.running) (this.awayFromCart ||= new Set()).add(seller);
       let needsPerson = false;
       let why = "";
       runner = new Runner({
