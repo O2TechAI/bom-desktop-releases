@@ -284,6 +284,7 @@ class Runner {
     this.status = "running";
     this.lastNavigationAt = Date.now();
     this.emit();
+    this.startedAt = Date.now();
     try {
       await this.driver.attach();
       const views = [...this.steps];
@@ -293,6 +294,7 @@ class Runner {
         await new Promise((resolve) => setTimeout(resolve, STEP_GAP));
       }
       this.status = "done";
+      console.warn(`[task ${this.profile.id}] ${new Date().toISOString().slice(11, 19)} ${this.task} done in ${Math.round((Date.now() - this.startedAt) / 1000)}s`);
     } catch (error) {
       const stoppedNow = error instanceof AutomationError && error.code === "stopped";
       this.status = stoppedNow ? "stopped" : "failed";
@@ -308,7 +310,7 @@ class Runner {
       if (!stoppedNow) {
         // Which step, for the app's log (2026-11-24: a packaging switch failed with no step named).
         const last = this.lastStep ? `${this.lastStep.do}${this.lastStep.target ? ` ${this.lastStep.target}` : ""}${this.lastStep.name ? ` ${this.lastStep.name}` : ""}` : "?";
-        console.error(`Automation step failed (${this.task}: ${last}): ${error.stack || error.message}`);
+        console.error(`Automation step failed ${new Date().toISOString().slice(11, 19)} (${this.task}: ${last}): ${error.stack || error.message}`);
         await this.logPage(`failed ${this.task}`);
       }
     } finally {
@@ -784,7 +786,7 @@ class Runner {
       const before = this.driver.contents.getURL?.() || "";
       const next = await this.take(transition, view, state);
       // One line per move, for the app's log (2026-11-23: a walk that went round unseen).
-      console.warn(`[walk ${this.profile.id}] ${state} --${transition.name}--> ${next} | ${String(before).slice(0, 90)} -> ${String(this.driver.contents.getURL?.() || "").slice(0, 90)}`);
+      console.warn(`[walk ${this.profile.id}] ${new Date().toISOString().slice(11, 19)} ${state} --${transition.name}--> ${next} | ${String(before).slice(0, 90)} -> ${String(this.driver.contents.getURL?.() || "").slice(0, 90)}`);
       // Stuck only when the click left the page where it was: a page in two
       // parts (Mouser's shipping, backorder choice then ship method) moves on
       // at the same state (2026-11-24); visits still end a loop.
