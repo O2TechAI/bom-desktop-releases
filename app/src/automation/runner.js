@@ -780,7 +780,10 @@ class Runner {
       const next = await this.take(transition, view, state);
       // One line per move, for the app's log (2026-11-23: a walk that went round unseen).
       console.warn(`[walk ${this.profile.id}] ${state} --${transition.name}--> ${next} | ${String(before).slice(0, 90)} -> ${String(this.driver.contents.getURL?.() || "").slice(0, 90)}`);
-      if (next === state && info?.stuck) {
+      // Stuck only when the click left the page where it was: a page in two
+      // parts (Mouser's shipping, backorder choice then ship method) moves on
+      // at the same state (2026-11-24); visits still end a loop.
+      if (next === state && info?.stuck && String(this.driver.contents.getURL?.() || "") === String(before)) {
         // The page didn't let the app on (a payment to choose): the person's turn.
         await this.personAt(state, info.stuck, view);
         visits[state] = 0;
