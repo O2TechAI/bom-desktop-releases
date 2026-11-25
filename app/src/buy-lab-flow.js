@@ -618,6 +618,12 @@ class BuyLabFlow {
    * show the person what to do. */
   observe(snapshot) {
     this.lastChangeAt = Date.now();
+    // Asked to stop softly, and now waiting for the person: nothing is in
+    // hand any more, so it stops (2026-11-25).
+    if (snapshot.status === "waiting" && this.softStop) {
+      this.softStop = false;
+      this.runner?.stop();
+    }
     if (snapshot.status === "waiting") {
       this.status = "waiting";
       this.message = snapshot.confirming
@@ -1241,7 +1247,10 @@ class BuyLabFlow {
    * cart; a second Stop, or a hard one, stops at once. Waiting on the
    * person, it stops at once. */
   stop({ soft = false } = {}) {
-    if (soft && this.driving() && !this.softStop) {
+    // A soft stop waits for the line in hand: only while lines are being
+    // added. In checkout it never came, and a cancelled order went on to the
+    // payment page and held the supplier there (2026-11-25).
+    if (soft && this.driving() && !this.softStop && this.progress < STAGE.ADDED) {
       this.softStop = true;
       this.stopRequested = true;
       this.emit({ message: this.message });
