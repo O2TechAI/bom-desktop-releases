@@ -676,6 +676,7 @@ class BuyLabWindow {
       return { ok: false, reason: "busy", holder: String(flow.resumeKey).split(":")[0] };
     }
     const state = flow.state();
+    if (state.confirm || state.cartCheck) console.warn(`[yes ${state.confirm ? "order" : "cart"} ${seller}] ${new Date().toISOString()} by BOM Continue (${code})`);
     if (state.confirm) return { ok: Boolean(flow.approve()), where: "order" };
     if (state.cartCheck) return { ok: Boolean(flow.confirmCart()), where: "cart" };
     if (state.canResume) {
@@ -892,8 +893,17 @@ function registerBuyLabIpc() {
   });
   ipcMain.handle("buy-lab:delete-address", (event, id) => ownerOf(event)?.addresses.remove(String(id || "")) ?? false);
   ipcMain.handle("buy-lab:stop", (event, id, options) => ownerOf(event)?.stop(String(id || ""), { soft: Boolean(options?.soft) }) ?? false);
-  ipcMain.handle("buy-lab:confirm", (event, id) => ownerOf(event)?.confirm(String(id || "")) ?? false);
-  ipcMain.handle("buy-lab:confirm-cart", (event, id) => ownerOf(event)?.confirmCart(String(id || "")) ?? false);
+  // Every yes is logged with what gave it (2026-11-25: a cart check was
+  // confirmed and nobody knew by whom).
+  ipcMain.handle("buy-lab:confirm", (event, id, by) => {
+    console.warn(`[yes order ${id}] ${new Date().toISOString()} by ${String(by || "?")}`);
+    return ownerOf(event)?.confirm(String(id || "")) ?? false;
+  });
+  ipcMain.handle("buy-lab:confirm-cart", (event, id, by) => {
+    const flow = ownerOf(event)?.flows?.get(String(id || ""));
+    console.warn(`[yes cart ${id}] ${new Date().toISOString()} by ${String(by || "?")} for ${flow?.resumeKey || "?"}`);
+    return ownerOf(event)?.confirmCart(String(id || "")) ?? false;
+  });
   ipcMain.handle("buy-lab:recheck-cart", (event, id) => ownerOf(event)?.recheckCart(String(id || "")) ?? false);
   ipcMain.handle("buy-lab:resume", async (event, id) => (await ownerOf(event)?.resume(String(id || ""))) ?? false);
   ipcMain.handle("buy-lab:select", (event, id) => ownerOf(event)?.select(String(id)) ?? false);

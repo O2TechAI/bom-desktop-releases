@@ -355,8 +355,8 @@ function buildPanel(site) {
     void startOne(site.id, list.value);
   });
   stop.addEventListener("click", () => { void window.buyLab.stop(site.id, { soft: true }); });
-  confirm.addEventListener("click", () => { void window.buyLab.confirm(site.id); });
-  cartOk.addEventListener("click", () => { void window.buyLab.confirmCart(site.id); });
+  confirm.addEventListener("click", (event) => { void window.buyLab.confirm(site.id, event.isTrusted ? "click" : "synthetic"); });
+  cartOk.addEventListener("click", (event) => { void window.buyLab.confirmCart(site.id, event.isTrusted ? "click" : "synthetic"); });
   cartRecheck.addEventListener("click", () => { void window.buyLab.recheckCart(site.id); });
   cartStop.addEventListener("click", () => { void window.buyLab.stop(site.id, { soft: true }); });
   resume.addEventListener("click", () => { void window.buyLab.resume(site.id); });
