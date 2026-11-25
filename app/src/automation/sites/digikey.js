@@ -588,7 +588,9 @@ const TRANSITIONS = [
       { do: "wait", ms: 1000 },
       { do: "click", target: "product.addToCart", timeout: 15000 },
       { do: "click", target: "product.valueCalcAdd", optional: true, timeout: 2500 },
-      { do: "waitForChange", target: "cart.count", from: "cartBefore", or: "cart.added", optional: true, timeout: 10000 },
+      // Required: an add that did nothing fails here, and its page is kept
+      // (2026-11-25: parts that "went in" were not in the cart).
+      { do: "waitForChange", target: "cart.count", from: "cartBefore", or: "cart.added", timeout: 10000 },
       { do: "click", target: "product.continueShopping", optional: true, timeout: 5000 },
       { do: "wait", ms: 500 },
     ],
