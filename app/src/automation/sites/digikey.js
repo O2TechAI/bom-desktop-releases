@@ -362,6 +362,13 @@ const TARGETS = {
   /* A part DigiKey no longer sells: "Unavailable. This product is no longer
    * carried by DigiKey" where the buy box would be (2026-11-24,
    * GRM188R61A106KE69D). */
+  /* A search with no result for the part: "Sorry, "X" did not return any
+   * results" (2026-11-25, CL10B683KB8NNNC). */
+  "results.none": {
+    title: T("No result", "没有结果", "Sin resultados"),
+    any: [{ css: "h1, h2, h3, p, div, span" }],
+    hasText: /did not return any results/i,
+  },
   "product.unavailable": {
     title: T("No longer sold", "已不再销售", "Ya no se vende"),
     any: [{ css: "h2, h3, h4, p, span, div" }],
@@ -421,6 +428,8 @@ const STATES = {
   orders: { title: T("Orders", "订单记录", "Pedidos"), match: [{ url: /\/orderhistory\/list/i }, { url: /orderhistory/i, all: ["orders.rows"] }] },
   // Known on its own, so the walk ends there at once: a line that can't be
   // had, not a page for the person (it waited as "lost").
+  // Searched, and nothing has the part's number: the line can't be had here.
+  noMatch: { title: T("Not found", "没找到", "No encontrado"), match: { url: /\/products\/result/i, all: ["results.none"] } },
   notSold: {
     title: T("No longer sold", "已不再销售", "Ya no se vende"),
     match: { url: /\/products\/detail\//i, all: ["product.unavailable", "product.ofPart"] },
@@ -450,7 +459,7 @@ const TRANSITIONS = [
     name: "search",
     title: T("Search for the part", "搜索型号", "Buscar la pieza"),
     from: "*",
-    to: ["product", "results", "challenge"],
+    to: ["product", "results", "challenge", "noMatch"],
     // Search the way a person does: the shop's own page, the box, the term and
     // the search button. A cold goto of the result URL is exactly what
     // Cloudflare asks to verify first.
@@ -715,7 +724,7 @@ module.exports = {
     ],
     addToCart: [
       // A part no longer sold ends the walk too, and the add fails at once.
-      { do: "walk", to: ["product", "notSold", "productPage"] },
+      { do: "walk", to: ["product", "notSold", "productPage", "noMatch"] },
       { do: "act", name: "addToCart" },
     ],
     // The same, without the search page: everything happens in the cart.

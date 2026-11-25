@@ -108,6 +108,11 @@ const TARGETS = {
       { placeholder: /part # \/ keyword/i },
     ],
   },
+  /* The results table, whatever it lists. */
+  "results.grid": {
+    title: T("Search results", "搜索结果", "Resultados"),
+    any: [{ css: "#SearchResultsGrid_grid" }, { css: "[id^='SearchResultsGrid_'][id$='_chkSelect']" }],
+  },
   "results.exact": {
     title: T("The exact part", "完全匹配的型号", "La pieza exacta"),
     any: [
@@ -388,6 +393,9 @@ const STATES = {
     { url: /\/ProductDetail\//i, all: ["product.ofPart"] },
   ] },
   results: { title: T("Search results", "搜索结果", "Resultados"), match: { url: /\/c\//i, all: ["results.exact"] } },
+  // Results, none of them the part itself (2026-11-25: MMBD4148LT1G listed
+  // only MMBD4148,215 and the like): the line can't be had here.
+  noMatch: { title: T("Not found", "没找到", "No encontrado"), match: { url: /\/c\//i, all: ["results.grid"] } },
 };
 
 const TRANSITIONS = [
@@ -395,7 +403,7 @@ const TRANSITIONS = [
     name: "search",
     title: T("Search for the part", "搜索型号", "Buscar la pieza"),
     from: "*",
-    to: ["product", "results", "challenge"],
+    to: ["product", "results", "challenge", "noMatch"],
     steps: [{ do: "goto", url: "{{search}}" }, { do: "click", target: "cookies.accept", optional: true, timeout: 2500 }],
   },
   {
@@ -573,7 +581,7 @@ module.exports = {
       { do: "waitForUrl", pattern: /\/cart/ },
     ],
     // A part it can't sell ends the walk too, and the add fails at once.
-    addToCart: [{ do: "walk", to: ["product", "notSold"] }, { do: "act", name: "addToCart" }],
+    addToCart: [{ do: "walk", to: ["product", "notSold", "noMatch"] }, { do: "act", name: "addToCart" }],
     openCart: [
       { do: "walk", to: "cart" },
       { do: "extract", target: "cart.rows", fields: CART_FIELDS, as: "cart", optional: true, timeout: 5000 },
