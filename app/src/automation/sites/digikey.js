@@ -433,6 +433,10 @@ const STATES = {
   },
   // A search can also land on a category page with an Exact Match card
   // (2026-11-23: 1N4148W-7-F opened /products/category/diodes/rectifiers).
+  // Any part's own page, its buy box not (yet, or any more) known: after an
+  // Add to Cart it was "unknown", and each walk on from it waited out the 20 s
+  // of recognising a page (2026-11-25).
+  productPage: { title: T("Product page", "商品页", "Página del producto"), match: { url: /\/products\/detail\//i } },
   results: { title: T("Search results", "搜索结果", "Resultados"), match: { url: /\/products\/(result|category)/i, all: ["results.exact"] } },
   // The home page Buy lab's Chrome opens on. Known by its address only, and
   // last, so it never shadows a page above. Unknown, a walk from here waited
@@ -535,8 +539,8 @@ const TRANSITIONS = [
     name: "addToCart",
     title: T("Add to cart", "加入购物车", "Añadir al carrito"),
     auto: false,
-    from: ["product"],
-    to: ["product"],
+    from: ["product", "productPage"],
+    to: ["product", "productPage"],
     steps: [
       { do: "peek", target: "cart.count", as: "cartBefore" },
       // Several packagings: cut tape, as a small quantity is sold.
@@ -711,7 +715,7 @@ module.exports = {
     ],
     addToCart: [
       // A part no longer sold ends the walk too, and the add fails at once.
-      { do: "walk", to: ["product", "notSold"] },
+      { do: "walk", to: ["product", "notSold", "productPage"] },
       { do: "act", name: "addToCart" },
     ],
     // The same, without the search page: everything happens in the cart.
