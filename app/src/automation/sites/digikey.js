@@ -305,6 +305,10 @@ const TARGETS = {
     title: T("Continue to Payment", "继续到付款", "Continuar al pago"),
     any: [{ css: "#continueButton #primaryButton" }],
   },
+  "cart.uploaded": {
+    title: T("The uploaded lines", "上传后的行", "Las líneas subidas"),
+    any: [{ css: "#cartDetails tbody tr" }, { css: "[id^='PartErrorRemove']" }, { role: "button", name: /^view options$/i }],
+  },
   "cart.empty": {
     title: T("Empty cart", "空购物车", "Carrito vacío"),
     any: [{ role: "heading", name: /your (shopping )?cart is empty/i }],
@@ -664,9 +668,11 @@ const TRANSITIONS = [
       { do: "fill", target: "cart.mapStartRow", value: "2" },
       { do: "click", target: "cart.mapAdd" },
       { do: "waitForHidden", target: "cart.mapper", timeout: 20000 },
-      { do: "wait", ms: 2500 },
-      { do: "waitForHidden", target: "cart.empty", timeout: 20000 },
-      { do: "waitFor", target: "cart.rows", timeout: 20000 },
+      // Done once the cart shows what it took: lines, or lines left at View
+      // Options (the empty-cart heading stays then, and waiting for it to go
+      // cost 20 s each upload, 2026-11-24).
+      { do: "waitFor", target: "cart.uploaded", timeout: 20000 },
+      { do: "wait", ms: 800 },
     ],
   },
   {
@@ -733,7 +739,7 @@ module.exports = {
       { do: "wait", ms: 6000 },
     ],
     openOption: [
-      { do: "click", target: "cart.viewOptions", timeout: 5000 },
+      { do: "click", target: "cart.viewOptions", timeout: 1500 },
       { do: "waitFor", target: "cart.optionsLoaded", timeout: 15000 },
       { do: "read", target: "cart.optionsLoaded", as: "options" },
     ],
