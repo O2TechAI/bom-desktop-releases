@@ -58,7 +58,7 @@ const ACTIONS = new Set([
 ]);
 
 /* A short pause between steps, so a person can follow along. */
-const STEP_GAP = 250;
+const STEP_GAP = 120;
 /* How often a hand-off checks whether the person is done. */
 const HANDOFF_POLL = 1000;
 /* How long a page may take to become a state the machine knows. A shop

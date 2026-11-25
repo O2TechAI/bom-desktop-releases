@@ -747,7 +747,7 @@ module.exports = {
       { do: "click", target: "cart.optionChoice", js: true },
       { do: "click", target: "cart.optionsAdd" },
       { do: "waitForHidden", target: "cart.optionsDialog", timeout: 15000 },
-      { do: "wait", ms: 2500 },
+      { do: "wait", ms: 1000 },
     ],
     closeOption: [{ do: "click", target: "cart.optionsCancel" }, { do: "waitForHidden", target: "cart.optionsDialog", timeout: 10000 }],
     openCart: [
