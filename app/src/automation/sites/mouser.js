@@ -30,6 +30,13 @@ const CART_ROW = {
 };
 
 const TARGETS = {
+  /* "Your cart contains backordered items. How would you like them
+   * shipped?" (2026-11-24): what is in stock ships now, the rest when it
+   * comes, as DigiKey's checkout does by default (Multiple Shipments). */
+  "checkout.backorderShipNow": {
+    title: T("Send items as they become available", "有货先发", "Enviar según haya existencias"),
+    any: [{ role: "radio", name: /send items as they become available/i }, { label: /send items as they become available/i }],
+  },
   /* Checkout's next step. Signed in, the shipping page's button reads "See
    * Shipping Options" (#btnSubmitShippingOptions, 2026-11-24). */
   "checkout.next": {
@@ -434,7 +441,10 @@ const TRANSITIONS = [
     title: T("Continue", "继续", "Continuar"),
     from: ["addresses", "shipping", "payment", "checkoutStep"],
     to: ["addresses", "shipping", "payment", "checkoutStep", "review", "signIn"],
-    steps: [{ do: "click", target: "checkout.next", navigates: true }],
+    steps: [
+      { do: "click", target: "checkout.backorderShipNow", optional: true, timeout: 1500 },
+      { do: "click", target: "checkout.next", navigates: true },
+    ],
   },
   {
     /* The BOM's ship-to into the address form (billing; Mouser ships there
