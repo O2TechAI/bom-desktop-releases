@@ -30,6 +30,16 @@ const CART_ROW = {
 };
 
 const TARGETS = {
+  /* Checkout's next step. Signed in, the shipping page's button reads "See
+   * Shipping Options" (#btnSubmitShippingOptions, 2026-11-24). */
+  "checkout.next": {
+    title: T("Continue", "继续", "Continuar"),
+    any: [
+      { css: "#btnSubmitShippingOptions" },
+      { role: "button", name: /^(continue|next|save (and|&) continue|continue to (shipping|payment|review)|review (your )?order|see shipping options)$/i },
+      { css: "input[type='submit'][value*='continue' i]" },
+    ],
+  },
   /* A cart line's packaging (2026-11-24, live): its "Packaging: **Cut Tape"
    * link opens "Packaging Choice", radios with labels (Cut Tape, MouseReel™,
    * Full Reels: only for the reel's quantity), then Submit. */
@@ -350,7 +360,7 @@ const STATES = {
   addresses: { title: T("Addresses", "地址", "Direcciones"), match: { url: /checkout/i, all: ["addr.form"] }, stuck: "checkout_details" },
   payment: { title: T("Payment", "付款", "Pago"), match: { url: /checkout/i, all: ["checkout.paymentPage"] }, stuck: "checkout_details" },
   shipping: { title: T("Shipping", "收货地址", "Envío"), match: { url: /checkout/i, all: ["checkout.shippingPage"] }, stuck: "checkout_details" },
-  checkoutStep: { title: T("Checkout", "结账", "Pago"), match: { url: /checkout/i, all: ["checkout.continue"] }, stuck: "checkout_details" },
+  checkoutStep: { title: T("Checkout", "结账", "Pago"), match: { url: /checkout/i, all: ["checkout.next"] }, stuck: "checkout_details" },
   // The cart's "Continue Checkout" window (a notice about the order) before checkout goes on.
   cartNotice: { title: T("Cart notice", "购物车提示", "Aviso del carrito"), match: { url: /\/cart/i, all: ["cart.notice"] } },
   cart: { title: T("Cart", "购物车", "Carrito"), match: { url: /\/cart\/?(\?|$)/i } },
@@ -424,7 +434,7 @@ const TRANSITIONS = [
     title: T("Continue", "继续", "Continuar"),
     from: ["addresses", "shipping", "payment", "checkoutStep"],
     to: ["addresses", "shipping", "payment", "checkoutStep", "review", "signIn"],
-    steps: [{ do: "click", target: "checkout.continue", navigates: true }],
+    steps: [{ do: "click", target: "checkout.next", navigates: true }],
   },
   {
     /* The BOM's ship-to into the address form (billing; Mouser ships there
