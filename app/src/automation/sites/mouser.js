@@ -30,6 +30,13 @@ const CART_ROW = {
 };
 
 const TARGETS = {
+  /* A part Mouser can't sell: "Restricted Availability" in place of the
+   * stock, "FACTORY NOT ACCEPTING ORDERS" (2026-11-24). */
+  "product.unavailable": {
+    title: T("Not for sale", "不可购买", "No a la venta"),
+    any: [{ css: "#lnkRestZeroPricePopUp, [data-testid='RestrictedAvailabilityTrigger']" }, { css: "a, button, span, div" }],
+    hasText: /restricted availability|not accepting orders/i,
+  },
   /* "Your cart contains backordered items. How would you like them
    * shipped?" (2026-11-24): what is in stock ships now, the rest when it
    * comes, as DigiKey's checkout does by default (Multiple Shipments). */
@@ -375,6 +382,7 @@ const STATES = {
   orders: { title: T("Orders", "订单记录", "Pedidos"), match: [{ url: /\/account\/orders\/?(\?|$)/i }, { url: /orderhistory/i }] },
   // Its buy box can load after the rest of the page (2026-11-24): the part's
   // own ProductDetail page counts, and the Buy click waits for the box.
+  notSold: { title: T("Not for sale", "不可购买", "No a la venta"), match: { url: /\/ProductDetail\//i, all: ["product.unavailable"] } },
   product: { title: T("Product page", "商品页", "Página del producto"), match: [
     { url: /\/ProductDetail\//i, all: ["product.addToCart", "product.ofPart"] },
     { url: /\/ProductDetail\//i, all: ["product.ofPart"] },
@@ -564,7 +572,8 @@ module.exports = {
       { do: "click", target: "paa.buy", js: true, timeout: 15000 },
       { do: "waitForUrl", pattern: /\/cart/ },
     ],
-    addToCart: [{ do: "walk", to: "product" }, { do: "act", name: "addToCart" }],
+    // A part it can't sell ends the walk too, and the add fails at once.
+    addToCart: [{ do: "walk", to: ["product", "notSold"] }, { do: "act", name: "addToCart" }],
     openCart: [
       { do: "walk", to: "cart" },
       { do: "extract", target: "cart.rows", fields: CART_FIELDS, as: "cart", optional: true, timeout: 5000 },
