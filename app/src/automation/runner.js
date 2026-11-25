@@ -673,6 +673,15 @@ class Runner {
         expression: `JSON.stringify({ url: location.href, title: document.title, h1: (document.querySelector("h1")?.innerText || "").slice(0, 80), buttons: [...document.querySelectorAll("button, input[type=submit], a[role=button]")].filter((b) => b.offsetParent !== null).map((b) => [b.id, b.getAttribute("data-testid"), (b.innerText || b.value || "").trim().slice(0, 30)].filter(Boolean).join("|")).filter(Boolean).slice(0, 30) })`,
       });
       console.warn(`[${label} ${this.profile.id}] ${String(result?.value || "").slice(0, 1800)}`);
+      // Tracking that found no order: the page's requests (status, time) and
+      // its words, to tell a list that never loaded (2026-11-24, DigiKey).
+      if (this.task === "track") {
+        const { result: net } = await this.driver.send("Runtime.evaluate", {
+          contextId, returnByValue: true,
+          expression: `JSON.stringify({ text: document.body.innerText.replace(/\s+/g, " ").slice(0, 600), requests: performance.getEntriesByType("resource").filter((e) => ["fetch", "xmlhttprequest"].includes(e.initiatorType)).slice(-25).map((e) => [e.name.replace(location.origin, "").slice(0, 110), e.responseStatus, Math.round(e.duration)]) })`,
+        });
+        console.warn(`[trackpage ${this.profile.id}] ${String(net?.value || "").slice(0, 4000)}`);
+      }
       // A packaging switch that failed: the elements that name a packaging,
       // with their own markup and their row's, to tell the site's changes.
       if (this.task === "setPack") {
