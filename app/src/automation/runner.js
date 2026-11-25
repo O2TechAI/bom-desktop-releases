@@ -745,7 +745,12 @@ class Runner {
       if (state !== UNKNOWN) await this.arrive(state, view);
       if (goals.includes(state)) return state;
       const info = machine.states[state];
-      if (info?.person) {
+      // A checkout page left from an earlier order is not the person's when
+      // this task goes back to the cart or a part (2026-11-24: a new order
+      // waited at the last one's payment page instead of filling its cart).
+      // A security check or sign-in still is.
+      const leaving = info?.person === "checkout_details" && goals.some((goal) => ["cart", "product", "results", "home", "orders", "orderDetail"].includes(goal));
+      if (info?.person && !leaving) {
         await this.personAt(state, info.person, view);
         state = await this.identify();
         continue;
