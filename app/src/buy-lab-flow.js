@@ -47,7 +47,12 @@ function writeBomFile(siteId, lines, numberFor = (line) => line.mpn, ownFor = nu
   // (2026-11-25: a maker's number two sellers list was refused as a
   // "Duplicate manufacturer part"; its own number is not).
   if (siteId === "digikey" && ownFor) {
-    const rows = lines.map((line) => `${ownFor(line) || ""},${line.mpn},${line.quantity}`).join("\n");
+    // A line that is DigiKey's own number already leaves the maker's column
+    // empty (2026-11-25: the number in both columns was refused).
+    const rows = lines.map((line) => {
+      const own = ownFor(line) || "";
+      return `${own},${own === line.mpn ? "" : line.mpn},${line.quantity}`;
+    }).join("\n");
     const own = path.join(os.tmpdir(), `o2-bom-${siteId}-${process.pid}-${Date.now()}.csv`);
     fs.writeFileSync(own, `DigiKey Part Number,Manufacturer Part Number,Quantity\n${rows}\n`, "utf8");
     return own;
@@ -870,7 +875,7 @@ class BuyLabFlow {
         // DigiKey's own numbers when every line has one from an earlier cart.
         const known = this.supplier === "digikey" ? (this.store?.sellerParts?.("digikey") || {}) : {};
         const numberFor = (line) => line.mpn;
-        const ownFor = this.supplier === "digikey" ? (line) => known[sellerPartKey(line)] || null : null;
+        const ownFor = this.supplier === "digikey" ? (line) => (/-ND$/i.test(line.mpn) ? line.mpn : known[sellerPartKey(line)] || null) : null;
         const file = writeBomFile(this.supplier, this.lines, numberFor, ownFor);
         try {
           snapshot = await this.runTask("bulkAddBom", { file, partColumn: partColumnFor(this.lines, numberFor) });
@@ -999,7 +1004,7 @@ class BuyLabFlow {
       }
       const text = String(snapshot.results?.options || "");
       const options = packOptions(text);
-      const line = this.lines.find((one) => options.some((option) => partKey(option.mpn) === partKey(one.mpn)));
+      const line = this.lines.find((one) => options.some((option) => partKey(option.mpn) === partKey(one.mpn) || partKey(option.part) === partKey(one.mpn)));
       const choice = line && !tried.has(line) ? pickPackOption(options, line) : -1;
       if (line) tried.add(line);
       console.warn(`[options ${this.supplier}] ${line?.mpn || "?"} (${line?.packaging || "no packaging"}) -> ${choice} of ${JSON.stringify(options)}`);

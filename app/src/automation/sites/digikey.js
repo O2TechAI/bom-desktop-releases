@@ -207,6 +207,12 @@ const TARGETS = {
     within: { any: [{ css: ".dk-modal.visible" }, { role: "dialog" }], hasText: /value calculator|lower extended price/i },
     any: [{ css: "#primary-add" }, { role: "button", name: /^add$/i }],
   },
+  /* "Add to Cart" again in DigiKey's own question after the first click
+   * (2026-11-25: Yageo RC0402 parts two sellers list; without it nothing went in). */
+  "product.addAnyway": {
+    title: T("Add to Cart", "加入购物车", "Añadir al carrito"),
+    any: [{ css: "[data-testid='add-to-cart-modal-error-ok-btn'], #add-to-cart-modal-error-ok-btn" }],
+  },
   "cart.viewOptions": {
     title: T("View Options", "查看选项", "Ver opciones"),
     any: [{ role: "button", name: /^view options$/i }],
@@ -393,7 +399,7 @@ const TARGETS = {
   "product.unavailable": {
     title: T("No longer sold", "已不再销售", "Ya no se vende"),
     any: [{ css: "h2, h3, h4, p, span, div" }],
-    hasText: /no longer carried by digikey/i,
+    hasText: /no longer carried by digikey|out of stock and backorders are currently unavailable/i,
   },
   "product.ofPart": {
     title: T("The part's page", "该型号的页面", "La página de la pieza"),
@@ -588,6 +594,7 @@ const TRANSITIONS = [
       { do: "wait", ms: 1000 },
       { do: "click", target: "product.addToCart", timeout: 15000 },
       { do: "click", target: "product.valueCalcAdd", optional: true, timeout: 2500 },
+      { do: "click", target: "product.addAnyway", optional: true, timeout: 2000 },
       // Required: an add that did nothing fails here, and its page is kept
       // (2026-11-25: parts that "went in" were not in the cart).
       { do: "waitForChange", target: "cart.count", from: "cartBefore", or: "cart.added", timeout: 10000 },
