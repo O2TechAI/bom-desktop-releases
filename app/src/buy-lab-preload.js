@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld("buyLab", {
   confirmCart: (id, by = "script") => ipcRenderer.invoke("buy-lab:confirm-cart", String(id), String(by).slice(0, 20)),
   recheckCart: (id) => ipcRenderer.invoke("buy-lab:recheck-cart", String(id)),
   resume: (id) => ipcRenderer.invoke("buy-lab:resume", String(id)),
+  redo: (key) => ipcRenderer.invoke("buy-lab:redo", String(key)),
   select: (id) => ipcRenderer.invoke("buy-lab:select", String(id)),
   showLive: (id = "") => ipcRenderer.invoke("buy-lab:show-live", String(id)),
   showFlow: () => ipcRenderer.invoke("buy-lab:show-flow"),

@@ -46,8 +46,14 @@ class BuyLabWindow {
     return window;
   }
 
-  constructor({ language, pageUrl, pagePreload, partition, userDataDir, downloadsPath, openExternal, onClosed, onBackToSite = null, serviceStatus = null, onResumeSaved = null, quiet = false }) {
+  constructor({ language, pageUrl, pagePreload, partition, userDataDir, downloadsPath, openExternal, onClosed, onBackToSite = null, serviceStatus = null, onResumeSaved = null, staleTasks = null, onRedo = null, onTracked = null, quiet = false }) {
     this.serviceStatus = serviceStatus;
+    // The orders that are no longer valid (a newer one took their supplier),
+    // for the tabs; Run again on one; what a placed order's page said when the
+    // person opened it (all three are BOM's link, buy-service-link.js).
+    this.staleTasks = staleTasks;
+    this.onRedo = onRedo;
+    this.onTracked = onTracked;
     // Continue on a run saved before the app started again, when it is one of
     // BOM's: BOM's link takes it on, so its cart and order still reach BOM.
     this.onResumeSaved = onResumeSaved;
@@ -270,6 +276,8 @@ class BuyLabWindow {
       liveOnly: this.liveOnly,
       // BOM's purchasing service, as its last call answered.
       service: this.serviceStatus?.() || null,
+      // Orders a newer one replaced: a tab each, with Run again.
+      stale: this.staleTasks?.() || [],
       // A purchase that was interrupted, saved on this computer: it can go on
       // even after the app was closed.
       saved: Object.fromEntries(this.sites.map((site) => {
@@ -421,7 +429,7 @@ class BuyLabWindow {
    * 的页面"): that seller's page in front, at its cart, or at one placed
    * order's own page (walked to the way tracking does, when no purchase is
    * using the page; else the page as it is). */
-  async openSellerAt(id, { view, order = "" } = {}) {
+  async openSellerAt(id, { view, order = "", requestId = "", orderId = "" } = {}) {
     const site = this.sites.find((entry) => entry.id === id);
     if (this.closed || !site) return false;
     await this.ensureSite(id);
@@ -435,7 +443,11 @@ class BuyLabWindow {
     this.focus();
     const flow = this.flows.get(id);
     const free = this.pageFree(flow);
-    if (free && view === "order" && order) void this.trackOrder(id, order);
+    if (free && view === "order" && order) {
+      void this.trackOrder(id, order).then((read) => {
+        if (read && requestId && orderId) void this.onTracked?.({ requestId, orderId, read });
+      }).catch(() => {});
+    }
     else if (free && view === "cart" && site.urls?.cart) {
       void live.page.goto(site.urls.cart).then(() => this.revealCart(id)).catch(() => {});
     }
@@ -570,6 +582,13 @@ class BuyLabWindow {
     const packaging = Object.fromEntries((job.lines || []).filter((line) => line.packaging)
       .map((line) => [line.sku || line.mpn, String(line.packaging)]));
     const resumeKey = `${job.purchase_request_id}:${supplier}`;
+    // Nothing of the order before it stays (2026-11-25): its cart check, its
+    // payment prompt, an order's page it left open, the extra tabs.
+    this.awayFromCart?.delete(supplier);
+    if (this.plainView === supplier) this.plainView = null;
+    this.payPrompted.delete(supplier);
+    this.notified?.delete(supplier);
+    void this.lives.get(supplier)?.browser?.closeExtraTabs?.();
     void this.startPurchase({ supplier, text, address, link, resumeKey, expected, packaging }).catch((error) => {
       this.failStart(supplier, error.message);
       link?.ended?.({ status: "failed", message: error.message });
@@ -744,6 +763,7 @@ class BuyLabWindow {
     this.tracking.add(seller);
     let runner = null;
     let timer = null;
+    let grace = null;
     try {
       const live = await this.ensureSite(seller);
       if (!live || !this.pageFree(flow)) return null;
@@ -762,11 +782,17 @@ class BuyLabWindow {
         checkSettleMs: 0,
         session: { warmedUp: false },
         onChange: (snapshot) => {
-          if (snapshot.status === "waiting" && !needsPerson) {
+          // A security check often passes by itself in a few seconds: it is
+          // given 40 (2026-11-25: DigiKey's order was "not read" for it).
+          if (snapshot.status !== "waiting") { clearTimeout(grace); grace = null; return; }
+          if (needsPerson || grace) return;
+          const give = () => {
             needsPerson = true;
             why = `${snapshot.message || "person"} at ${snapshot.state || "?"} (signed in ${snapshot.metrics?.signIns || 0}x) ${String(live.page.url()).slice(0, 90)}`;
             runner.stop();
-          }
+          };
+          if (/challenge/i.test(`${snapshot.message || ""} ${snapshot.state || ""}`)) grace = setTimeout(give, 40_000);
+          else give();
         },
       });
       timer = setTimeout(() => runner.stop(), 120_000);
@@ -789,6 +815,7 @@ class BuyLabWindow {
       return { failed: String(error?.message || error).slice(0, 200) };
     } finally {
       clearTimeout(timer);
+      clearTimeout(grace);
       this.tracking.delete(seller);
     }
   }
@@ -906,6 +933,18 @@ function registerBuyLabIpc() {
   });
   ipcMain.handle("buy-lab:recheck-cart", (event, id) => ownerOf(event)?.recheckCart(String(id || "")) ?? false);
   ipcMain.handle("buy-lab:resume", async (event, id) => (await ownerOf(event)?.resume(String(id || ""))) ?? false);
+  // Run again an order that a newer one replaced (`<purchase_request_id>:<seller>`).
+  ipcMain.handle("buy-lab:redo", async (event, key) => {
+    const owner = ownerOf(event);
+    if (!owner?.onRedo) return { ok: false };
+    try {
+      const result = await owner.onRedo(String(key || "").slice(0, 160));
+      owner.publish();
+      return result || { ok: true };
+    } catch (error) {
+      return { ok: false, message: String(error?.message || error).slice(0, 200) };
+    }
+  });
   ipcMain.handle("buy-lab:select", (event, id) => ownerOf(event)?.select(String(id)) ?? false);
   ipcMain.handle("buy-lab:show-live", async (event, id) => {
     const owner = ownerOf(event);

@@ -29,6 +29,8 @@ const TICK_MS = 15_000;
 const MAX_RUNS = 6;
 /* How long a paused order keeps its supplier from the next one. */
 const HOLD_MS = 6 * 60 * 60 * 1000;
+// Orders that are no longer valid, kept as tabs in the Buy lab: the newest.
+const MAX_TASK_TABS = 6;
 const BASE = "/api/v1/buy-lab-service/desk";
 
 function money(text) {
@@ -107,7 +109,9 @@ class ServiceLink {
       const saved = JSON.parse(fs.readFileSync(this.stateFile, "utf8").replace(/^\uFEFF/, ""));
       for (const key of saved.ended || []) this.ended.add(String(key));
       for (const [key, stop] of Object.entries(saved.stops || {})) {
-        if (stop?.job?.purchase_request_id && stop.job.seller) this.stops.set(key, { job: stop.job, message: stop.message || "stopped", at: Number(stop.at) || 0 });
+        if (stop?.job?.purchase_request_id && stop.job.seller) {
+          this.stops.set(key, { job: stop.job, message: stop.message || "stopped", at: Number(stop.at) || 0, by: stop.by || "", lines: Number(stop.lines) || 0 });
+        }
       }
     } catch {
       // none yet
@@ -118,10 +122,12 @@ class ServiceLink {
     if (!this.stateFile) return;
     try {
       fs.mkdirSync(path.dirname(this.stateFile), { recursive: true });
-      const stops = Object.fromEntries([...this.stops].map(([key, { job, message, at }]) => [key, {
+      const stops = Object.fromEntries([...this.stops].map(([key, { job, message, at, by, lines }]) => [key, {
         job: { purchase_request_id: job.purchase_request_id, seller: job.seller, supplier_order_id: job.supplier_order_id || null },
         message,
         at: at || 0,
+        by: by || "",
+        lines: lines || (Array.isArray(job.lines) ? job.lines.length : 0),
       }]));
       fs.writeFileSync(this.stateFile, JSON.stringify({ ended: [...this.ended], stops }, null, 2));
     } catch (error) {
@@ -213,6 +219,16 @@ class ServiceLink {
         } catch { /* the Buy lab is closed */ }
       }
     }
+    // Several orders for one supplier that have not begun (the app just
+    // started, or two were sent together): only the newest begins, the others
+    // are kept as no longer valid (BOM lists its jobs oldest first).
+    const fresh = new Map();
+    for (const job of this.jobs) {
+      const key = `${job.purchase_request_id}:${job.seller}`;
+      if (this.ended.has(key) || this.running.has(key)) continue;
+      if (fresh.has(job.seller)) this.supersede(fresh.get(job.seller), key);
+      fresh.set(job.seller, key);
+    }
     for (const job of this.jobs) {
       const key = `${job.purchase_request_id}:${job.seller}`;
       if (this.ended.has(key)) continue;
@@ -233,11 +249,18 @@ class ServiceLink {
         run.job = job;
         continue;
       }
-      // One purchase per supplier at a time, and at most MAX_RUNS Chromes: the
-      // next waits for its turn. A paused order whose parts are in the cart
-      // keeps its supplier too, until it is ordered or cancelled (2026-11-24).
+      // One purchase per supplier at a time, and at most MAX_RUNS Chromes.
+      // A new order takes its supplier from the order that has it (2026-11-25:
+      // "上传一个新的order，点进页面还是之前的cart"): that one stops, is kept as
+      // no longer valid, and can be run again from its button. Only an order
+      // already placed at the supplier is waited for.
       if (!this.lab && this.jobs.length) this.lab = await this.openBuyLab({ quiet: true }).catch(() => null);
-      if (this.holder(job.seller, key)) continue;
+      const holder = this.holder(job.seller, key);
+      if (holder) {
+        if (this.supersede(holder, key)) this.nudge();
+        // Its page is free once the stopped run has wound down: the next round.
+        continue;
+      }
       if (this.busyRuns() >= MAX_RUNS) break;
       // Out of sight: BOM's Placing tab follows it (2026-11-21).
       const lab = await this.openBuyLab({ quiet: true });
@@ -294,8 +317,8 @@ class ServiceLink {
    */
   holder(seller, except = "") {
     for (const [key, run] of this.running) if (run.job.seller === seller && key !== except) return key;
-    for (const [key, { job, at }] of this.stops) {
-      if (job.seller !== seller || key === except) continue;
+    for (const [key, { job, at, message }] of this.stops) {
+      if (job.seller !== seller || key === except || message === "superseded") continue;
       // Only an order paused lately: one left for hours (or from before the
       // pause time was kept) does not keep the supplier from the next order
       // (2026-11-24: an order paused for days held DigiKey).
@@ -305,6 +328,57 @@ class ServiceLink {
       if (saved && saved.progress >= 1) return key; // in the cart already
     }
     return null;
+  }
+
+  /**
+   * Another order takes this order's supplier: its run stops at once, its
+   * saved place is dropped (the cart is the other order's now), and it is
+   * kept as no longer valid, shown in BOM and in the Buy lab with a button
+   * that runs it again from the start. False for an order already placed at
+   * the supplier (its payment and its order are not undone here).
+   */
+  supersede(key, by = "") {
+    const run = this.running.get(key);
+    if (run?.placed) return false;
+    const job = run?.job || this.stops.get(key)?.job
+      || this.jobs.find((entry) => `${entry.purchase_request_id}:${entry.seller}` === key);
+    if (!job) return false;
+    if (run) {
+      this.running.delete(key);
+      run.stopped = true;
+      try { this.lab?.stop(job.seller, { soft: false }); } catch { /* the Buy lab is closed */ }
+    }
+    try { this.lab?.runs?.clear?.(job.seller, key); } catch { /* none saved */ }
+    this.ended.add(key);
+    const lines = Array.isArray(job.lines) ? job.lines.length : this.stops.get(key)?.lines || 0;
+    this.stops.set(key, { job, message: "superseded", at: Date.now(), by: String(by || ""), lines });
+    this.saveState();
+    this.log(`buy service: ${key} is no longer valid${by ? ` (${by} took ${job.seller})` : ""}`);
+    try { this.lab?.publish?.(); } catch { /* closed */ }
+    return true;
+  }
+
+  /** The orders that are no longer valid, newest first, for the Buy lab's
+   * tabs: at most MAX_TASK_TABS; the oldest are left out. */
+  staleTasks() {
+    return [...this.stops]
+      .filter(([, stop]) => stop.message === "superseded")
+      .map(([key, stop]) => ({ key, seller: stop.job.seller, at: stop.at || 0, lines: stop.lines || 0 }))
+      .sort((a, b) => b.at - a.at)
+      .slice(0, MAX_TASK_TABS);
+  }
+
+  /** What a placed order's page said, read because the person opened it. */
+  async reportTracked({ requestId, orderId, read }) {
+    if (!requestId || !orderId || !read) return false;
+    this.trackTried.set(orderId, Date.now());
+    try {
+      await this.post("tracking", { purchase_request_id: requestId, supplier_order_id: orderId, ...read });
+      return true;
+    } catch (error) {
+      this.log(`buy service: tracking ${orderId}: ${error.message}`);
+      return false;
+    }
   }
 
   /** Runs the app is driving. One waiting for the person (a cart to check, a
@@ -323,8 +397,9 @@ class ServiceLink {
   async continueOrder(code) {
     const key = String(code || "");
     const seller = key.split(":").pop();
+    // The order the person asks for takes the supplier, as a new one does.
     const holder = this.holder(seller, key);
-    if (holder) return { ok: false, reason: "busy", holder: holder.split(":")[0] };
+    if (holder && !this.supersede(holder, key)) return { ok: false, reason: "busy", holder: holder.split(":")[0] };
     if (this.running.has(key)) return null; // its own run: the Buy lab goes on with it
     if (await this.continueSaved(seller, key)) return { ok: true, where: "resume" };
     return { ok: false, reason: "unknown" };

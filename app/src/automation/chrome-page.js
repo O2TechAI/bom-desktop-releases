@@ -45,6 +45,9 @@ const NAVIGATION_TIMEOUT = 45000;
 const ABORTED = /net::ERR_ABORTED|interrupted by another navigation|Navigation interrupted|frame was detached/i;
 
 
+/* The tabs one supplier's Chrome keeps open, its main one counted. */
+const MAX_TABS = 6;
+
 class ChromePage extends EventEmitter {
   constructor(browser) {
     super();
@@ -349,6 +352,14 @@ class SupplierBrowser extends EventEmitter {
     const tab = { id: this.nextTabId++, title: "" };
     this.tabsByPage.set(page, tab);
     this.watchPage(page);
+    // At most MAX_TABS tabs with the main one (2026-11-25): the oldest of the
+    // others closes when one more opens.
+    while (this.tabsByPage.size > MAX_TABS - 1) {
+      const oldest = this.tabsByPage.keys().next().value;
+      if (!oldest || oldest === page) break;
+      this.tabsByPage.delete(oldest);
+      void oldest.close().catch(() => {});
+    }
     this.emit("tabs", this.tabs());
     return tab;
   }
@@ -410,6 +421,15 @@ class SupplierBrowser extends EventEmitter {
     await this.link.loadURL(url).catch(() => {});
     await page.close().catch(() => {});
     await this.page.bringToFront().catch(() => {});
+  }
+
+  /** Every tab but the main one closes: a new purchase starts on a clean browser. */
+  async closeExtraTabs() {
+    const extra = [...this.tabsByPage.keys()];
+    this.tabsByPage.clear();
+    await Promise.all(extra.map((page) => page.close().catch(() => {})));
+    await this.page?.bringToFront().catch(() => {});
+    this.emit("tabs", this.tabs());
   }
 
   async closeTab(id) {

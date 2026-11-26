@@ -411,6 +411,9 @@ async function openBuyLab({ quiet = false } = {}) {
     partition: PARTITION,
     serviceStatus: () => serviceLink?.status || null,
     onResumeSaved: (id, resumeKey) => (serviceLink ? serviceLink.continueSaved(id, resumeKey) : false),
+    staleTasks: () => serviceLink?.staleTasks() || [],
+    onRedo: (key) => (serviceLink ? serviceLink.continueOrder(key) : { ok: false }),
+    onTracked: (report) => (serviceLink ? serviceLink.reportTracked(report) : false),
     userDataDir: app.getPath("userData"),
     openExternal: (url) => void openExternal(url),
     downloadsPath: app.getPath("downloads"),
@@ -493,7 +496,8 @@ function registerSiteIpc() {
     try {
       if (number) {
         const lab = await openBuyLab({ quiet: true });
-        if (await lab.openSellerAt(seller, { view: "order", order: number })) {
+        const orderId = String(options?.orderId || "").replace(/[^0-9A-Za-z_-]/g, "").slice(0, 64);
+        if (await lab.openSellerAt(seller, { view: "order", order: number, requestId: order, orderId })) {
           if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide();
           return { ok: true, where: "order" };
         }
