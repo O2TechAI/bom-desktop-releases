@@ -283,9 +283,13 @@ class ServiceLink {
       for (const item of due) {
         const tried = this.trackTried.get(item.supplier_order_id) || 0;
         if (Date.now() - tried < 10 * 60 * 1000) continue;
-        // A purchase for this seller, running or waiting its turn, comes first.
-        if ([...this.running.values()].some((run) => run.job.seller === item.seller)) continue;
-        if (this.jobs.some((job) => job.seller === item.seller && !this.ended.has(`${job.purchase_request_id}:${job.seller}`))) continue;
+        // A purchase the app is working on for this seller comes first. One
+        // that only waits for the person (now for hours, 2026-11-27) does not
+        // keep placed orders from being looked up: the Buy lab reads the
+        // order's page only when the seller's page is free for it, and goes
+        // back to the cart afterwards.
+        if ([...this.running.values()].some((run) => run.job.seller === item.seller
+          && this.lab?.activity?.(item.seller)?.driver !== "person")) continue;
         let lab;
         try {
           lab = await this.openBuyLab({ quiet: true });
