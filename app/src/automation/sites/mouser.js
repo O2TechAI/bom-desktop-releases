@@ -30,12 +30,88 @@ const CART_ROW = {
 };
 
 const TARGETS = {
+  /* A part Mouser can't sell: "Restricted Availability" in place of the
+   * stock, "FACTORY NOT ACCEPTING ORDERS" (2026-11-24). */
+  "product.unavailable": {
+    title: T("Not for sale", "不可购买", "No a la venta"),
+    any: [{ css: "#lnkRestZeroPricePopUp, [data-testid='RestrictedAvailabilityTrigger']" }, { css: "a, button, span, div" }],
+    hasText: /restricted availability|not accepting orders/i,
+  },
+  /* "Your cart contains backordered items. How would you like them
+   * shipped?" (2026-11-24): what is in stock ships now, the rest when it
+   * comes, as DigiKey's checkout does by default (Multiple Shipments). */
+  "checkout.backorderShipNow": {
+    title: T("Send items as they become available", "有货先发", "Enviar según haya existencias"),
+    any: [{ role: "radio", name: /send items as they become available/i }, { label: /send items as they become available/i }],
+  },
+  /* Checkout's next step. Signed in, the shipping page's button reads "See
+   * Shipping Options" (#btnSubmitShippingOptions, 2026-11-24). */
+  "checkout.next": {
+    title: T("Continue", "继续", "Continuar"),
+    any: [
+      { css: "#btnSubmitShippingOptions" },
+      { role: "button", name: /^(continue|next|save (and|&) continue|continue to (shipping|payment|review)|review (your )?order|see shipping options)$/i },
+      { css: "input[type='submit'][value*='continue' i]" },
+    ],
+  },
+  /* A cart line's packaging (2026-11-24, live): its "Packaging: **Cut Tape"
+   * link opens "Packaging Choice", radios with labels (Cut Tape, MouseReel™,
+   * Full Reels: only for the reel's quantity), then Submit. */
+  "cart.packLink": {
+    title: T("Packaging", "包装", "Empaque"),
+    within: CART_ROW,
+    // A button, lnkMouseReel_<n>, reading "**Cut Tape" (2026-11-24, live).
+    any: [{ css: "button[id^='lnkMouseReel']" }, { role: "button", name: /cut tape|mousereel|reel/i }, { role: "link", name: /cut tape|mousereel|reel/i }],
+    hasText: /cut tape|mousereel|reel/i,
+  },
+  /* The dialog ("Packaging Choice", jQuery UI) shows a page in an iframe,
+   * #ifrmMouseReel (/cart/cart/MouseReel): in it, the smallest box that holds
+   * a radio and the packaging's name, then that radio. Submit is the
+   * dialog's own button, #btnConfirm. */
+  "cart.packChoiceBox": {
+    title: T("The packaging", "该包装", "El empaque"),
+    within: { any: [{ css: "iframe#ifrmMouseReel" }, { css: ".ui-dialog iframe" }] },
+    any: [
+      { css: "label:has(input[type=radio])" },
+      { css: "li:has(input[type=radio])" },
+      { css: "div:has(> input[type=radio])" },
+      { css: "p:has(input[type=radio])" },
+      { css: "td:has(input[type=radio])" },
+      { css: "div:has(> * > input[type=radio])" },
+    ],
+    hasText: "{{pack}}",
+  },
+  "cart.packChoice": {
+    title: T("The packaging", "该包装", "El empaque"),
+    within: {
+      within: { any: [{ css: "iframe#ifrmMouseReel" }, { css: ".ui-dialog iframe" }] },
+      any: [
+        { css: "label:has(input[type=radio])" },
+        { css: "li:has(input[type=radio])" },
+        { css: "div:has(> input[type=radio])" },
+        { css: "p:has(input[type=radio])" },
+        { css: "td:has(input[type=radio])" },
+        { css: "div:has(> * > input[type=radio])" },
+      ],
+      hasText: "{{pack}}",
+    },
+    any: [{ css: "input[type=radio]" }],
+  },
+  "cart.packSubmit": {
+    title: T("Submit", "提交", "Enviar"),
+    any: [{ css: ".ui-dialog #btnConfirm" }, { role: "button", name: /^submit$/i }],
+  },
   "search.input": {
     title: T("Search box", "搜索框", "Cuadro de búsqueda"),
     any: [
       { css: "#global-search, #headerSearchKeyword, input[name='keyword'].headerSearchBox" },
       { placeholder: /part # \/ keyword/i },
     ],
+  },
+  /* The results table, whatever it lists. */
+  "results.grid": {
+    title: T("Search results", "搜索结果", "Resultados"),
+    any: [{ css: "#SearchResultsGrid_grid" }, { css: "[id^='SearchResultsGrid_'][id$='_chkSelect']" }],
   },
   "results.exact": {
     title: T("The exact part", "完全匹配的型号", "La pieza exacta"),
@@ -62,6 +138,9 @@ const TARGETS = {
     any: [
       { css: "#btnBuy, [data-testid='PricingTableBuyButtonTrigger']" },
       { role: "button", name: /^(add to cart|buy)$/i },
+      // Other buy boxes of the product page (2026-11-24: GRM188R71H104KA93D's page was not recognised).
+      { css: "button[id*='btnBuy' i], input[id*='btnBuy' i], button[id*='AddToCart' i], button[data-testid*='Buy' i]" },
+      { role: "button", name: /add to cart/i },
     ],
   },
   "cart.count": {
@@ -300,14 +379,23 @@ const STATES = {
   addresses: { title: T("Addresses", "地址", "Direcciones"), match: { url: /checkout/i, all: ["addr.form"] }, stuck: "checkout_details" },
   payment: { title: T("Payment", "付款", "Pago"), match: { url: /checkout/i, all: ["checkout.paymentPage"] }, stuck: "checkout_details" },
   shipping: { title: T("Shipping", "收货地址", "Envío"), match: { url: /checkout/i, all: ["checkout.shippingPage"] }, stuck: "checkout_details" },
-  checkoutStep: { title: T("Checkout", "结账", "Pago"), match: { url: /checkout/i, all: ["checkout.continue"] }, stuck: "checkout_details" },
+  checkoutStep: { title: T("Checkout", "结账", "Pago"), match: { url: /checkout/i, all: ["checkout.next"] }, stuck: "checkout_details" },
   // The cart's "Continue Checkout" window (a notice about the order) before checkout goes on.
   cartNotice: { title: T("Cart notice", "购物车提示", "Aviso del carrito"), match: { url: /\/cart/i, all: ["cart.notice"] } },
   cart: { title: T("Cart", "购物车", "Carrito"), match: { url: /\/cart\/?(\?|$)/i } },
   orderDetail: { title: T("Order", "订单详情", "Pedido"), match: { url: /\/account\/orders\/[^?]*\d{5,}/i } },
   orders: { title: T("Orders", "订单记录", "Pedidos"), match: [{ url: /\/account\/orders\/?(\?|$)/i }, { url: /orderhistory/i }] },
-  product: { title: T("Product page", "商品页", "Página del producto"), match: { url: /\/ProductDetail\//i, all: ["product.addToCart", "product.ofPart"] } },
+  // Its buy box can load after the rest of the page (2026-11-24): the part's
+  // own ProductDetail page counts, and the Buy click waits for the box.
+  notSold: { title: T("Not for sale", "不可购买", "No a la venta"), match: { url: /\/ProductDetail\//i, all: ["product.unavailable"] } },
+  product: { title: T("Product page", "商品页", "Página del producto"), match: [
+    { url: /\/ProductDetail\//i, all: ["product.addToCart", "product.ofPart"] },
+    { url: /\/ProductDetail\//i, all: ["product.ofPart"] },
+  ] },
   results: { title: T("Search results", "搜索结果", "Resultados"), match: { url: /\/c\//i, all: ["results.exact"] } },
+  // Results, none of them the part itself (2026-11-25: MMBD4148LT1G listed
+  // only MMBD4148,215 and the like): the line can't be had here.
+  noMatch: { title: T("Not found", "没找到", "No encontrado"), match: { url: /\/c\//i, all: ["results.grid"] } },
 };
 
 const TRANSITIONS = [
@@ -315,7 +403,7 @@ const TRANSITIONS = [
     name: "search",
     title: T("Search for the part", "搜索型号", "Buscar la pieza"),
     from: "*",
-    to: ["product", "results", "challenge"],
+    to: ["product", "results", "challenge", "noMatch"],
     steps: [{ do: "goto", url: "{{search}}" }, { do: "click", target: "cookies.accept", optional: true, timeout: 2500 }],
   },
   {
@@ -369,7 +457,10 @@ const TRANSITIONS = [
     title: T("Continue", "继续", "Continuar"),
     from: ["addresses", "shipping", "payment", "checkoutStep"],
     to: ["addresses", "shipping", "payment", "checkoutStep", "review", "signIn"],
-    steps: [{ do: "click", target: "checkout.continue", navigates: true }],
+    steps: [
+      { do: "click", target: "checkout.backorderShipNow", optional: true, timeout: 1500 },
+      { do: "click", target: "checkout.next", navigates: true },
+    ],
   },
   {
     /* The BOM's ship-to into the address form (billing; Mouser ships there
@@ -410,12 +501,14 @@ const TRANSITIONS = [
     title: T("Add to cart", "加入购物车", "Añadir al carrito"),
     auto: false,
     from: ["product"],
-    to: ["product"],
+    // Mouser goes to the cart after a Buy (2026-11-24): that is an add too.
+    // The cart is read afterwards either way, so the count is not waited for.
+    to: ["product", "cart"],
     steps: [
       { do: "peek", target: "cart.count", as: "cartBefore" },
       { do: "fill", target: "product.quantity", value: "{{quantity}}" },
-      { do: "click", target: "product.addToCart" },
-      { do: "waitForChange", target: "cart.count", from: "cartBefore", or: "cart.added" },
+      { do: "click", target: "product.addToCart", timeout: 20000 },
+      { do: "waitForChange", target: "cart.count", from: "cartBefore", or: "cart.added", optional: true, timeout: 10000 },
     ],
   },
   {
@@ -479,16 +572,30 @@ module.exports = {
       { do: "fill", target: "paa.text", value: "{{lines}}", js: true },
       { do: "click", target: "paa.check", js: true },
       { do: "waitForUrl", pattern: /price-availability\/Edit/ },
+      { do: "wait", ms: 2000 },
       { do: "click", target: "paa.selectAll", js: true },
-      { do: "click", target: "paa.buy", js: true },
+      // Buy turns on a moment after the rows are ticked (2026-11-24: it was
+      // still off when clicked).
+      { do: "wait", ms: 3000 },
+      { do: "click", target: "paa.buy", js: true, timeout: 15000 },
       { do: "waitForUrl", pattern: /\/cart/ },
     ],
-    addToCart: [{ do: "walk", to: "product" }, { do: "act", name: "addToCart" }],
+    // A part it can't sell ends the walk too, and the add fails at once.
+    addToCart: [{ do: "walk", to: ["product", "notSold", "noMatch"] }, { do: "act", name: "addToCart" }],
     openCart: [
       { do: "walk", to: "cart" },
       { do: "extract", target: "cart.rows", fields: CART_FIELDS, as: "cart", optional: true, timeout: 5000 },
     ],
     removeFromCart: [{ do: "walk", to: "cart" }, { do: "act", name: "removeLine" }],
+    setPack: [
+      { do: "walk", to: "cart" },
+      { do: "click", target: "cart.packLink", timeout: 10000 },
+      { do: "wait", ms: 1500 },
+      { do: "click", target: "cart.packChoice", js: true, timeout: 10000 },
+      { do: "wait", ms: 1000 },
+      { do: "click", target: "cart.packSubmit", timeout: 5000 },
+      { do: "wait", ms: 6000 },
+    ],
     checkout: [{ do: "walk", to: "cart" }, { do: "walk", to: "review" }],
     placeOrder: [{ do: "walk", to: "cart" }, { do: "walk", to: "confirmation" }],
     // The same with the BOM's ship-to: filled into the address form when it comes.
@@ -529,7 +636,7 @@ module.exports = {
       },
     ],
   },
-  taskParams: { bulkAddPaa: ["lines"], removeFromCart: ["part"], checkout: [], placeOrder: [], placeOrderWithAddress: ["firstName", "lastName", "phoneDigits", "company", "line1", "line2", "city", "stateName", "zip"], orders: [], track: ["order"] },
+  taskParams: { bulkAddPaa: ["lines"], removeFromCart: ["part"], setPack: ["part", "pack"], checkout: [], placeOrder: [], placeOrderWithAddress: ["firstName", "lastName", "phoneDigits", "company", "line1", "line2", "city", "stateName", "zip"], orders: [], track: ["order"] },
   taskDefaults: {
     addToCart: { part: "GRM155R71C104KA88D", quantity: "10" },
     removeFromCart: { part: "GRM155R71C104KA88D" },

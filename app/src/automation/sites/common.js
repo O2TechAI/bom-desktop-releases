@@ -248,7 +248,7 @@ const COMMON_TASKS = {
 const TASK_ORDER = ["signIn", "addToCart", "bulkAdd", "openCart", "removeFromCart", "checkout", "placeOrder", "orders", "track", "pageMap"];
 
 const TASK_PARAMS = {
-  addToCart: ["part", "quantity"],
+  addToCart: ["part", "quantity", "pack"],
   openCart: [],
   signIn: [],
   pageMap: [],

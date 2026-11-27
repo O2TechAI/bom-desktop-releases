@@ -26,7 +26,9 @@
 const { T } = require("./common");
 
 const RESULT_ROW = {
-  any: [{ css: "tr[id^='productId']" }, { role: "row" }, { css: "tr" }],
+  // The first row: a part can be listed again below as a flash sale with a
+  // minimum of 100,000 (2026-11-24, CL21A106KAYNNNE).
+  any: [{ css: "tr[id^='productId']:not([id$='flashSaleProduct'])" }, { css: "tr[id^='productId']" }, { role: "row" }, { css: "tr" }],
   hasText: "{{part}}",
 };
 
@@ -335,7 +337,9 @@ module.exports = {
     "cart.select": {
       title: T("Tick this line", "勾选这一行", "Marcar esta línea"),
       within: CART_ROW,
-      any: [{ role: "checkbox" }, { css: "input[type=checkbox]" }, { css: ".v-input--checkbox" }],
+      // The visible box first: the input behind it is hidden (2026-11-24).
+      any: [{ css: ".v-input--checkbox .v-input--selection-controls__input" }, { css: ".v-input--checkbox" },
+        { css: "[class*='checkbox' i]:not(input)" }, { role: "checkbox" }, { css: "input[type=checkbox]" }],
     },
     "cart.delete": {
       title: T("Delete", "删除", "Eliminar"),
@@ -344,9 +348,33 @@ module.exports = {
         { css: "button.v2-button-outlined-primary" },
       ],
     },
+    /* A cart line's packaging (2026-11-24, live): its "Cut Tape" button opens
+     * a menu of Cut Tape, LCSC-Reels(+$3) and "2000 | Full Reel" (a whole
+     * reel sets the quantity to the reel's). */
+    "cart.packMenu": {
+      title: T("Packaging", "包装", "Empaque"),
+      within: CART_ROW,
+      any: [{ css: "span[role=button]" }],
+      hasText: /cut tape|lcsc-reels|full reel/i,
+    },
+    /* "Packaging Method: Update the remaining N eligible items to LCSC-Reels
+     * as well?" (2026-11-24, signed in): No, only this line changes. */
+    "cart.packOnlyThis": {
+      title: T("Only this line", "只改这一行", "Solo esta línea"),
+      within: { any: [{ css: ".v-dialog--active" }, { role: "dialog" }], hasText: /packaging method/i },
+      any: [{ role: "button", name: /^no$/i }],
+    },
+    "cart.packOption": {
+      title: T("The packaging", "该包装", "El empaque"),
+      any: [{ css: ".v-menu__content.menuable__content__active [role=option]" }],
+      hasText: "{{pack}}",
+    },
     "cart.deleteConfirm": {
       title: T("Confirm the delete", "确认删除", "Confirmar"),
-      any: [{ role: "button", name: /^(ok|confirm|delete|yes)$/i }],
+      // In the dialog only: "Delete" matched the covered button under it, so
+      // the Yes was never pressed (2026-11-24).
+      within: { any: [{ css: ".v-dialog--active" }, { css: "[role=dialog]" }, { css: ".v-dialog, .el-dialog, .el-message-box" }] },
+      any: [{ role: "button", name: /^(ok|confirm|yes)$/i }],
     },
     "checkout.start": {
       title: T("Secure Checkout", "去结算", "Pagar"),
@@ -443,9 +471,9 @@ module.exports = {
         to: ["results"],
         steps: [
           { do: "peek", target: "cart.count", as: "cartBefore" },
-          { do: "fill", target: "product.quantity", value: "{{quantity}}" },
+          { do: "fill", target: "product.quantity", value: "{{quantity}}", roundBy: "results.row" },
           { do: "click", target: "product.addToCart" },
-          { do: "waitForChange", target: "cart.count", from: "cartBefore", or: "cart.added" },
+          { do: "waitForChange", target: "cart.count", from: "cartBefore", or: "cart.added", optional: true, timeout: 10000 },
         ],
       },
       {
@@ -458,7 +486,7 @@ module.exports = {
           { do: "peek", target: "cart.count", as: "cartBefore" },
           { do: "fill", target: "detail.quantity", value: "{{quantity}}" },
           { do: "click", target: "detail.addToCart" },
-          { do: "waitForChange", target: "cart.count", from: "cartBefore", or: "cart.added" },
+          { do: "waitForChange", target: "cart.count", from: "cartBefore", or: "cart.added", optional: true, timeout: 10000 },
         ],
       },
       {
@@ -537,7 +565,7 @@ module.exports = {
         steps: [
           { do: "click", target: "cart.select" },
           { do: "click", target: "cart.delete" },
-          { do: "click", target: "cart.deleteConfirm", optional: true, timeout: 3000 },
+          { do: "click", target: "cart.deleteConfirm", optional: true, timeout: 6000 },
           { do: "waitForHidden", target: "cart.row" },
         ],
       },
@@ -598,6 +626,13 @@ module.exports = {
       { do: "walk", to: "cart" },
       { do: "act", name: "removeLine" },
     ],
+    setPack: [
+      { do: "walk", to: "cart" },
+      { do: "click", target: "cart.packMenu", timeout: 10000 },
+      { do: "click", target: "cart.packOption", timeout: 5000 },
+      { do: "click", target: "cart.packOnlyThis", optional: true, timeout: 5000 },
+      { do: "wait", ms: 5000 },
+    ],
     checkout: [
       { do: "walk", to: "cart" },
       { do: "walk", to: "review" },
@@ -651,6 +686,7 @@ module.exports = {
   taskParams: {
     bulkAddBom: ["file"],
     removeFromCart: ["part"],
+    setPack: ["part", "pack"],
     checkout: [],
     placeOrder: [],
     placeOrderWithAddress: ["firstName", "lastName", "phoneDigits", "line1", "line2", "city", "stateName", "zip"],

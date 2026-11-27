@@ -8,7 +8,7 @@ const COPY = {
     start: "Start purchase", demo: "Demo", stop: "Stop",
     hint: "The app works through the suppliers' own websites in the background. It asks you only to finish a security check, sign in, or confirm an order.",
     confirmTitle: "Confirm the order", confirmText: "The order is on the supplier's review page. Place it now?",
-    confirm: "Place the order", live: "Open supplier page", external: "Open in browser", backToBom: "\u2190 Back to BOM", backToList: "\u2190 Back to the list",
+    confirm: "Place the order", live: "Open supplier page", external: "Open in browser", backToBom: "\u2190 Back to O2 BOM", backToList: "\u2190 Back to the list",
     lines: "Lines", part: "Part", qty: "Qty", state: "State", note: "Note",
     cart: "Cart", orders: "Orders", tracking: "Reading shipping updates…",
     ready: "Ready", working: "Working", waiting: "Waiting for you", done: "Done", failed: "Failed", stopped: "Stopped", blocked: "The website blocked the app (Access Denied). Try again later.",
@@ -23,6 +23,8 @@ const COPY = {
       "bulk-adding": "Adding the whole list to the cart…",
       "checking-cart": "Checking the cart against your list…",
       "removing-extra": "Removing a part that isn't on your list…",
+      "fixing-quantity": "Setting a part to your list's quantity…",
+      "choosing-packaging": "Choosing each part's packaging in the DigiKey cart…",
       challenge: "Finish the security check in the Chrome window that opened; the app continues by itself.",
       blocked: "The supplier refused this browser (Access Denied); try again later or use its API.",
       sign_in: "Sign in on the supplier's page; the app continues once you're in.",
@@ -50,7 +52,7 @@ const COPY = {
     cartCheckTitle: "Check the cart", cartCheckText: "Compare it with your list before anything is bought.",
     cartOk: "Correct, go to checkout", cartRecheck: "Re-check", cartList: "Your list", cartCart: "In the cart",
     cartUnit: "Unit price", cartLine: "Line total", cartTotal: "Cart total", cartAllGood: "Every line matches your list.",
-    cartIssues: "{n} to look at", issues: { missing: "Not in the cart", quantity: "Other quantity", price: "Dearer than BOM", extra: "Not on your list" },
+    cartIssues: "{n} to look at", issues: { missing: "Not in the cart", quantity: "Other quantity", price: "Dearer than BOM", extra: "Not on your list", packaging: "Other packaging than the order", unpriced: "No price: can't be bought at this quantity" },
     resume: "Continue", resumeSaved: "Continue the interrupted purchase",
     rehearsal: "Rehearsal (no order)", rehearsalHint: "Runs to the order's yes, then stops: nothing is bought.",
     placedTitle: "Order placed", rehearsalTitle: "Rehearsal: not ordered", placedNumber: "Order number",
@@ -68,7 +70,7 @@ const COPY = {
     start: "开始采购", demo: "一键演示", stop: "停止",
     hint: "app 在后台操作供应商自己的网站。只有需要你完成安全验证、登录或确认下单时才会叫你。",
     confirmTitle: "确认下单", confirmText: "订单已到供应商的确认页，现在下单吗？",
-    confirm: "确认下单", live: "打开供应商页面", external: "在浏览器中打开", backToBom: "\u2190 返回 BOM", backToList: "\u2190 返回清单",
+    confirm: "确认下单", live: "打开供应商页面", external: "在浏览器中打开", backToBom: "\u2190 返回 O2 BOM", backToList: "\u2190 返回清单",
     lines: "明细", part: "型号", qty: "数量", state: "状态", note: "说明",
     cart: "购物车", orders: "订单", tracking: "正在读取物流信息…",
     ready: "准备就绪", working: "进行中", waiting: "等待你操作", done: "完成", failed: "失败", stopped: "已停止", blocked: "网站拦住了 app（Access Denied），请稍后再试。",
@@ -83,6 +85,8 @@ const COPY = {
       "bulk-adding": "正在把整份清单加入购物车…",
       "checking-cart": "正在核对购物车和清单…",
       "removing-extra": "正在删除不在清单上的零件…",
+      "fixing-quantity": "正在把零件数量改成清单上的数量…",
+      "choosing-packaging": "正在 DigiKey 购物车里为每个零件选包装…",
       challenge: "请在弹出的 Chrome 窗口里完成安全验证，完成后 app 会自动继续。",
       blocked: "站点拒绝访问（Access Denied），请稍后再试或改用其 API",
       sign_in: "请在供应商页面登录，登录后 app 会自动继续。",
@@ -110,7 +114,7 @@ const COPY = {
     cartCheckTitle: "核对购物车", cartCheckText: "下单前，和你的清单对一下。",
     cartOk: "没问题，去结账", cartRecheck: "重新读取", cartList: "你的清单", cartCart: "购物车里",
     cartUnit: "单价", cartLine: "小计", cartTotal: "购物车合计", cartAllGood: "每一行都和清单对得上。",
-    cartIssues: "有 {n} 处要看", issues: { missing: "购物车里没有", quantity: "数量不同", price: "比 BOM 贵", extra: "清单里没有" },
+    cartIssues: "有 {n} 处要看", issues: { missing: "购物车里没有", quantity: "数量不同", price: "比 BOM 贵", extra: "清单里没有", packaging: "包装和订单不一样", unpriced: "没有价格：这个数量买不了" },
     resume: "继续", resumeSaved: "继续上次中断的采购",
     rehearsal: "演练（不下单）", rehearsalHint: "走到确认下单就停，不会买任何东西。",
     placedTitle: "已下单", rehearsalTitle: "演练：未下单", placedNumber: "订单号",
@@ -128,7 +132,7 @@ const COPY = {
     start: "Iniciar compra", demo: "Demostración", stop: "Detener",
     hint: "La app trabaja en las webs de los proveedores en segundo plano. Solo te pide terminar una verificación de seguridad, iniciar sesión o confirmar un pedido.",
     confirmTitle: "Confirmar el pedido", confirmText: "El pedido está en la página de revisión del proveedor. ¿Lo haces ahora?",
-    confirm: "Realizar el pedido", live: "Abrir página del proveedor", external: "Abrir en el navegador", backToBom: "\u2190 Volver a BOM", backToList: "\u2190 Volver a la lista",
+    confirm: "Realizar el pedido", live: "Abrir página del proveedor", external: "Abrir en el navegador", backToBom: "\u2190 Volver a O2 BOM", backToList: "\u2190 Volver a la lista",
     lines: "Líneas", part: "Pieza", qty: "Cant.", state: "Estado", note: "Nota",
     cart: "Carrito", orders: "Pedidos", tracking: "Leyendo el seguimiento…",
     ready: "Listo", working: "En curso", waiting: "Esperándote", done: "Hecho", failed: "Falló", stopped: "Detenido", blocked: "La web bloqueó la app (Access Denied). Inténtalo más tarde.",
@@ -143,6 +147,8 @@ const COPY = {
       "bulk-adding": "Añadiendo toda la lista al carrito…",
       "checking-cart": "Comprobando el carrito con tu lista…",
       "removing-extra": "Quitando una pieza que no está en tu lista…",
+      "fixing-quantity": "Ajustando una pieza a la cantidad de tu lista…",
+      "choosing-packaging": "Eligiendo el empaque de cada pieza en el carrito de DigiKey…",
       challenge: "Termina la verificación de seguridad en la ventana de Chrome que se abrió; la app sigue sola.",
       blocked: "El proveedor rechazó este navegador (Access Denied); inténtalo más tarde o usa su API.",
       sign_in: "Inicia sesión en la página del proveedor; la app sigue en cuanto entres.",
@@ -170,7 +176,7 @@ const COPY = {
     cartCheckTitle: "Revisa el carrito", cartCheckText: "Compáralo con tu lista antes de comprar nada.",
     cartOk: "Correcto, ir al pago", cartRecheck: "Volver a leer", cartList: "Tu lista", cartCart: "En el carrito",
     cartUnit: "Precio unitario", cartLine: "Total de la línea", cartTotal: "Total del carrito", cartAllGood: "Todas las líneas coinciden con tu lista.",
-    cartIssues: "{n} por revisar", issues: { missing: "No está en el carrito", quantity: "Otra cantidad", price: "Más caro que en BOM", extra: "No está en tu lista" },
+    cartIssues: "{n} por revisar", issues: { missing: "No está en el carrito", quantity: "Otra cantidad", price: "Más caro que en BOM", extra: "No está en tu lista", packaging: "Otro empaque que el del pedido", unpriced: "Sin precio: no se puede comprar esta cantidad" },
     resume: "Continuar", resumeSaved: "Continuar la compra interrumpida",
     rehearsal: "Ensayo (sin pedido)", rehearsalHint: "Llega a la confirmación del pedido y se detiene: no se compra nada.",
     placedTitle: "Pedido realizado", rehearsalTitle: "Ensayo: sin pedido", placedNumber: "Número de pedido",
@@ -349,8 +355,8 @@ function buildPanel(site) {
     void startOne(site.id, list.value);
   });
   stop.addEventListener("click", () => { void window.buyLab.stop(site.id, { soft: true }); });
-  confirm.addEventListener("click", () => { void window.buyLab.confirm(site.id); });
-  cartOk.addEventListener("click", () => { void window.buyLab.confirmCart(site.id); });
+  confirm.addEventListener("click", (event) => { void window.buyLab.confirm(site.id, event.isTrusted ? "click" : "synthetic"); });
+  cartOk.addEventListener("click", (event) => { void window.buyLab.confirmCart(site.id, event.isTrusted ? "click" : "synthetic"); });
   cartRecheck.addEventListener("click", () => { void window.buyLab.recheckCart(site.id); });
   cartStop.addEventListener("click", () => { void window.buyLab.stop(site.id, { soft: true }); });
   resume.addEventListener("click", () => { void window.buyLab.resume(site.id); });
@@ -476,7 +482,7 @@ function render(state) {
   renderService(state.service);
   // Opened by BOM's Deal with it: Back (here and on the seller's page) goes to BOM.
   elements.backSite.hidden = state.returnTo !== "site";
-  if (elements.liveBack) elements.liveBack.textContent = state.returnTo === "site" ? copy.backToBom : copy.backToList;
+  if (elements.liveBack) elements.liveBack.textContent = state.returnTo === "site" || state.liveOnly ? copy.backToBom : copy.backToList;
   renderHold(state);
   const anyRunning = Object.values(state.flows).some((flow) => flow.running);
   elements.stopAll.disabled = !anyRunning;

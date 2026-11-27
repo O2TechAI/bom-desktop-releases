@@ -128,6 +128,14 @@ const tabsBar = document.querySelector("[data-tabs]");
 const MAIN = { en: "Page", zh: "主页面", es: "Página" };
 const CLOSE = { en: "Close tab", zh: "关闭标签页", es: "Cerrar pestaña" };
 const WAITING = { en: "waiting for you", zh: "等你操作", es: "esperándote" };
+const STALE = { en: "replaced", zh: "已失效", es: "reemplazado" };
+const REDO = { en: "Run again", zh: "重新进行", es: "Repetir" };
+const STALE_WHY = {
+  en: "A newer order took this supplier. Run again starts this one over; the order running there now stops.",
+  zh: "这家供应商换成了更新的订单。点「重新进行」会从头再跑这一单，正在跑的那一单会停下。",
+  es: "Un pedido más reciente ocupó este proveedor. Repetir lo empieza de nuevo; el que está en curso se detiene.",
+};
+const LINES = { en: (n) => `${n} lines`, zh: (n) => `${n} 行`, es: (n) => `${n} líneas` };
 
 let flow = null; // { sites, flows, active, view }
 let pageTabs = null; // { viewing, tabs }
@@ -140,7 +148,7 @@ function hostOf(url) {
   }
 }
 
-function tabButton({ label, current, onPick, onClose, kind, attention }) {
+function tabButton({ label, current, onPick, onClose, kind, attention, action, hint }) {
   const item = document.createElement("div");
   item.className = `tab tab-${kind}`;
   item.setAttribute("role", "tab");
@@ -169,7 +177,20 @@ function tabButton({ label, current, onPick, onClose, kind, attention }) {
     });
     item.append(close);
   }
-  const pick = () => { onPick(); canvas.focus(); };
+  if (hint) item.title = hint;
+  if (action) {
+    const button = document.createElement("button");
+    button.className = "tab-action";
+    button.type = "button";
+    button.textContent = action.label;
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      button.disabled = true;
+      action.run();
+    });
+    item.append(button);
+  }
+  const pick = () => { onPick?.(); canvas.focus(); };
   item.addEventListener("click", pick);
   item.addEventListener("keydown", (event) => { if (event.key === "Enter") pick(); });
   return item;
@@ -187,6 +208,25 @@ function renderTabs() {
       attention: Boolean(state && (state.status === "waiting" || state.confirm)),
       onPick: () => { void window.buyLab.showLive(site.id); },
     }));
+  }
+  // Orders a newer one replaced: no longer valid, each with Run again.
+  const stale = Array.isArray(flow?.stale) ? flow.stale : [];
+  if (stale.length) {
+    const divider = document.createElement("span");
+    divider.className = "tab-divider";
+    items.push(divider);
+    for (const task of stale) {
+      const site = sites.find((entry) => entry.id === task.seller);
+      const at = task.at ? new Date(task.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+      const count = task.lines ? (LINES[language] || LINES.en)(task.lines) : "";
+      items.push(tabButton({
+        kind: "task",
+        label: [site?.name || task.seller, count, at, STALE[language] || STALE.en].filter(Boolean).join(" · "),
+        current: false,
+        hint: STALE_WHY[language] || STALE_WHY.en,
+        action: { label: REDO[language] || REDO.en, run: () => { void window.buyLab.redo(task.key); } },
+      }));
+    }
   }
   const tabs = Array.isArray(pageTabs?.tabs) ? pageTabs.tabs : [];
   if (tabs.length > 1) {

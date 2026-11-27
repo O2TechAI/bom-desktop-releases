@@ -37,7 +37,19 @@ const { randomUUID } = require("node:crypto");
 
 const { AutomationError, Driver } = require("./driver");
 const { UNKNOWN, matchTargets, nextTransition, recognise } = require("./machine");
-const { fill } = require("./targets");
+const { escapeRegExp, fill } = require("./targets");
+
+/** The smallest quantity at least `wanted` that a "MOQ: 20, Mult: 20" rule
+ * allows; null when the text has no such rule. */
+function roundQuantity(wanted, text) {
+  const want = Number(String(wanted).replace(/,/g, ""));
+  const min = Number((String(text || "").match(/MOQ\s*:?\s*([\d,]+)/i) || [])[1]?.replace(/,/g, "") || 0);
+  const step = Number((String(text || "").match(/Mult\s*:?\s*([\d,]+)/i) || [])[1]?.replace(/,/g, "") || 0);
+  if (!want || (!min && !step)) return null;
+  let quantity = Math.max(want, min || 0);
+  if (step > 1) quantity = Math.ceil(quantity / step) * step;
+  return quantity;
+}
 
 const ACTIONS = new Set([
   "goto", "waitForLoad", "waitForUrl", "waitFor", "waitForHidden", "click", "hover", "fill", "type", "press",
@@ -46,7 +58,7 @@ const ACTIONS = new Set([
 ]);
 
 /* A short pause between steps, so a person can follow along. */
-const STEP_GAP = 250;
+const STEP_GAP = 120;
 /* How often a hand-off checks whether the person is done. */
 const HANDOFF_POLL = 1000;
 /* How long a page may take to become a state the machine knows. A shop
@@ -272,6 +284,7 @@ class Runner {
     this.status = "running";
     this.lastNavigationAt = Date.now();
     this.emit();
+    this.startedAt = Date.now();
     try {
       await this.driver.attach();
       const views = [...this.steps];
@@ -281,6 +294,7 @@ class Runner {
         await new Promise((resolve) => setTimeout(resolve, STEP_GAP));
       }
       this.status = "done";
+      console.warn(`[task ${this.profile.id}] ${new Date().toISOString().slice(11, 19)} ${this.task} done in ${Math.round((Date.now() - this.startedAt) / 1000)}s`);
     } catch (error) {
       const stoppedNow = error instanceof AutomationError && error.code === "stopped";
       this.status = stoppedNow ? "stopped" : "failed";
@@ -293,7 +307,12 @@ class Runner {
           detail: error.detail || null,
         };
       }
-      if (!stoppedNow) console.error(`Automation step failed: ${error.stack || error.message}`);
+      if (!stoppedNow) {
+        // Which step, for the app's log (2026-11-24: a packaging switch failed with no step named).
+        const last = this.lastStep ? `${this.lastStep.do}${this.lastStep.target ? ` ${this.lastStep.target}` : ""}${this.lastStep.name ? ` ${this.lastStep.name}` : ""}` : "?";
+        console.error(`Automation step failed ${new Date().toISOString().slice(11, 19)} (${this.task}: ${last}): ${error.stack || error.message}`);
+        await this.logPage(`failed ${this.task}`);
+      }
     } finally {
       this.message = null;
       this.confirming = null;
@@ -319,12 +338,16 @@ class Runner {
     view.status = "running";
     this.emit();
     try {
+      this.lastStep = step;
       const result = await this.perform(step, view, options);
       if (step.as) this.results[step.as] = result ?? null;
       view.status = "done";
     } catch (error) {
       // An optional step is skipped when its target isn't there or can't be reached.
-      const missing = error instanceof AutomationError && ["not_found", "not_visible", "covered"].includes(error.code);
+      // A wait for a change that did not come is skipped too (2026-11-24:
+      // Mouser goes to the cart instead of changing its count).
+      const missing = error instanceof AutomationError && (["not_found", "not_visible", "covered", "unchanged"].includes(error.code)
+        || (step.do === "waitForUrl" && error.code === "timeout"));
       if (!(step.optional && missing)) throw error;
       view.status = "skipped";
     }
@@ -351,11 +374,31 @@ class Runner {
       case "hover": return driver.hover(target, options).then(() => true);
       case "fill": {
         const value = fill(step.value ?? "", this.params);
-        return step.js ? driver.fillJs(target, value, options) : driver.fill(target, value, options);
+        const done = await (step.js ? driver.fillJs(target, value, options) : driver.fill(target, value, options));
+        // A quantity the shop sells only in steps (LCSC: "MOQ: 20, Mult: 20"
+        // under the box, and Add disabled for 50, 2026-11-24): the next
+        // quantity it sells, at least the one asked for. Kept as
+        // results.quantity for the cart check.
+        if (step.roundBy) {
+          await new Promise((resolve) => setTimeout(resolve, 800));
+          const rule = await driver.peek(this.target(step.roundBy), { params: this.params });
+          const rounded = roundQuantity(value, rule);
+          this.results.quantity = String(rounded ?? value);
+          if (rounded != null && String(rounded) !== String(value)) {
+            await (step.js ? driver.fillJs(target, String(rounded), options) : driver.fill(target, String(rounded), options));
+          }
+        }
+        return done;
       }
       case "type": return driver.type(fill(step.value ?? "", this.params));
       case "press": return driver.press(step.key);
-      case "select": return driver.select(target, step.option instanceof RegExp ? step.option : fill(step.option, this.params), options);
+      case "select": {
+        // `contains`: an option whose words include the value ("Digi-Reel" for
+        // "Digi-Reel®", 2026-11-24), else one that reads exactly so.
+        const wanted = step.option instanceof RegExp ? step.option : fill(step.option, this.params);
+        const option = step.contains && typeof wanted === "string" ? new RegExp(escapeRegExp(wanted), "i") : wanted;
+        return driver.select(target, option, options);
+      }
       case "check": return driver.check(target, true, options);
       case "uncheck": return driver.check(target, false, options);
       case "upload": return driver.upload(target, [].concat(step.files ?? this.params[step.filesParam]), options).then(() => true);
@@ -623,6 +666,74 @@ class Runner {
     return this.identify({ not: transition.to.includes(from) ? null : from });
   }
 
+  /** The page's address and visible buttons, for the app's log (2026-11-23). */
+  /** A page the app did not know, or a step that failed on it: its address,
+   * outline (the operable parts) and a picture, kept on disk by seller so the
+   * site maps can be brought up to date in one go (2026-11-24: "把所有可能的
+   * 页面都看一遍"). The last 300 per seller are kept. */
+  async capturePage(label) {
+    const root = process.env.O2_PAGE_LOG_DIR;
+    if (!root) return;
+    try {
+      const fs = require("node:fs");
+      const path = require("node:path");
+      const dir = path.join(root, String(this.profile.id || "site"));
+      fs.mkdirSync(dir, { recursive: true });
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const name = `${stamp}-${String(label).replace(/[^a-z0-9]+/gi, "-").slice(0, 40)}`;
+      const outline = await this.driver.outline(400).catch(() => null);
+      const url = this.driver.contents.getURL?.() || "";
+      const step = this.lastStep ? { do: this.lastStep.do, target: this.lastStep.target || null, name: this.lastStep.name || null } : null;
+      fs.writeFileSync(path.join(dir, `${name}.json`), JSON.stringify({ label, task: this.task, state: this.state || null, step, url, outline }, null, 1));
+      const png = await this.driver.screenshot().catch(() => null);
+      if (png) fs.writeFileSync(path.join(dir, `${name}.png`), png);
+      const files = fs.readdirSync(dir).filter((file) => file.endsWith(".json")).sort();
+      for (const old of files.slice(0, Math.max(0, files.length - 300))) {
+        for (const ext of [".json", ".png"]) { try { fs.unlinkSync(path.join(dir, old.replace(/\.json$/, ext))); } catch { /* gone */ } }
+      }
+    } catch { /* only a record */ }
+  }
+
+  async logPage(label) {
+    void this.capturePage(label);
+    try {
+      const contextId = await this.driver.world();
+      const { result } = await this.driver.send("Runtime.evaluate", {
+        contextId, returnByValue: true,
+        expression: `JSON.stringify({ url: location.href, title: document.title, h1: (document.querySelector("h1")?.innerText || "").slice(0, 80), buttons: [...document.querySelectorAll("button, input[type=submit], a[role=button]")].filter((b) => b.offsetParent !== null).map((b) => [b.id, b.getAttribute("data-testid"), (b.innerText || b.value || "").trim().slice(0, 30)].filter(Boolean).join("|")).filter(Boolean).slice(0, 30) })`,
+      });
+      console.warn(`[${label} ${this.profile.id}] ${String(result?.value || "").slice(0, 1800)}`);
+      // Tracking that found no order: the page's requests (status, time) and
+      // its words, to tell a list that never loaded (2026-11-24, DigiKey).
+      if (this.task === "track") {
+        const { result: net } = await this.driver.send("Runtime.evaluate", {
+          contextId, returnByValue: true,
+          expression: `JSON.stringify({ text: document.body.innerText.replace(/\s+/g, " ").slice(0, 600), requests: performance.getEntriesByType("resource").filter((e) => ["fetch", "xmlhttprequest"].includes(e.initiatorType)).slice(-25).map((e) => [e.name.replace(location.origin, "").slice(0, 110), e.responseStatus, Math.round(e.duration)]) })`,
+        });
+        console.warn(`[trackpage ${this.profile.id}] ${String(net?.value || "").slice(0, 4000)}`);
+      }
+      // A packaging switch that failed: the elements that name a packaging,
+      // with their own markup and their row's, to tell the site's changes.
+      if (this.task === "setPack") {
+        const { result: packs } = await this.driver.send("Runtime.evaluate", {
+          contextId, returnByValue: true,
+          expression: `JSON.stringify([...document.querySelectorAll("body *")].filter((e) => e.children.length === 0 && /packaging|cut tape|mousereel|lcsc-reels|full reel/i.test(e.textContent || "") && e.offsetParent !== null).slice(0, 14).map((e) => { const row = e.closest("tr, [id^=cartItemBox_], li"); const up = e.parentElement; return [e.tagName, e.id, String(e.className).slice(0, 40), e.getAttribute("role"), (e.textContent || "").trim().slice(0, 30), up ? up.tagName + "." + String(up.className).slice(0, 30) + "#" + up.id : "", row ? row.tagName + "." + String(row.className).slice(0, 40) + "#" + row.id : "-"].join("|"); }))`,
+        });
+        console.warn(`[packs ${this.profile.id}] ${String(packs?.value || "").slice(0, 2500)}`);
+        const { result: radios } = await this.driver.send("Runtime.evaluate", {
+          contextId, returnByValue: true,
+          expression: `JSON.stringify([...document.querySelectorAll("input[type=radio]")].filter((r) => r.offsetParent !== null).slice(0, 10).map((r) => [r.id, r.name, r.value, r.disabled, r.parentElement?.tagName + "." + String(r.parentElement?.className).slice(0, 30), (r.parentElement?.textContent || "").trim().replace(/\s+/g, " ").slice(0, 50), r.nextElementSibling?.tagName || "", r.labels?.length || 0].join("|")))`,
+        });
+        console.warn(`[radios ${this.profile.id}] ${String(radios?.value || "").slice(0, 2500)}`);
+        const { result: dialogs } = await this.driver.send("Runtime.evaluate", {
+          contextId, returnByValue: true,
+          expression: `JSON.stringify([...document.querySelectorAll(".ui-dialog, [role=dialog]")].filter((d) => d.offsetParent !== null).map((d) => ({ cls: String(d.className).slice(0, 60), frames: [...d.querySelectorAll("iframe")].map((f) => f.src), html: d.innerHTML.replace(/\s+/g, " ").slice(0, 1500) })))`,
+        });
+        console.warn(`[dialogs ${this.profile.id}] ${String(dialogs?.value || "").slice(0, 3000)}`);
+      }
+    } catch { /* only for the log */ }
+  }
+
   /** Go from whatever page this is to a goal state, one transition at a time. */
   async walk(step, view) {
     const machine = this.profile.machine;
@@ -636,7 +747,12 @@ class Runner {
       if (state !== UNKNOWN) await this.arrive(state, view);
       if (goals.includes(state)) return state;
       const info = machine.states[state];
-      if (info?.person) {
+      // A checkout page left from an earlier order is not the person's when
+      // this task goes back to the cart or a part (2026-11-24: a new order
+      // waited at the last one's payment page instead of filling its cart).
+      // A security check or sign-in still is.
+      const leaving = info?.person === "checkout_details" && goals.some((goal) => ["cart", "product", "results", "home", "orders", "orderDetail"].includes(goal));
+      if (info?.person && !leaving) {
         await this.personAt(state, info.person, view);
         state = await this.identify();
         continue;
@@ -653,6 +769,7 @@ class Runner {
             expression: `JSON.stringify({ url: location.href, h1: (document.querySelector("h1")?.innerText || "").slice(0, 80), buttons: [...document.querySelectorAll("button, input[type=submit], a[role=button]")].filter((b) => b.offsetParent !== null).map((b) => [b.id, b.getAttribute("data-testid"), (b.innerText || b.value || "").trim().slice(0, 30)].filter(Boolean).join("|")).filter(Boolean).slice(0, 25) })`,
           });
           console.warn(`[unknown ${this.profile.id}] ${String(result?.value || "").slice(0, 1500)}`);
+          void this.capturePage("unknown");
         } catch { /* only for the log */ }
       }
       // Lost mid-way, or going round in circles: the person takes over.
@@ -669,8 +786,11 @@ class Runner {
       const before = this.driver.contents.getURL?.() || "";
       const next = await this.take(transition, view, state);
       // One line per move, for the app's log (2026-11-23: a walk that went round unseen).
-      console.warn(`[walk ${this.profile.id}] ${state} --${transition.name}--> ${next} | ${String(before).slice(0, 90)} -> ${String(this.driver.contents.getURL?.() || "").slice(0, 90)}`);
-      if (next === state && info?.stuck) {
+      console.warn(`[walk ${this.profile.id}] ${new Date().toISOString().slice(11, 19)} ${state} --${transition.name}--> ${next} | ${String(before).slice(0, 90)} -> ${String(this.driver.contents.getURL?.() || "").slice(0, 90)}`);
+      // Stuck only when the click left the page where it was: a page in two
+      // parts (Mouser's shipping, backorder choice then ship method) moves on
+      // at the same state (2026-11-24); visits still end a loop.
+      if (next === state && info?.stuck && String(this.driver.contents.getURL?.() || "") === String(before)) {
         // The page didn't let the app on (a payment to choose): the person's turn.
         await this.personAt(state, info.stuck, view);
         visits[state] = 0;

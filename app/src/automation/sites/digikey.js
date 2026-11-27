@@ -69,13 +69,19 @@ const TARGETS = {
   },
   /* A part sold in several packagings (cut tape, tape & reel, Digi-Reel):
    * the options on its page (2026-11-23: "根据描述来进行选择"). */
+  /* The "added to your cart" window after Add to Cart (2026-11-23): it
+   * covers the page until closed. */
+  "product.continueShopping": {
+    title: T("Continue Shopping", "继续购物", "Seguir comprando"),
+    any: [{ css: "#continue-shopping-btn, [data-testid='continue-shopping-btn']" }, { role: "button", name: /^continue shopping$/i }],
+  },
   "product.packaging": {
     title: T("Packaging options", "包装选项", "Opciones de empaque"),
     any: [
       { role: "radio", name: /cut tape|tape & reel|digi-?reel/i },
       { role: "tab", name: /cut tape|tape & reel|digi-?reel/i },
       { role: "option", name: /cut tape|tape & reel|digi-?reel/i },
-      { text: /^(cut tape|tape & reel|digi-?reel)/i },
+      { css: "[id^='pack-type-radio']" },
     ],
   },
   /* Cut tape: what a small quantity is sold as. Tape & reel is a whole reel,
@@ -87,8 +93,15 @@ const TARGETS = {
       { role: "tab", name: /cut tape/i },
       { role: "option", name: /cut tape/i },
       { role: "button", name: /cut tape/i },
-      { text: /^cut tape( \(ct\))?$/i },
+      { css: "[id^='pack-type-radio']", hasText: "Cut Tape" },
     ],
+  },
+  /* The packaging the order asked for, by its name on the page's options
+   * ("Cut Tape", "Digi-Reel® US$7.00", "Tape & Reel"; 2026-11-24). */
+  "product.packChosen": {
+    title: T("The order's packaging", "订单要求的包装", "El empaque del pedido"),
+    any: [{ css: "[id^='pack-type-radio']" }, { role: "radio" }, { role: "tab" }, { role: "button" }],
+    hasText: "{{pack}}",
   },
   "cart.count": {
     title: T("Cart count", "购物车数量", "Cantidad en el carrito"),
@@ -168,9 +181,76 @@ const TARGETS = {
     title: T("Quantity column", "数量列", "Columna de cantidad"),
     any: [{ css: "#dialog-mapper select[name=column1]" }],
   },
+  /* The file is DigiKey number, maker's number, quantity (2026-11-25). */
+  "cart.mapColumn2": {
+    title: T("Quantity column", "数量列", "Columna de cantidad"),
+    any: [{ css: "#dialog-mapper select[name=column2]" }],
+  },
   "cart.mapStartRow": {
     title: T("First part row", "首行料号所在行", "Primera fila de piezas"),
     any: [{ css: "#dialog-mapper input#StartRow" }],
+  },
+  /* A line the BOM file left at "View Options" (2026-11-24, live): its
+   * button, the options dialog (#dialog-suggestions), one radio per option
+   * (#suggestion0...), and Add / Cancel. */
+  /* The cart's loading cover while it refreshes after a change (2026-11-25:
+   * it covered View Options and the rest of the lines went by search). */
+  "cart.busy": {
+    title: T("Loading", "加载中", "Cargando"),
+    any: [{ css: "#loadingDiv.ui-widget-overlay, #loadingDiv" }],
+  },
+  /* The Value Calculator after Add to Cart: "A lower extended price is
+   * available at a higher quantity", the asked quantity chosen, and Add
+   * (2026-11-25: without it the part never went in, and nothing said so). */
+  "product.valueCalcAdd": {
+    title: T("Add", "加入", "Añadir"),
+    within: { any: [{ css: ".dk-modal.visible" }, { role: "dialog" }], hasText: /value calculator|lower extended price/i },
+    any: [{ css: "#primary-add" }, { role: "button", name: /^add$/i }],
+  },
+  /* "Add to Cart" again in DigiKey's own question after the first click
+   * (2026-11-25: Yageo RC0402 parts two sellers list; without it nothing went in). */
+  "product.addAnyway": {
+    title: T("Add to Cart", "加入购物车", "Añadir al carrito"),
+    any: [{ css: "[data-testid='add-to-cart-modal-error-ok-btn'], #add-to-cart-modal-error-ok-btn" }],
+  },
+  "cart.viewOptions": {
+    title: T("View Options", "查看选项", "Ver opciones"),
+    any: [{ role: "button", name: /^view options$/i }],
+  },
+  "cart.optionsDialog": {
+    title: T("Packaging options", "包装选项", "Opciones de empaque"),
+    any: [{ css: "#dialog-suggestions.visible .dk-modal__content" }],
+  },
+  /* The same once its options have loaded: they come a moment after the
+   * dialog shows, and a read before then found none (2026-11-24). */
+  "cart.optionsLoaded": {
+    title: T("Packaging options", "包装选项", "Opciones de empaque"),
+    any: [{ css: "#dialog-suggestions.visible .dk-modal__content" }],
+    // Also DigiKey's Value Calculator ("A lower extended price is available
+    // at a higher quantity", 2026-11-25): the list's own quantity is kept.
+    hasText: /(valid options are|lower extended price)[\s\S]*-ND/i,
+  },
+  "cart.optionChoice": {
+    title: T("The packaging", "该包装", "El empaque"),
+    any: [{ css: "#dialog-suggestions.visible #suggestion{{option}}" }],
+  },
+  "cart.optionsAdd": {
+    title: T("Add", "加入", "Añadir"),
+    any: [{ css: "#dialog-suggestions.visible #primary-add" }],
+  },
+  "cart.optionsCancel": {
+    title: T("Cancel", "取消", "Cancelar"),
+    any: [{ css: "#dialog-suggestions.visible #secondary-cancel" }],
+  },
+  /* A cart line's packaging (2026-11-24, live): a select named
+   * Details[n].PartNumber whose options are that part's packagings ("Cut
+   * Tape (CT)", "Digi-Reel®", "Tape & Reel") by their DigiKey numbers.
+   * Choosing one keeps the quantity, unless the packaging needs more (a reel:
+   * 10 became 3,000). */
+  "cart.packSelect": {
+    title: T("Packaging", "包装", "Empaque"),
+    within: { any: [{ css: "tr.detailRow" }, { css: "tbody tr" }], hasText: "{{part}}" },
+    any: [{ css: "select[name$='PartNumber']" }],
   },
   "cart.mapAdd": {
     title: T("Add to Current Cart", "加入当前购物车", "Añadir al carrito actual"),
@@ -182,6 +262,28 @@ const TARGETS = {
   "addr.form": {
     title: T("Shipping address form", "收货地址表单", "Formulario de dirección"),
     any: [{ css: "input#ShippingAddress_AddressLine1" }],
+  },
+  /* Signed in, the address page lists the account's saved addresses, one
+   * radio each, and "+ Add a New Shipping Address" (2026-11-24, live). The
+   * order's ship-to is the saved one with its postal code, else a new one. */
+  "addr.savedAny": {
+    title: T("Saved addresses", "已保存的地址", "Direcciones guardadas"),
+    any: [{ css: "tr:has(input[type=radio])" }],
+    hasText: /\d{5}/,
+  },
+  "addr.savedRow": {
+    title: T("The order's address", "订单的收货地址", "La dirección del pedido"),
+    any: [{ css: "tr:has(input[type=radio])" }],
+    hasText: "{{zip}}",
+  },
+  "addr.savedPick": {
+    title: T("The order's address", "订单的收货地址", "La dirección del pedido"),
+    within: { any: [{ css: "tr:has(input[type=radio])" }], hasText: "{{zip}}" },
+    any: [{ css: "input[type=radio]" }],
+  },
+  "addr.addNew": {
+    title: T("Add a New Shipping Address", "新增收货地址", "Añadir una dirección"),
+    any: [{ role: "link", name: /add a new shipping address/i }, { role: "button", name: /add a new shipping address/i }, { text: /add a new shipping address/i }],
   },
   "addr.email": { title: T("Email", "邮箱", "Correo"), any: [{ css: "input#ShippingContactInfo_ShippingEmail" }] },
   "addr.phone": { title: T("Telephone", "电话", "Teléfono"), any: [{ css: "input#ShippingContactInfo_ShippingPhone" }] },
@@ -229,6 +331,10 @@ const TARGETS = {
   "ship.continue": {
     title: T("Continue to Payment", "继续到付款", "Continuar al pago"),
     any: [{ css: "#continueButton #primaryButton" }],
+  },
+  "cart.uploaded": {
+    title: T("The uploaded lines", "上传后的行", "Las líneas subidas"),
+    any: [{ css: "#cartDetails tbody tr" }, { css: "[id^='PartErrorRemove']" }, { role: "button", name: /^view options$/i }],
   },
   "cart.empty": {
     title: T("Empty cart", "空购物车", "Carrito vacío"),
@@ -279,6 +385,21 @@ const TARGETS = {
     title: T("Orders", "订单", "Pedidos"),
     any: [{ css: "tr.mud-table-row" }, { css: "table tbody tr" }, { role: "row" }],
     hasText: /\d{6,}/,
+  },
+  /* A part DigiKey no longer sells: "Unavailable. This product is no longer
+   * carried by DigiKey" where the buy box would be (2026-11-24,
+   * GRM188R61A106KE69D). */
+  /* A search with no result for the part: "Sorry, "X" did not return any
+   * results" (2026-11-25, CL10B683KB8NNNC). */
+  "results.none": {
+    title: T("No result", "没有结果", "Sin resultados"),
+    any: [{ css: "h1, h2, h3, p, div, span" }],
+    hasText: /did not return any results/i,
+  },
+  "product.unavailable": {
+    title: T("No longer sold", "已不再销售", "Ya no se vende"),
+    any: [{ css: "h2, h3, h4, p, span, div" }],
+    hasText: /no longer carried by digikey|out of stock and backorders are currently unavailable/i,
   },
   "product.ofPart": {
     title: T("The part's page", "该型号的页面", "La página de la pieza"),
@@ -332,13 +453,31 @@ const STATES = {
   cart: { title: T("Cart", "购物车", "Carrito"), match: { url: /\/ordering\/shoppingcart/i } },
   orderDetail: { title: T("Order", "订单详情", "Pedido"), match: { url: /\/orderhistory\/(?!list)[^?]*\d{5,}/i } },
   orders: { title: T("Orders", "订单记录", "Pedidos"), match: [{ url: /\/orderhistory\/list/i }, { url: /orderhistory/i, all: ["orders.rows"] }] },
+  // Known on its own, so the walk ends there at once: a line that can't be
+  // had, not a page for the person (it waited as "lost").
+  // Searched, and nothing has the part's number: the line can't be had here.
+  noMatch: { title: T("Not found", "没找到", "No encontrado"), match: { url: /\/products\/result/i, all: ["results.none"] } },
+  notSold: {
+    title: T("No longer sold", "已不再销售", "Ya no se vende"),
+    match: { url: /\/products\/detail\//i, all: ["product.unavailable", "product.ofPart"] },
+  },
   product: {
     title: T("Product page", "商品页", "Página del producto"),
     // Its buy box, or its packaging options before one is chosen (2026-11-23:
     // the page of a part in several packagings was not recognised).
     match: [{ all: ["product.addToCart", "product.ofPart"] }, { all: ["product.packaging", "product.ofPart"] }],
   },
-  results: { title: T("Search results", "搜索结果", "Resultados"), match: { url: /\/products\/result/i, all: ["results.exact"] } },
+  // A search can also land on a category page with an Exact Match card
+  // (2026-11-23: 1N4148W-7-F opened /products/category/diodes/rectifiers).
+  // Any part's own page, its buy box not (yet, or any more) known: after an
+  // Add to Cart it was "unknown", and each walk on from it waited out the 20 s
+  // of recognising a page (2026-11-25).
+  // This part's own page only: any part's page taken as the goal added the
+  // last part again under the next one's quantity (2026-11-25).
+  productPage: { title: T("Product page", "商品页", "Página del producto"), match: { url: /\/products\/detail\//i, all: ["product.ofPart"] } },
+  // Another part's page: known (no 20 s of recognising), but no goal.
+  otherProduct: { title: T("Product page", "商品页", "Página del producto"), match: { url: /\/products\/detail\//i } },
+  results: { title: T("Search results", "搜索结果", "Resultados"), match: { url: /\/products\/(result|category)/i, all: ["results.exact"] } },
   // The home page Buy lab's Chrome opens on. Known by its address only, and
   // last, so it never shadows a page above. Unknown, a walk from here waited
   // out the whole recognition time (20 s) before setting off.
@@ -351,7 +490,7 @@ const TRANSITIONS = [
     name: "search",
     title: T("Search for the part", "搜索型号", "Buscar la pieza"),
     from: "*",
-    to: ["product", "results", "challenge"],
+    to: ["product", "results", "challenge", "noMatch"],
     // Search the way a person does: the shop's own page, the box, the term and
     // the search button. A cold goto of the result URL is exactly what
     // Cloudflare asks to verify first.
@@ -362,7 +501,10 @@ const TRANSITIONS = [
       { do: "fill", target: "search.input", value: "{{part}}" },
       { do: "wait", ms: 400 },
       { do: "click", target: "search.submit", navigates: true },
-      { do: "waitForUrl", pattern: /products\/result|product-detail/i, timeout: 20000 },
+      // A search with one match goes straight to its page, /products/detail/
+      // (2026-11-23: RC0603FR-07100KL); a security check keeps the address,
+      // so the page itself is told apart after this wait.
+      { do: "waitForUrl", pattern: /products\/(result|detail|category)|product-detail/i, optional: true, timeout: 20000 },
       { do: "wait", ms: 800 },
       { do: "click", target: "cookies.accept", optional: true, timeout: 2500 },
     ],
@@ -437,16 +579,27 @@ const TRANSITIONS = [
     name: "addToCart",
     title: T("Add to cart", "加入购物车", "Añadir al carrito"),
     auto: false,
-    from: ["product"],
-    to: ["product"],
+    from: ["product", "productPage"],
+    to: ["product", "productPage"],
     steps: [
       { do: "peek", target: "cart.count", as: "cartBefore" },
       // Several packagings: cut tape, as a small quantity is sold.
-      { do: "click", target: "product.packCutTape", when: "product.packaging", whenTimeout: 2000 },
-      { do: "wait", ms: 800 },
+      // No Cut Tape button (the word only in its specifications): the page's own choice stays (2026-11-24).
+      // The quantity first: on a narrow page the packaging options only show
+      // once it is typed, and they push Add to Cart down; a click aimed
+      // before they showed hit nothing (2026-11-24, MMBT2222ALT1G).
       { do: "fill", target: "product.quantity", value: "{{quantity}}" },
+      { do: "wait", ms: 1500 },
+      { do: "click", target: "product.packChosen", when: "product.packaging", whenTimeout: 2000, optional: true, timeout: 3000 },
+      { do: "wait", ms: 1000 },
       { do: "click", target: "product.addToCart", timeout: 15000 },
-      { do: "waitForChange", target: "cart.count", from: "cartBefore", or: "cart.added" },
+      { do: "click", target: "product.valueCalcAdd", optional: true, timeout: 2500 },
+      { do: "click", target: "product.addAnyway", optional: true, timeout: 2000 },
+      // Required: an add that did nothing fails here, and its page is kept
+      // (2026-11-25: parts that "went in" were not in the cart).
+      { do: "waitForChange", target: "cart.count", from: "cartBefore", or: "cart.added", timeout: 10000 },
+      { do: "click", target: "product.continueShopping", optional: true, timeout: 5000 },
+      { do: "wait", ms: 500 },
     ],
   },
   {
@@ -555,17 +708,26 @@ const TRANSITIONS = [
     from: ["cart"],
     to: ["cart"],
     steps: [
+      // Right after a new cart the page is still settling, and a file given
+      // then was not taken (2026-11-25): a moment first, and once more if
+      // the mapping dialog doesn't come.
+      { do: "wait", ms: 1500 },
       { do: "upload", target: "cart.uploadFile", filesParam: "file" },
+      { do: "waitFor", target: "cart.mapper", optional: true, timeout: 10000 },
+      { do: "upload", target: "cart.uploadFile", filesParam: "file", unless: "cart.mapper" },
       { do: "waitFor", target: "cart.mapper", timeout: 20000 },
-      { do: "select", target: "cart.mapPartColumn", option: "{{partColumn}}" },
-      { do: "select", target: "cart.mapQtyColumn", option: "Quantity" },
+      { do: "select", target: "cart.mapPartColumn", option: "DigiKey Part Number" },
+      { do: "select", target: "cart.mapQtyColumn", option: "Manufacturer Part Number" },
+      { do: "select", target: "cart.mapColumn2", option: "Quantity" },
       // The file's first row is its header; the parts start on row 2.
       { do: "fill", target: "cart.mapStartRow", value: "2" },
       { do: "click", target: "cart.mapAdd" },
       { do: "waitForHidden", target: "cart.mapper", timeout: 20000 },
-      { do: "wait", ms: 2500 },
-      { do: "waitForHidden", target: "cart.empty", timeout: 20000 },
-      { do: "waitFor", target: "cart.rows", timeout: 20000 },
+      // Done once the cart shows what it took: lines, or lines left at View
+      // Options (the empty-cart heading stays then, and waiting for it to go
+      // cost 20 s each upload, 2026-11-24).
+      { do: "waitFor", target: "cart.uploaded", timeout: 20000 },
+      { do: "wait", ms: 800 },
     ],
   },
   {
@@ -603,7 +765,8 @@ module.exports = {
       { do: "handoff", message: "sign_in", until: "account.signedIn" },
     ],
     addToCart: [
-      { do: "walk", to: "product" },
+      // A part no longer sold ends the walk too, and the add fails at once.
+      { do: "walk", to: ["product", "notSold", "productPage", "noMatch"] },
       { do: "act", name: "addToCart" },
     ],
     // The same, without the search page: everything happens in the cart.
@@ -625,6 +788,25 @@ module.exports = {
       { do: "waitFor", target: "cart.empty", optional: true, timeout: 20000 },
       { do: "act", name: "uploadToCart" },
     ],
+    setPack: [
+      { do: "walk", to: "cart" },
+      { do: "select", target: "cart.packSelect", option: "{{pack}}", contains: true, timeout: 10000 },
+      { do: "wait", ms: 6000 },
+    ],
+    openOption: [
+      { do: "waitForHidden", target: "cart.busy", optional: true, timeout: 20000 },
+      { do: "click", target: "cart.viewOptions", timeout: 1500 },
+      { do: "waitFor", target: "cart.optionsLoaded", timeout: 15000 },
+      { do: "read", target: "cart.optionsLoaded", as: "options" },
+    ],
+    pickOption: [
+      { do: "click", target: "cart.optionChoice", js: true },
+      { do: "click", target: "cart.optionsAdd" },
+      { do: "waitForHidden", target: "cart.optionsDialog", timeout: 15000 },
+      { do: "wait", ms: 800 },
+      { do: "waitForHidden", target: "cart.busy", optional: true, timeout: 20000 },
+    ],
+    closeOption: [{ do: "click", target: "cart.optionsCancel" }, { do: "waitForHidden", target: "cart.optionsDialog", timeout: 10000 }],
     openCart: [
       { do: "walk", to: "cart" },
       {
@@ -659,7 +841,12 @@ module.exports = {
     placeOrderWithAddress: [
       { do: "walk", to: "cart" },
       { do: "walk", to: ["shipping", "payment", "review", "confirmation"] },
-      { do: "act", name: "fillAddress", when: "addr.form" },
+      // Signed in: the saved address with the order's postal code, then on.
+      { do: "click", target: "addr.savedPick", js: true, when: "addr.savedRow", whenTimeout: 4000, optional: true },
+      { do: "click", target: "addr.continue", when: "addr.savedRow", navigates: true, optional: true, timeout: 8000 },
+      // None saved for it: a new address, filled in below.
+      { do: "click", target: "addr.addNew", when: "addr.savedAny", unless: "addr.savedRow", optional: true, timeout: 5000 },
+      { do: "act", name: "fillAddress", when: "addr.form", whenTimeout: 5000 },
       { do: "walk", to: "confirmation" },
     ],
     orders: [
@@ -698,6 +885,10 @@ module.exports = {
     bulkAdd: ["part", "quantity"],
     bulkAddList: ["lines"],
     bulkAddBom: ["file", "partColumn"],
+    setPack: ["part", "pack"],
+    openOption: [],
+    pickOption: ["option"],
+    closeOption: [],
     removeFromCart: ["part"],
     checkout: [],
     placeOrder: [],

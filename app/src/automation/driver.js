@@ -362,10 +362,16 @@ class Driver {
 
   /** Wait until the page has stopped loading and its document is ready. */
   async waitForLoad({ timeout = this.options.navigationTimeout } = {}) {
+    // A page that never stops loading (DigiKey's Order History keeps
+    // requesting, 2026-11-24) counts as loaded once its document is complete,
+    // or ready for 8 s: what is on it is waited for by the steps after.
+    const started = Date.now();
     await this.poll(async () => {
-      if (this.contents.isLoading()) return { done: false };
-      const state = await this.page("readyState");
-      return { done: state.readyState !== "loading", value: state };
+      const loading = this.contents.isLoading();
+      const state = await this.page("readyState").catch(() => ({ readyState: "loading" }));
+      if (state.readyState === "loading") return { done: false };
+      const settled = !loading || state.readyState === "complete" || Date.now() - started > 8000;
+      return { done: settled, value: state };
     }, { timeout, describe: () => new AutomationError("timeout", "The page took too long to load") });
   }
 

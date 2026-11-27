@@ -26,7 +26,11 @@ const path = require("node:path");
 
 const TICK_MS = 15_000;
 /* At most this many supplier Chromes at once: each is 1-2 GB. */
-const MAX_RUNS = 2;
+const MAX_RUNS = 6;
+/* How long a paused order keeps its supplier from the next one. */
+const HOLD_MS = 6 * 60 * 60 * 1000;
+// Orders that are no longer valid, kept as tabs in the Buy lab: the newest.
+const MAX_TASK_TABS = 6;
 const BASE = "/api/v1/buy-lab-service/desk";
 
 function money(text) {
@@ -102,10 +106,12 @@ class ServiceLink {
   loadState() {
     if (!this.stateFile) return;
     try {
-      const saved = JSON.parse(fs.readFileSync(this.stateFile, "utf8"));
+      const saved = JSON.parse(fs.readFileSync(this.stateFile, "utf8").replace(/^\uFEFF/, ""));
       for (const key of saved.ended || []) this.ended.add(String(key));
       for (const [key, stop] of Object.entries(saved.stops || {})) {
-        if (stop?.job?.purchase_request_id && stop.job.seller) this.stops.set(key, { job: stop.job, message: stop.message || "stopped" });
+        if (stop?.job?.purchase_request_id && stop.job.seller) {
+          this.stops.set(key, { job: stop.job, message: stop.message || "stopped", at: Number(stop.at) || 0, by: stop.by || "", lines: Number(stop.lines) || 0 });
+        }
       }
     } catch {
       // none yet
@@ -116,9 +122,12 @@ class ServiceLink {
     if (!this.stateFile) return;
     try {
       fs.mkdirSync(path.dirname(this.stateFile), { recursive: true });
-      const stops = Object.fromEntries([...this.stops].map(([key, { job, message }]) => [key, {
+      const stops = Object.fromEntries([...this.stops].map(([key, { job, message, at, by, lines }]) => [key, {
         job: { purchase_request_id: job.purchase_request_id, seller: job.seller, supplier_order_id: job.supplier_order_id || null },
         message,
+        at: at || 0,
+        by: by || "",
+        lines: lines || (Array.isArray(job.lines) ? job.lines.length : 0),
       }]));
       fs.writeFileSync(this.stateFile, JSON.stringify({ ended: [...this.ended], stops }, null, 2));
     } catch (error) {
@@ -201,24 +210,58 @@ class ServiceLink {
         this.running.delete(key);
         run.stopped = true;
         try {
-          // Finish the line in hand first, so the cart isn't left half changed.
-          (await this.openBuyLab({ quiet: true })).stop(run.job.seller, { soft: true });
+          // Finish the line in hand first, so the cart isn't left half changed;
+          // a run waiting for the person stops at once (a soft stop never came,
+          // 2026-11-24: a cancelled order sat at its cart check).
+          const lab = await this.openBuyLab({ quiet: true });
+          const driving = Boolean(lab.flows?.get(run.job.seller)?.state()?.driving);
+          lab.stop(run.job.seller, { soft: driving });
         } catch { /* the Buy lab is closed */ }
       }
+    }
+    // Several orders for one supplier that have not begun (the app just
+    // started, or two were sent together): only the newest begins, the others
+    // are kept as no longer valid (BOM lists its jobs oldest first).
+    const fresh = new Map();
+    for (const job of this.jobs) {
+      const key = `${job.purchase_request_id}:${job.seller}`;
+      if (this.ended.has(key) || this.running.has(key)) continue;
+      if (fresh.has(job.seller)) this.supersede(fresh.get(job.seller), key);
+      fresh.set(job.seller, key);
     }
     for (const job of this.jobs) {
       const key = `${job.purchase_request_id}:${job.seller}`;
       if (this.ended.has(key)) continue;
       const run = this.running.get(key);
       if (run) {
+        // Sent back to pricing (a line retried in BOM) while the run waits for
+        // the person at its cart: it starts again from the price, with the
+        // retried line (2026-11-24: Mouser sat at its cart check and the order
+        // stayed in pricing).
+        const waiting = this.lab?.activity?.(job.seller)?.driver === "person";
+        if (job.phase === "price" && run.phase !== "price" && waiting && !run.placed) {
+          this.running.delete(key);
+          run.stopped = true;
+          try { this.lab.stop(job.seller, { soft: false }); } catch { /* closed */ }
+          continue;
+        }
         run.phase = job.phase;
         run.job = job;
         continue;
       }
-      // One purchase per supplier at a time, and at most two Chromes: the
-      // next waits for its turn.
-      if ([...this.running.values()].some((other) => other.job.seller === job.seller)) continue;
-      if (this.running.size >= MAX_RUNS) break;
+      // One purchase per supplier at a time, and at most MAX_RUNS Chromes.
+      // A new order takes its supplier from the order that has it (2026-11-25:
+      // "上传一个新的order，点进页面还是之前的cart"): that one stops, is kept as
+      // no longer valid, and can be run again from its button. Only an order
+      // already placed at the supplier is waited for.
+      if (!this.lab && this.jobs.length) this.lab = await this.openBuyLab({ quiet: true }).catch(() => null);
+      const holder = this.holder(job.seller, key);
+      if (holder) {
+        if (this.supersede(holder, key)) this.nudge();
+        // Its page is free once the stopped run has wound down: the next round.
+        continue;
+      }
+      if (this.busyRuns() >= MAX_RUNS) break;
       // Out of sight: BOM's Placing tab follows it (2026-11-21).
       const lab = await this.openBuyLab({ quiet: true });
       this.lab = lab;
@@ -266,6 +309,102 @@ class ServiceLink {
     }
   }
 
+  /**
+   * The order a supplier is busy with: the one running there, else a paused
+   * one whose parts are already in that supplier's cart (it holds the cart
+   * until it is ordered or cancelled, so the next order doesn't remove its
+   * parts, 2026-11-24). Null when the supplier is free.
+   */
+  holder(seller, except = "") {
+    for (const [key, run] of this.running) if (run.job.seller === seller && key !== except) return key;
+    for (const [key, { job, at, message }] of this.stops) {
+      if (job.seller !== seller || key === except || message === "superseded") continue;
+      // Only an order paused lately: one left for hours (or from before the
+      // pause time was kept) does not keep the supplier from the next order
+      // (2026-11-24: an order paused for days held DigiKey).
+      if (!at || Date.now() - at > HOLD_MS) continue;
+      if (!this.jobs.some((live) => `${live.purchase_request_id}:${live.seller}` === key)) continue;
+      const saved = this.lab?.runs?.load?.(seller, key);
+      if (saved && saved.progress >= 1) return key; // in the cart already
+    }
+    return null;
+  }
+
+  /**
+   * Another order takes this order's supplier: its run stops at once, its
+   * saved place is dropped (the cart is the other order's now), and it is
+   * kept as no longer valid, shown in BOM and in the Buy lab with a button
+   * that runs it again from the start. False for an order already placed at
+   * the supplier (its payment and its order are not undone here).
+   */
+  supersede(key, by = "") {
+    const run = this.running.get(key);
+    if (run?.placed) return false;
+    const job = run?.job || this.stops.get(key)?.job
+      || this.jobs.find((entry) => `${entry.purchase_request_id}:${entry.seller}` === key);
+    if (!job) return false;
+    if (run) {
+      this.running.delete(key);
+      run.stopped = true;
+      try { this.lab?.stop(job.seller, { soft: false }); } catch { /* the Buy lab is closed */ }
+    }
+    try { this.lab?.runs?.clear?.(job.seller, key); } catch { /* none saved */ }
+    this.ended.add(key);
+    const lines = Array.isArray(job.lines) ? job.lines.length : this.stops.get(key)?.lines || 0;
+    this.stops.set(key, { job, message: "superseded", at: Date.now(), by: String(by || ""), lines });
+    this.saveState();
+    this.log(`buy service: ${key} is no longer valid${by ? ` (${by} took ${job.seller})` : ""}`);
+    try { this.lab?.publish?.(); } catch { /* closed */ }
+    return true;
+  }
+
+  /** The orders that are no longer valid, newest first, for the Buy lab's
+   * tabs: at most MAX_TASK_TABS; the oldest are left out. */
+  staleTasks() {
+    return [...this.stops]
+      .filter(([, stop]) => stop.message === "superseded")
+      .map(([key, stop]) => ({ key, seller: stop.job.seller, at: stop.at || 0, lines: stop.lines || 0 }))
+      .sort((a, b) => b.at - a.at)
+      .slice(0, MAX_TASK_TABS);
+  }
+
+  /** What a placed order's page said, read because the person opened it. */
+  async reportTracked({ requestId, orderId, read }) {
+    if (!requestId || !orderId || !read) return false;
+    this.trackTried.set(orderId, Date.now());
+    try {
+      await this.post("tracking", { purchase_request_id: requestId, supplier_order_id: orderId, ...read });
+      return true;
+    } catch (error) {
+      this.log(`buy service: tracking ${orderId}: ${error.message}`);
+      return false;
+    }
+  }
+
+  /** Runs the app is driving. One waiting for the person (a cart to check, a
+   * security check) does not keep another supplier from starting (2026-11-24:
+   * Mouser waited while DigiKey and LCSC sat at their cart checks). */
+  busyRuns() {
+    let busy = 0;
+    for (const run of this.running.values()) {
+      if (this.lab?.activity?.(run.job.seller)?.driver !== "person") busy += 1;
+    }
+    return busy;
+  }
+
+  /** The person's Continue on one order (`<purchase_request_id>:<seller>`):
+   * that order, not whichever the supplier has in hand. */
+  async continueOrder(code) {
+    const key = String(code || "");
+    const seller = key.split(":").pop();
+    // The order the person asks for takes the supplier, as a new one does.
+    const holder = this.holder(seller, key);
+    if (holder && !this.supersede(holder, key)) return { ok: false, reason: "busy", holder: holder.split(":")[0] };
+    if (this.running.has(key)) return null; // its own run: the Buy lab goes on with it
+    if (await this.continueSaved(seller, key)) return { ok: true, where: "resume" };
+    return { ok: false, reason: "unknown" };
+  }
+
   /** What each of BOM's runs is doing right now, for its Orders page: the step,
    * who has the supplier page (the app or the person), lines done of total.
    * BOM locks a seller the app is working on (2026-11-21). */
@@ -282,7 +421,18 @@ class ServiceLink {
       if (!now) continue;
       out.push({ purchase_request_id: run.job.purchase_request_id, seller: run.job.seller, ...now });
     }
-    return out.slice(0, 20);
+    // Waiting for their turn, with the order the supplier is busy with.
+    for (const job of this.jobs) {
+      const key = `${job.purchase_request_id}:${job.seller}`;
+      if (this.running.has(key) || this.stops.has(key) || this.ended.has(key)) continue;
+      const holder = this.holder(job.seller, key);
+      // Its supplier is free but every browser the app runs at once is busy
+      // with other suppliers: queued too, with no order named (2026-11-24).
+      if (!holder && this.busyRuns() < MAX_RUNS) continue;
+      out.push({ purchase_request_id: job.purchase_request_id, seller: job.seller, step: "queued", driver: "none",
+        message: holder ? holder.split(":")[0].slice(0, 64) : "" });
+    }
+    return out.slice(0, 40);
   }
 
   /** A run changed step or who drives: tell BOM soon, not at the next tick. */
@@ -342,7 +492,7 @@ class ServiceLink {
           await this.post("cart", { purchase_request_id: run.job.purchase_request_id, seller: run.job.seller, failed: why });
           return;
         }
-        this.stops.set(key, { job: run.job, message: message || status || "stopped" });
+        this.stops.set(key, { job: run.job, message: message || status || "stopped", at: Date.now() });
         this.saveState();
         this.nudge?.();
       },

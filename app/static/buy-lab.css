@@ -437,6 +437,11 @@ table.lines td.n { width: 40px; color: var(--muted, #5b6b76); }
 }
 
 .live .tabs[hidden] { display: none; }
+/* The bar spans from the Back button's right on, wider than its tabs: only
+ * the tabs take clicks, so Back is never covered (2026-11-23: "back to the
+ * list" could not be clicked on its right half). */
+.live .tabs { pointer-events: none; }
+.live .tabs > * { pointer-events: auto; }
 
 .live .tab {
   display: flex;
@@ -468,6 +473,11 @@ table.lines td.n { width: 40px; color: var(--muted, #5b6b76); }
 }
 
 .live .tab-supplier { font-weight: 600; }
+/* An order a newer one replaced: dimmed, with its Run again. */
+.live .tab-task { max-width: 400px; cursor: default; opacity: 0.85; }
+.live .tab-task .tab-title { opacity: 0.75; }
+.live .tab-action { flex: none; margin-left: 6px; padding: 2px 8px; color: #1d2b22; background: #f5d98a; border: 0; border-radius: 999px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.live .tab-action:disabled { opacity: 0.6; cursor: default; }
 .live .tab-divider { flex: none; width: 1px; margin: 4px 4px; background: rgba(255, 255, 255, 0.28); }
 .live .tab-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: #f5a524; }
 

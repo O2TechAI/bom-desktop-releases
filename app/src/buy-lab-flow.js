@@ -42,9 +42,23 @@ function parseLines(text) {
 
 
 /** A CSV the supplier's BOM tool can read: part and quantity per line. */
-function writeBomFile(siteId, lines) {
+function writeBomFile(siteId, lines, numberFor = (line) => line.mpn, ownFor = null) {
+  // DigiKey: its own number where one is known, beside the maker's
+  // (2026-11-25: a maker's number two sellers list was refused as a
+  // "Duplicate manufacturer part"; its own number is not).
+  if (siteId === "digikey" && ownFor) {
+    // A line that is DigiKey's own number already leaves the maker's column
+    // empty (2026-11-25: the number in both columns was refused).
+    const rows = lines.map((line) => {
+      const own = ownFor(line) || "";
+      return `${own},${own === line.mpn ? "" : line.mpn},${line.quantity}`;
+    }).join("\n");
+    const own = path.join(os.tmpdir(), `o2-bom-${siteId}-${process.pid}-${Date.now()}.csv`);
+    fs.writeFileSync(own, `DigiKey Part Number,Manufacturer Part Number,Quantity\n${rows}\n`, "utf8");
+    return own;
+  }
   const header = siteId === "lcsc" ? "LCSC Part Number,Quantity" : "Part Number,Quantity";
-  const body = lines.map((line) => `${line.mpn},${line.quantity}`).join("\n");
+  const body = lines.map((line) => `${numberFor(line)},${line.quantity}`).join("\n");
   const file = path.join(os.tmpdir(), `o2-bom-${siteId}-${process.pid}-${Date.now()}.csv`);
   fs.writeFileSync(file, `${header}\n${body}\n`, "utf8");
   return file;
@@ -52,8 +66,8 @@ function writeBomFile(siteId, lines) {
 
 /** Which column an uploaded file's part numbers are, for a mapping dialog:
  * the supplier's own numbers (DigiKey's end in "-ND") or the makers'. */
-function partColumnFor(lines) {
-  return lines.length && lines.every((line) => /-ND$/i.test(line.mpn))
+function partColumnFor(lines, numberFor = (line) => line.mpn) {
+  return lines.length && lines.every((line) => /-ND$/i.test(numberFor(line)))
     ? "DigiKey Part Number"
     : "Manufacturer Part Number";
 }
@@ -173,7 +187,7 @@ class AddressBook {
 
   list() {
     try {
-      const saved = JSON.parse(fs.readFileSync(this.file, "utf8"));
+      const saved = JSON.parse(fs.readFileSync(this.file, "utf8").replace(/^\uFEFF/, ""));
       return Array.isArray(saved) ? saved.filter((entry) => entry && typeof entry.id === "string") : [];
     } catch {
       return [];
@@ -238,6 +252,7 @@ const STAGE = { NEW: 0, ADDED: 1, CART_CONFIRMED: 2, PLACED: 3 };
  * the person takes over (2026-11-21: 机器操作的环节不能让人干预, with a timeout). */
 const STALL_MS = 3 * 60 * 1000;
 
+
 /** The order number in what a confirmation page said around it (2026-11-23:
  * Mouser's whole sentence reached BOM as the number). DigiKey's sales order
  * id is the one its order history and tracking use, before its web id. */
@@ -264,6 +279,87 @@ function partKey(text) {
   return String(text || "").replace(/[‎‏\s]/g, "").toUpperCase();
 }
 
+/** The quantity a shop made a line into (its minimum or multiple, e.g. 50 to
+ * LCSC's 60): what its cart should hold. */
+function noteBought(line, snapshot) {
+  const bought = Number(snapshot?.results?.quantity);
+  if (bought && bought !== Number(line.quantity)) line.buyQuantity = bought;
+}
+
+/** The key a seller's own number is kept under: the maker's part and, when
+ * the order named one, its packaging. */
+function sellerPartKey(line) {
+  return line.packaging ? `${partKey(line.mpn)}|${line.packaging}` : partKey(line.mpn);
+}
+
+/* DigiKey's words for BOM's packaging codes. */
+const PACK_WORDS = {
+  cut_tape: /cut tape/i, tape_reel: /tape\s*&\s*reel/i, digi_reel: /digi-?reel/i,
+  tray: /tray/i, tube: /tube/i, bulk: /bulk/i,
+};
+
+/** The options DigiKey's "View Options" lists for a line it didn't take:
+ * [{ quantity, part, mpn, pack }], in the order of its choices. */
+function packOptions(text) {
+  const clean = String(text || "").replace(/[\u200e\u200f]/g, "");
+  // "10*": an option on backorder is marked with a star (2026-11-24).
+  const re = /(\d[\d,]*)\*?\s+(\S+-ND)\s+(\S+)\s+(Cut Tape|Digi-Reel|Tape & Reel|Tray|Tube|Bulk|Box|Bag)/gi;
+  return [...clean.matchAll(re)].map((m) => ({ quantity: Number(m[1].replace(/,/g, "")), part: m[2], mpn: m[3], pack: m[4] }));
+}
+
+/** The packaging a DigiKey number is for, by its ending (CT-ND / -1-ND cut
+ * tape, DKR-ND / -6-ND Digi-Reel, TR-ND / -2-ND tape & reel); null when it
+ * doesn't say. */
+function packOfPart(part) {
+  const text = String(part || "").trim().toUpperCase();
+  if (/(DKR|-6)-ND$/.test(text)) return "digi_reel";
+  if (/(CT|-1)-ND$/.test(text)) return "cut_tape";
+  if (/(TR|-2)-ND$/.test(text)) return "tape_reel";
+  return null;
+}
+
+/* The seller's name for a packaging (on DigiKey's product page). */
+const PACK_NAMES = { cut_tape: "Cut Tape", tape_reel: "Tape & Reel", digi_reel: "Digi-Reel", tray: "Tray", tube: "Tube", bulk: "Bulk" };
+
+/* Each seller's words for the packagings a cart line can be switched between
+ * (2026-11-24, live): its custom reel is DigiKey's Digi-Reel, LCSC's
+ * LCSC-Reels, Mouser's MouseReel; a whole reel needs the reel's quantity. */
+const SITE_PACKS = {
+  digikey: { cut_tape: "Cut Tape", digi_reel: "Digi-Reel", tape_reel: "Tape & Reel" },
+  lcsc: { cut_tape: "Cut Tape", digi_reel: "LCSC-Reels", tape_reel: "Full Reel" },
+  mouser: { cut_tape: "Cut Tape", digi_reel: "MouseReel", tape_reel: "Full Reels" },
+};
+
+/** A cart line's packaging: by DigiKey's number, else by the words on the
+ * line (LCSC "Cut Tape" / "LCSC-Reels" / "Full Reel", Mouser "Packaging:
+ * Cut Tape" / "MouseReel"); null when neither says. */
+function rowPack(row) {
+  if (!row) return null;
+  if (/-ND\s*$/i.test(String(row.part || ""))) return packOfPart(row.part);
+  const text = String(row.text || "");
+  if (/mousereel|lcsc-reels|digi-?reel/i.test(text)) return "digi_reel";
+  if (/full reel/i.test(text)) return "tape_reel";
+  if (/cut tape/i.test(text)) return "cut_tape";
+  return null;
+}
+
+/** The packaging a line is added in: Cut Tape, which every quantity can be
+ * bought in; the cart's own packaging list then sets the order's (2026-11-24:
+ * a Digi-Reel chosen on the product page was never added). */
+function packWord() {
+  return "Cut Tape";
+}
+
+/** Which option a line takes: its packaging at its own quantity, or, when
+ * the order named none, Cut Tape (what a small quantity is sold as; a reel's
+ * minimum or Digi-Reel's fee is never chosen for it). -1 when none fits. */
+function pickPackOption(options, line) {
+  const at = (pattern) => options.findIndex((option) => pattern.test(option.pack) && option.quantity === Number(line.quantity));
+  const own = PACK_WORDS[line.packaging] ? at(PACK_WORDS[line.packaging]) : -1;
+  // Not to be had at this quantity: Cut Tape, and the cart check says so.
+  return own >= 0 ? own : at(PACK_WORDS.cut_tape);
+}
+
 function amount(text) {
   const match = String(text ?? "").replace(/,/g, "").match(/\d+(?:\.\d+)?/);
   return match ? Number(match[0]) : null;
@@ -288,7 +384,11 @@ function compareCart(lines, rows, expected = {}) {
     const expectedPrice = expected[partKey(line.mpn)] != null ? Number(expected[partKey(line.mpn)]) : null;
     let issue = null;
     if (!row) issue = "missing";
-    else if (amount(row.quantity) !== Number(line.quantity)) issue = "quantity";
+    else if (amount(row.quantity) !== Number(line.buyQuantity || line.quantity)) issue = "quantity";
+    // No price for it (2026-11-24: a reel-only number at 10 showed 0.00000).
+    // (A sample at $0 beside its price, LCSC's "$0 $0.0021", is priced.)
+    else if (unitPrice === 0 && !/[1-9]/.test(String(row.unitPrice || ""))) issue = "unpriced";
+    else if (line.packaging && rowPack(row) && rowPack(row) !== line.packaging) issue = "packaging";
     else if (unitPrice != null && expectedPrice != null && unitPrice > expectedPrice + 1e-9) issue = "price";
     return {
       part: line.mpn, quantity: String(line.quantity), cartQuantity: row ? String(amount(row.quantity) ?? "") : null,
@@ -318,13 +418,19 @@ class RunStore {
     this.dir = userDataDir ? path.join(userDataDir, "buy-lab", "runs") : null;
   }
 
-  file(supplier) {
-    return this.dir ? path.join(this.dir, `${String(supplier).replace(/[^a-z0-9-]/gi, "")}.json`) : null;
+  /* One file per supplier for its latest run (the Continue of a run saved
+   * before the app closed), and one per order (`key`, its resumeKey), so each
+   * order of a supplier goes on from its own place (2026-11-24). */
+  file(supplier, key = "") {
+    if (!this.dir) return null;
+    const name = String(supplier).replace(/[^a-z0-9-]/gi, "");
+    const own = key ? `--${String(key).replace(/[^a-z0-9_-]/gi, "_").slice(0, 120)}` : "";
+    return path.join(this.dir, `${name}${own}.json`);
   }
 
-  load(supplier) {
+  load(supplier, key = "") {
     try {
-      return JSON.parse(fs.readFileSync(this.file(supplier), "utf8"));
+      return JSON.parse(fs.readFileSync(this.file(supplier, key), "utf8").replace(/^\uFEFF/, ""));
     } catch {
       return null;
     }
@@ -333,10 +439,39 @@ class RunStore {
   save(supplier, record) {
     if (!this.dir) return;
     fs.mkdirSync(this.dir, { recursive: true });
-    fs.writeFileSync(this.file(supplier), JSON.stringify({ ...record, savedAt: new Date().toISOString() }, null, 2));
+    const text = JSON.stringify({ ...record, savedAt: new Date().toISOString() }, null, 2);
+    fs.writeFileSync(this.file(supplier), text);
+    if (record?.resumeKey) fs.writeFileSync(this.file(supplier, record.resumeKey), text);
   }
 
-  clear(supplier) {
+  /* DigiKey's own number for a maker's part, as its cart showed it (Cut Tape,
+   * what a small quantity is bought as): a BOM file of these needs no
+   * packaging chosen by hand (2026-11-24: an upload of makers' numbers left
+   * every line at "View Options"). */
+  sellerParts(supplier) {
+    try {
+      const file = path.join(this.dir, "..", `${String(supplier).replace(/[^a-z0-9-]/gi, "")}-parts.json`);
+      return JSON.parse(fs.readFileSync(file, "utf8").replace(/^\uFEFF/, "")) || {};
+    } catch {
+      return {};
+    }
+  }
+
+  rememberSellerParts(supplier, pairs) {
+    if (!this.dir || !pairs.length) return;
+    const known = this.sellerParts(supplier);
+    for (const [mpn, part] of pairs) known[mpn] = part;
+    try {
+      fs.mkdirSync(path.join(this.dir, ".."), { recursive: true });
+      fs.writeFileSync(path.join(this.dir, "..", `${String(supplier).replace(/[^a-z0-9-]/gi, "")}-parts.json`), JSON.stringify(known, null, 1));
+    } catch { /* only a help for next time */ }
+  }
+
+  clear(supplier, key = "") {
+    if (key) {
+      try { fs.unlinkSync(this.file(supplier, key)); } catch { /* none */ }
+      if (this.load(supplier)?.resumeKey !== key) return;
+    }
     try { fs.unlinkSync(this.file(supplier)); } catch { /* none */ }
   }
 }
@@ -498,6 +633,12 @@ class BuyLabFlow {
    * show the person what to do. */
   observe(snapshot) {
     this.lastChangeAt = Date.now();
+    // Asked to stop softly, and now waiting for the person: nothing is in
+    // hand any more, so it stops (2026-11-25).
+    if (snapshot.status === "waiting" && this.softStop) {
+      this.softStop = false;
+      this.runner?.stop();
+    }
     if (snapshot.status === "waiting") {
       this.status = "waiting";
       this.message = snapshot.confirming
@@ -548,7 +689,7 @@ class BuyLabFlow {
    * `resumeKey`: the purchase this is. When this supplier's saved progress has
    * the same key, the stages already done are not done again. `expected`:
    * part -> the unit price BOM showed, for the cart check. */
-  async start({ supplier, text, address = null, link = null, rehearsal = false, resumeKey = null, expected = null }) {
+  async start({ supplier, text, address = null, link = null, rehearsal = false, resumeKey = null, expected = null, packaging = null }) {
     if (this.running) throw new Error("A purchase is already running");
     const lines = parseLines(text);
     if (!lines.length) throw new Error("Paste at least one line: part number and quantity");
@@ -559,7 +700,9 @@ class BuyLabFlow {
     this.link = link;
     this.rehearsal = Boolean(rehearsal) && !link;
     this.expected = Object.fromEntries(Object.entries(expected || {}).map(([part, price]) => [partKey(part), Number(price)]));
-    this.lines = lines.map((line, index) => ({ ...line, index, status: "pending", error: null, price: null }));
+    const packs = Object.fromEntries(Object.entries(packaging || {}).map(([part, pack]) => [partKey(part), pack]));
+    this.lines = lines.map((line, index) => ({ ...line, index, status: "pending", error: null, price: null,
+      packaging: packs[partKey(line.mpn)] || null }));
     this.cart = null;
     this.orderNumber = null;
     this.orders = [];
@@ -567,7 +710,7 @@ class BuyLabFlow {
     this.placed = null;
     this.cartCheck = null;
     this.freshCart = null;
-    const saved = resumeKey ? this.store?.load(supplier) : null;
+    const saved = resumeKey ? this.store?.load(supplier, resumeKey) : null;
     if (saved && saved.resumeKey === resumeKey && saved.progress > STAGE.NEW && saved.progress < STAGE.PLACED) {
       // The same purchase, interrupted earlier: go on from where it got to.
       this.progress = saved.progress;
@@ -625,7 +768,10 @@ class BuyLabFlow {
         this.emit({ status: "running", message: "reading-cart" });
         const cart = finished(await this.runTask("openCart"));
         const rows = Array.isArray(cart.results?.cart) ? cart.results.cart : [];
-        if (compareCart(this.lines, rows).lines.some((line) => line.issue === "missing")) {
+        // A quantity off too, while the person hasn't confirmed this cart: the
+        // cart is set right again (2026-11-24: LCSC held twice each part).
+        const redo = (line) => line.issue === "missing" || (!this.confirmedCart && (line.issue === "quantity" || line.issue === "extra"));
+        if (compareCart(this.lines, rows).lines.some(redo)) {
           this.progress = STAGE.NEW;
           this.confirmedCart = null;
           this.save();
@@ -648,7 +794,7 @@ class BuyLabFlow {
         this.save();
         await this.placeOrder(site);
         this.progress = STAGE.PLACED;
-        this.store?.clear(this.supplier);
+        this.store?.clear(this.supplier, this.resumeKey);
       }
 
       // Bought for BOM (2026-11-23: "这个不应该跳提示"): the confirmation stays on
@@ -706,16 +852,33 @@ class BuyLabFlow {
 
   /** Stage 1: the list into the cart. False when the purchase ends here. */
   async addLines(site) {
-    if (site?.tasks.bulkAddBom || site?.tasks.bulkAddPaa || site?.tasks.bulkAddList) {
+    // A short list goes in part by part, from each part's own page: the
+    // batch tools (DigiKey's Bulk Add box, Mouser's and LCSC's BOM upload)
+    // each led to a page the app doesn't know, and DigiKey's box doesn't take
+    // a maker's part number (2026-11-23, an uploaded order of three lines).
+    // DigiKey takes the BOM file whatever its length (2026-11-24: "不应该直接
+    // BOM 导入让digikey 处理"): one upload instead of a search per part, each
+    // of which could meet a security check. What the upload leaves out is
+    // added part by part by settleCart.
+    // Every supplier takes the list the way the site takes a BOM, whatever
+    // its length (2026-11-24: "所有的流程都是走给网站上传BOM 网站自动添加的路径"):
+    // DigiKey's and LCSC's BOM upload, Mouser's part list. What the site
+    // leaves out is added part by part by settleCart.
+    const batch = Boolean(site?.tasks.bulkAddBom || site?.tasks.bulkAddPaa || site?.tasks.bulkAddList);
+    if (batch) {
       // One page, one batch: a BOM file or the cart's own Bulk Add box.
       this.emit({ message: "bulk-adding" });
       for (const line of this.lines) line.status = "adding";
       this.emit();
       let snapshot;
       if (site.tasks.bulkAddBom) {
-        const file = writeBomFile(this.supplier, this.lines);
+        // DigiKey's own numbers when every line has one from an earlier cart.
+        const known = this.supplier === "digikey" ? (this.store?.sellerParts?.("digikey") || {}) : {};
+        const numberFor = (line) => line.mpn;
+        const ownFor = this.supplier === "digikey" ? (line) => (/-ND$/i.test(line.mpn) ? line.mpn : known[sellerPartKey(line)] || null) : null;
+        const file = writeBomFile(this.supplier, this.lines, numberFor, ownFor);
         try {
-          snapshot = await this.runTask("bulkAddBom", { file, partColumn: partColumnFor(this.lines) });
+          snapshot = await this.runTask("bulkAddBom", { file, partColumn: partColumnFor(this.lines, numberFor) });
         } finally {
           try { fs.unlinkSync(file); } catch { /* already gone */ }
         }
@@ -723,6 +886,21 @@ class BuyLabFlow {
         snapshot = await this.runTask("bulkAddPaa", { lines: paaLines(this.lines) });
       } else {
         snapshot = await this.runTask("bulkAddList", { lines: bulkLines(this.lines) });
+      }
+      if (this.supplier === "digikey" && site.tasks.openOption) {
+        try {
+          await this.settlePackOptions();
+        } catch (error) {
+          // Stopped before or among the options (2026-11-25: the lines stayed
+          // "adding" on a stopped purchase): they say what the upload did.
+          if (error?.code === "stopped") {
+            for (const line of this.lines) {
+              line.status = snapshot.status === "done" ? "added" : "stopped";
+              line.error = null;
+            }
+          }
+          throw error;
+        }
       }
       const failed = snapshot.steps.find((step) => step.status === "failed");
       if (snapshot.status === "stopped") {
@@ -747,18 +925,43 @@ class BuyLabFlow {
       this.emit();
       if (this.stopRequested) { this.emit({ status: "stopped", message: "stopped" }); return false; }
     } else {
+      // What is in the cart already is not added again: a run that starts over
+      // (the app restarted, Continue) added each part once more and the cart
+      // held three times the quantity (2026-11-24). A different quantity is
+      // left to the cart check.
+      let present = new Set();
+      try {
+        const cart = finished(await this.runTask("openCart"));
+        const rows = Array.isArray(cart.results?.cart) ? cart.results.cart : [];
+        present = new Set(this.lines.filter((line) => {
+          const key = partKey(line.mpn);
+          return rows.some((row) => partKey(row.part) === key || (key.length >= 6 && partKey(row.text).includes(key)));
+        }));
+      } catch (error) {
+        if (error?.code === "stopped" || error?.code === "blocked") throw error;
+      }
       for (const line of this.lines) {
+        if (present.has(line)) {
+          line.status = "added";
+          this.emit();
+          continue;
+        }
         this.emit({ message: "adding" });
         line.status = "adding";
         this.emit();
         try {
-          const snapshot = await this.runTask("addToCart", { part: line.mpn, quantity: line.quantity });
+          const snapshot = await this.runTask("addToCart", { part: line.mpn, quantity: line.quantity, pack: packWord(line) });
           const failed = snapshot.steps.find((step) => step.status === "failed");
           if (snapshot.status !== "done") {
             line.status = "failed";
             line.error = failed?.error?.message || snapshot.status;
+            // The cart is read before anything is given up (2026-11-24: a part
+            // already in the cart left its count unchanged and was taken for
+            // not added): settleCart matches what is really there.
+            this.bulkFailed = true;
           } else {
             line.status = "added";
+            noteBought(line, snapshot);
           }
         } catch (error) {
           if (error?.code === "blocked") {
@@ -788,6 +991,48 @@ class BuyLabFlow {
     return true;
   }
 
+  /** DigiKey took the BOM file but left lines at "View Options" (a part sold
+   * in several packagings, 2026-11-24): each is opened and given the line's
+   * packaging. One with no option that fits is left for settleCart and the
+   * cart check to name. */
+  async settlePackOptions() {
+    const tried = new Set();
+    for (let round = 0; round < this.lines.length + 2; round += 1) {
+      let snapshot;
+      try {
+        snapshot = await this.runTask("openOption", {});
+      } catch (error) {
+        if (error?.code === "stopped" || error?.code === "blocked") throw error;
+        console.warn(`[options ${this.supplier}] open: ${error?.message || error}`);
+        return;
+      }
+      // Covered while the cart refreshed: a moment, and again (2026-11-25).
+      const covered = snapshot.status !== "done" && snapshot.steps?.some((step) => step.error?.code === "covered");
+      if (covered && round < this.lines.length + 1) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        continue;
+      }
+      if (snapshot.status !== "done") { // no row left to settle
+        console.warn(`[options ${this.supplier}] open ended ${snapshot.status}`);
+        return;
+      }
+      const text = String(snapshot.results?.options || "");
+      const options = packOptions(text);
+      const line = this.lines.find((one) => options.some((option) => partKey(option.mpn) === partKey(one.mpn) || partKey(option.part) === partKey(one.mpn)));
+      const choice = line && !tried.has(line) ? pickPackOption(options, line) : -1;
+      if (line) tried.add(line);
+      console.warn(`[options ${this.supplier}] ${line?.mpn || "?"} (${line?.packaging || "no packaging"}) -> ${choice} of ${JSON.stringify(options)}`);
+      if (choice < 0) {
+        await this.runTask("closeOption", {}).catch(() => {});
+        // Its row stays: the next one is reached only past it, so stop here.
+        return;
+      }
+      this.emit({ message: "choosing-packaging" });
+      await this.runTask("pickOption", { option: String(choice) }).catch(() => {});
+      if (this.stopRequested) throw stoppedError();
+    }
+  }
+
   /** Stage 1b (2026-11-21): the cart holds this list and nothing else. A
    * shop's batch upload can say it finished and leave parts out (DigiKey did,
    * on a cart that still held an earlier run's lines), and a checkout buys
@@ -804,27 +1049,37 @@ class BuyLabFlow {
     // was taken for a stranger and removed from the cart).
     const match = (rows) => {
       const used = new Set();
-      const found = new Set();
+      const found = new Map(); // line -> its row
       for (const line of this.lines) {
         const key = partKey(line.mpn);
         let index = rows.findIndex((row, at) => !used.has(at) && partKey(row.part) === key);
         if (index < 0 && key.length >= 6) index = rows.findIndex((row, at) => !used.has(at) && partKey(row.text).includes(key));
-        if (index >= 0) { used.add(index); found.add(line); }
+        if (index >= 0) { used.add(index); found.set(line, rows[index]); }
       }
       return { used, found };
     };
+    // A line in the cart with another quantity (2026-11-24: LCSC held twice
+    // each part after restarts re-added them): taken out and added again with
+    // the list's quantity, where the shop lets the app remove a line.
+    const offCount = (found) => [...found].filter(([line, row]) => {
+      const have = amount(row.quantity);
+      return have != null && have !== Number(line.buyQuantity || line.quantity);
+    });
     this.emit({ status: "running", message: "checking-cart" });
     let rows = await read();
     const first = match(rows);
     const extras = rows.filter((_, at) => !first.used.has(at));
+    const canRedo = Boolean(site?.tasks.removeFromCart && site?.tasks.addToCart);
+    const recount = canRedo ? offCount(first.found) : [];
     const missing = this.lines.filter((line) => !first.found.has(line));
-    if (!extras.length && !missing.length) {
+    if (!extras.length && !missing.length && !recount.length) {
       this.freshCart = rows; // the cart check takes this read instead of reading again
       return true;
     }
-    const attempt = async (task, params) => {
+    const attempt = async (task, params, line = null) => {
       try {
         const snapshot = await this.runTask(task, params);
+        if (line && snapshot.status === "done") noteBought(line, snapshot);
         const failed = snapshot.steps?.find((step) => step.status === "failed");
         return snapshot.status === "done" ? null : (failed?.error?.message || snapshot.status);
       } catch (error) {
@@ -839,12 +1094,20 @@ class BuyLabFlow {
         if (this.stopRequested) throw stoppedError();
       }
     }
+    for (const [line, row] of recount) {
+      this.emit({ message: "fixing-quantity" });
+      line.status = "adding";
+      this.emit();
+      const removed = await attempt("removeFromCart", { part: row.part });
+      if (this.stopRequested) throw stoppedError();
+      if (!removed) missing.push(line); // out: added below with the list's quantity
+    }
     if (site?.tasks.addToCart) {
       for (const line of missing) {
         this.emit({ message: "adding" });
         line.status = "adding";
         this.emit();
-        line.error = await attempt("addToCart", { part: line.mpn, quantity: line.quantity });
+        line.error = await attempt("addToCart", { part: line.mpn, quantity: line.quantity, pack: packWord(line) }, line);
         if (this.stopRequested) throw stoppedError();
       }
     }
@@ -868,8 +1131,11 @@ class BuyLabFlow {
     const wanted = new Set(this.lines.map((line) => partKey(line.mpn)));
     const known = (row) => wanted.has(partKey(row.part))
       || [...wanted].some((key) => key.length >= 6 && partKey(row.text).includes(key));
-    const left = rows.filter((row) => !known(row)).map((row) => row.part || row.text);
-    if (left.length) throw new Error(`The cart still has other items: ${left.slice(0, 3).join(", ")}`);
+    // Lines the app could not remove stay for the person: the cart check
+    // shows them as not on the list, rather than the whole supplier failing
+    // (2026-11-24: an earlier test's C1525 left in the LCSC cart failed all
+    // three lines of a new order).
+    this.leftInCart = rows.filter((row) => !known(row)).map((row) => row.part || row.text);
     this.freshCart = rows;
     return true;
   }
@@ -879,6 +1145,62 @@ class BuyLabFlow {
    * It always waits for their "correct"; "re-check" reads the cart again
    * after they changed it in the supplier's page. Continuing a purchase whose
    * cart was confirmed and has not changed since does not ask again. */
+  /** DigiKey's own number for each line its cart holds, kept for the next
+   * BOM file (2026-11-24). */
+  rememberSellerParts(rows) {
+    if (this.supplier !== "digikey" || !this.store?.rememberSellerParts) return;
+    const pairs = [];
+    for (const line of this.lines) {
+      const key = partKey(line.mpn);
+      const row = rows.find((one) => /-ND$/i.test(String(one.part || "").trim())
+        && key.length >= 6 && partKey(one.text).includes(key));
+      // Only a number in the packaging asked for (2026-11-24: a line for
+      // Digi-Reel bought as cut tape was kept as its Digi-Reel number).
+      const pack = row ? packOfPart(row.part) : null;
+      const fits = line.packaging ? pack === line.packaging : (pack === null || pack === "cut_tape");
+      if (row && fits) pairs.push([sellerPartKey(line), String(row.part).trim()]);
+    }
+    this.store.rememberSellerParts("digikey", pairs);
+  }
+
+  /** DigiKey: each line in another packaging than its order's is switched in
+   * the cart's own packaging list. One whose quantity that changes (a reel's
+   * minimum) is switched back and left to the cart check. True when the cart
+   * changed. */
+  async setPackaging(rows) {
+    const names = SITE_PACKS[this.supplier];
+    const site = this.sites.find((entry) => entry.id === this.supplier);
+    if (!names || !site?.tasks.setPack) return false;
+    const rowOf = (all, line) => {
+      const key = partKey(line.mpn);
+      return all.find((one) => partKey(one.part) === key || (key.length >= 6 && partKey(one.text).includes(key)));
+    };
+    let changed = false;
+    for (const line of this.lines) {
+      // A whole reel changes the quantity (2026-11-24: LCSC made 40 into
+      // 2,000): never switched to by the app; the cart check shows it.
+      if (!names[line.packaging] || line.packaging === "tape_reel") continue;
+      const row = rowOf(rows, line);
+      const pack = rowPack(row);
+      if (!row || !pack || pack === line.packaging) continue;
+      this.emit({ status: "running", message: "choosing-packaging" });
+      const tried = await this.runTask("setPack", { part: line.mpn, pack: names[line.packaging] }).catch(() => null);
+      if (tried?.status !== "done") continue;
+      changed = true;
+      const cart = finished(await this.runTask("openCart"));
+      const now = rowOf(Array.isArray(cart.results?.cart) ? cart.results.cart : [], line);
+      if (rowPack(now) !== line.packaging) {
+        console.warn(`[packaging ${this.supplier}] ${line.mpn} still ${rowPack(now)} after switching to ${names[line.packaging]}: ${String(now?.text || "").replace(/\s+/g, " ").slice(0, 300)}`);
+      }
+      if (now && amount(now.quantity) !== Number(line.buyQuantity || line.quantity)) {
+        // The packaging needs another quantity: back to what it was.
+        await this.runTask("setPack", { part: line.mpn, pack: names[pack] || "Cut Tape" }).catch(() => null);
+      }
+      if (this.stopRequested) throw stoppedError();
+    }
+    return changed;
+  }
+
   async checkCart() {
     for (;;) {
       this.emit({ status: "running", message: "reading-cart" });
@@ -889,7 +1211,12 @@ class BuyLabFlow {
         const cart = finished(await this.runTask("openCart"));
         this.cart = Array.isArray(cart.results?.cart) ? cart.results.cart : [];
       }
+      if (!this.confirmedCart && await this.setPackaging(this.cart)) {
+        const cart = finished(await this.runTask("openCart"));
+        this.cart = Array.isArray(cart.results?.cart) ? cart.results.cart : [];
+      }
       if (this.link?.cart) await this.link.cart(this.cart).catch(() => {});
+      this.rememberSellerParts(this.cart);
       if (this.confirmedCart && sameCart(this.confirmedCart, this.cart)) {
         this.cartCheck = null;
         return;
@@ -955,7 +1282,10 @@ class BuyLabFlow {
    * cart; a second Stop, or a hard one, stops at once. Waiting on the
    * person, it stops at once. */
   stop({ soft = false } = {}) {
-    if (soft && this.driving() && !this.softStop) {
+    // A soft stop waits for the line in hand: only while lines are being
+    // added. In checkout it never came, and a cancelled order went on to the
+    // payment page and held the supplier there (2026-11-25).
+    if (soft && this.driving() && !this.softStop && this.progress < STAGE.ADDED) {
       this.softStop = true;
       this.stopRequested = true;
       this.emit({ message: this.message });
