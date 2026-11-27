@@ -218,7 +218,23 @@ function saveLogin(profilePath, login) {
  * went through, or at least moved on: a wrong one gets typed again and
  * replaces it).
  */
-function watchLogins(page, profilePath, home) {
+/* The seller's cookies by name, with how long each lasts ("session", or days
+ * left): never a value. Written to the app's log when a sign-in form shows
+ * and when it goes away, so what carries a sign-in, and for how long, can be
+ * told (2026-11-27: LCSC asked for a sign-in again within the hour). */
+async function cookieInventory(context, home) {
+  try {
+    const own = siteOf(home);
+    const now = Date.now() / 1000;
+    return (await context.cookies()).filter((cookie) => siteOf(`https://${String(cookie.domain).replace(/^\./, "")}`) === own)
+      .map((cookie) => `${cookie.name}@${cookie.domain}:${cookie.expires > 0 ? `${Math.max(0, (cookie.expires - now) / 86400).toFixed(1)}d` : "session"}`)
+      .sort().join(" ").slice(0, 3000);
+  } catch {
+    return "";
+  }
+}
+
+function watchLogins(page, profilePath, home, context = null, onSignedIn = null) {
   let typed = null; // { username, password } as the form was sent
   let polled = null; // as it was last seen
   let username = ""; // from a first step that asks for the name alone
@@ -245,9 +261,17 @@ function watchLogins(page, profilePath, home) {
       // Once per form: the person may untick it, and it stays as they left it.
       if (found && !remembered) {
         remembered = true;
-        await found.frame.evaluate(tickRememberMe).catch(() => {});
-      } else if (!found) {
+        const ticked = await found.frame.evaluate(tickRememberMe).catch(() => false);
+        console.warn(`[sign-in ${siteOf(home)}] form showing (name field ${found.fields.user !== null ? "yes" : "no"}, password field ${found.fields.pass !== null ? "yes" : "no"}, Remember me ${ticked ? "ticked" : "not ticked"})`);
+        if (context) console.warn(`[cookies ${siteOf(home)}] at the sign-in form: ${await cookieInventory(context, home)}`);
+      } else if (!found && remembered) {
         remembered = false;
+        console.warn(`[sign-in ${siteOf(home)}] form gone; ${typed?.password || polled?.password ? "the login typed is kept" : "no password was typed (a code, or another way in): nothing to keep"}`);
+        if (context) console.warn(`[cookies ${siteOf(home)}] after the sign-in form: ${await cookieInventory(context, home)}`);
+        // Kept at once and again shortly after (the seller sets more on the
+        // way back): an app closed hard a minute later still has the sign-in.
+        void onSignedIn?.();
+        setTimeout(() => { void onSignedIn?.(); }, 15_000).unref?.();
       }
       // While the form is up it is read now and then too: a sign-in typed in
       // Chrome's own window (a security check hands the person Chrome itself)
@@ -329,7 +353,8 @@ function keepSignedIn({ context, profilePath, siteId, home, page }) {
   const save = () => saveSessionCookies(context, profilePath).catch(() => {});
   const saver = setInterval(save, SAVE_EVERY_MS);
   const pinger = setInterval(() => { void ping(page(), siteId).catch(() => {}); }, PING_EVERY_MS);
-  const watch = watchLogins(page, profilePath, home);
+  const watch = watchLogins(page, profilePath, home, context, save);
+  void cookieInventory(context, home).then((text) => console.warn(`[cookies ${siteOf(home)}] at start: ${text}`));
   const watcher = setInterval(() => { void watch.poll().catch(() => {}); }, WATCH_EVERY_MS);
   saver.unref?.();
   pinger.unref?.();
