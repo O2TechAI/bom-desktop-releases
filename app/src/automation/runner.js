@@ -762,6 +762,16 @@ class Runner {
         state = await this.identify();
         continue;
       }
+      // A page still drawing itself is not yet a page the app does not know:
+      // a few seconds first (2026-11-27: Mouser's product page was "lost" for
+      // a moment, and BOM asked the person to take over).
+      if (state === UNKNOWN && moves > 0) {
+        for (let wait = 0; wait < 4 && state === UNKNOWN; wait += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          state = await this.identify();
+        }
+        if (state !== UNKNOWN) continue;
+      }
       visits[state] = (visits[state] || 0) + 1;
       // An unknown page, for the app's log: its address and the buttons on it,
       // so a page the site changed can be told apart (2026-11-23: DigiKey's

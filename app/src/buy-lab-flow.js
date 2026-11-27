@@ -275,6 +275,18 @@ function phaseOf(message) {
   return message || "";
 }
 
+/** Whether a cart row's text names this part (its key): anywhere for a long
+ * number; as a whole word for a short one, so SS34 is its own row and not
+ * SS34B's (2026-11-27: LCSC's row for SS34 shows C8678, and the line was
+ * reported missing with its own row as a stranger). */
+function textHas(text, key) {
+  if (!key) return false;
+  if (key.length >= 6) return partKey(text).includes(key);
+  if (key.length < 3) return false;
+  const word = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^A-Z0-9])${word}([^A-Z0-9]|$)`).test(String(text ?? "").toUpperCase());
+}
+
 function partKey(text) {
   return String(text || "").replace(/[‎‏\s]/g, "").toUpperCase();
 }
@@ -377,7 +389,7 @@ function compareCart(lines, rows, expected = {}) {
     // 490-3261-1-ND for GRM155R71C104KA88D).
     const key = partKey(line.mpn);
     let index = cartRows.findIndex((row, at) => !used.has(at) && partKey(row.part) === key);
-    if (index < 0 && key.length >= 6) index = cartRows.findIndex((row, at) => !used.has(at) && partKey(row.text).includes(key));
+    if (index < 0 && key) index = cartRows.findIndex((row, at) => !used.has(at) && textHas(row.text, key));
     // Bought by its other number (the maker's, when the seller's own was not found).
     const other = partKey(line.alt);
     if (index < 0 && other.length >= 6) {
@@ -942,7 +954,7 @@ class BuyLabFlow {
         const rows = Array.isArray(cart.results?.cart) ? cart.results.cart : [];
         present = new Set(this.lines.filter((line) => {
           const key = partKey(line.mpn);
-          return rows.some((row) => partKey(row.part) === key || (key.length >= 6 && partKey(row.text).includes(key)));
+          return rows.some((row) => partKey(row.part) === key || (textHas(row.text, key)));
         }));
       } catch (error) {
         if (error?.code === "stopped" || error?.code === "blocked") throw error;
@@ -1060,7 +1072,7 @@ class BuyLabFlow {
       for (const line of this.lines) {
         const key = partKey(line.mpn);
         let index = rows.findIndex((row, at) => !used.has(at) && partKey(row.part) === key);
-        if (index < 0 && key.length >= 6) index = rows.findIndex((row, at) => !used.has(at) && partKey(row.text).includes(key));
+        if (index < 0 && key) index = rows.findIndex((row, at) => !used.has(at) && textHas(row.text, key));
         const other = partKey(line.alt);
         if (index < 0 && other.length >= 6) {
           index = rows.findIndex((row, at) => !used.has(at) && (partKey(row.part) === other || partKey(row.text).includes(other)));
@@ -1148,7 +1160,7 @@ class BuyLabFlow {
     // A line bought by the MPN may show the seller's own number in the cart.
     const wanted = new Set(this.lines.map((line) => partKey(line.mpn)));
     const known = (row) => wanted.has(partKey(row.part))
-      || [...wanted].some((key) => key.length >= 6 && partKey(row.text).includes(key));
+      || [...wanted].some((key) => textHas(row.text, key));
     // Lines the app could not remove stay for the person: the cart check
     // shows them as not on the list, rather than the whole supplier failing
     // (2026-11-24: an earlier test's C1525 left in the LCSC cart failed all
@@ -1171,7 +1183,7 @@ class BuyLabFlow {
     for (const line of this.lines) {
       const key = partKey(line.mpn);
       const row = rows.find((one) => /-ND$/i.test(String(one.part || "").trim())
-        && key.length >= 6 && partKey(one.text).includes(key));
+        && textHas(one.text, key));
       // Only a number in the packaging asked for (2026-11-24: a line for
       // Digi-Reel bought as cut tape was kept as its Digi-Reel number).
       const pack = row ? packOfPart(row.part) : null;
@@ -1191,7 +1203,7 @@ class BuyLabFlow {
     if (!names || !site?.tasks.setPack) return false;
     const rowOf = (all, line) => {
       const key = partKey(line.mpn);
-      return all.find((one) => partKey(one.part) === key || (key.length >= 6 && partKey(one.text).includes(key)));
+      return all.find((one) => partKey(one.part) === key || (textHas(one.text, key)));
     };
     let changed = false;
     for (const line of this.lines) {

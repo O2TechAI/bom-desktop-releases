@@ -268,6 +268,14 @@ module.exports = {
       title: T("Search box", "搜索框", "Cuadro de búsqueda"),
       any: [{ label: /^search input$/i }, { role: "textbox", name: /search input/i }],
     },
+    /* A search that found nothing: "Sorry, "XQZ…" did not return any results."
+     * (2026-11-27: the app took that page for one it did not know and waited
+     * for the person). */
+    "results.none": {
+      title: T("No results", "没有结果", "Sin resultados"),
+      any: [{ css: "h1, h2, h3, p, div, span" }],
+      hasText: /did not return any results|0 results found for/i,
+    },
     "results.row": {
       title: T("The part's row", "该型号所在行", "La fila de la pieza"),
       ...RESULT_ROW,
@@ -400,6 +408,7 @@ module.exports = {
       // A search for an LCSC number (C1525) opens the part's own page.
       product: { title: T("Product page", "商品页", "Página del producto"), match: { url: /\/product-detail\//i, all: ["detail.addToCart", "detail.ofPart"] } },
       results: { title: T("Search results", "搜索结果", "Resultados"), match: { all: ["product.addToCart"] } },
+      noMatch: { title: T("Not found", "没找到", "No encontrado"), match: { url: /\/search\?/i, all: ["results.none"] } },
       // Past the cart there is no signed-in sample, so these states are known
       // by the words on the page (common.js), not by LCSC's own markup.
       confirmation: {
@@ -446,7 +455,7 @@ module.exports = {
         name: "search",
         title: T("Search for the part", "搜索型号", "Buscar la pieza"),
         from: "*",
-        to: ["product", "results", "tour", "challenge"],
+        to: ["product", "results", "noMatch", "tour", "challenge"],
         steps: [{ do: "goto", url: "{{search}}" }, { do: "click", target: "cookies.accept", optional: true, timeout: 2500 }],
       },
       {
@@ -586,8 +595,11 @@ module.exports = {
       // account. Signed out, the sign-in page opens and the run waits for the
       // person; it carries on by itself once they are in.
       { do: "click", target: "cookies.accept", optional: true, timeout: 2500 },
-      { do: "goto", url: "{{signIn}}", when: "account.signInLink" },
-      { do: "handoff", message: "sign_in", when: "account.signInForm", whenTimeout: 8000, untilGone: "account.signInForm", timeout: 600000 },
+      // Its own Sign In link, which leads to the form (2026-11-27: the old
+      // /login address now lands on the home page, so nobody was signed in
+      // here and the run stopped later at the results' "Log in to view").
+      { do: "click", target: "account.signInLink", when: "account.signInLink", whenTimeout: 3000, optional: true, timeout: 5000 },
+      { do: "handoff", message: "sign_in", when: "account.signInForm", whenTimeout: 10000, untilGone: "account.signInForm", timeout: 600000 },
       { do: "goto", url: "https://www.lcsc.com/bom" },
       { do: "click", target: "cookies.accept", optional: true, timeout: 2500 },
       { do: "upload", target: "bom.upload", filesParam: "file" },
@@ -617,7 +629,7 @@ module.exports = {
       { do: "click", target: "cart.newest", timeout: 10000 },
       { do: "wait", ms: 3000 },
     ],
-    addToCart: [{ do: "walk", to: ["product", "results"] }, { do: "act", name: ["addToCartHere", "addToCart"] }],
+    addToCart: [{ do: "walk", to: ["product", "results", "noMatch"], leave: ["noMatch"] }, { do: "act", name: ["addToCartHere", "addToCart"] }],
     openCart: [
       { do: "walk", to: "cart" },
       { do: "extract", target: "cart.rows", fields: { part: { target: "cart.part" }, text: { target: "track.self" }, quantity: { target: "cart.quantity", read: "value" }, unitPrice: { target: "cart.unitPrice" }, extended: { target: "cart.extended" } }, as: "cart", optional: true, timeout: 5000 },
