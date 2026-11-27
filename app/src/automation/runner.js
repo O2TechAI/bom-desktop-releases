@@ -61,6 +61,12 @@ const ACTIONS = new Set([
 const STEP_GAP = 120;
 /* How often a hand-off checks whether the person is done. */
 const HANDOFF_POLL = 1000;
+/* How long a run waits for the person (a sign-in, a security check, a
+ * payment to choose, the order's yes). Fifteen minutes ended the run under
+ * someone who had stepped away, and what they did on the page afterwards
+ * moved nothing (2026-11-27). A waiting run holds no one up: it is not
+ * counted among the browsers at work, and a newer order takes its supplier. */
+const PERSON_WAIT_MS = 8 * 60 * 60 * 1000;
 /* How long a page may take to become a state the machine knows. A shop
  * behind Cloudflare holds its own address on a "wait" page for a few
  * seconds before the real page renders; the walk should wait that out
@@ -479,7 +485,7 @@ class Runner {
   }
 
   /** Wait until `isDone()` says so or the person presses Continue. */
-  async waitForPerson(message, view, isDone, timeout = 15 * 60 * 1000) {
+  async waitForPerson(message, view, isDone, timeout = PERSON_WAIT_MS) {
     // A sign-in: the login kept from the person's last one goes in first,
     // once per run, and the person is asked only if it did not get through
     // (2026-11-23: sign in once). A check or a code still comes to them.
@@ -841,7 +847,7 @@ class Runner {
     this.approved = false;
     this.confirming = { message: step.message, value: step.show ? this.results[step.show] ?? null : null };
     this.emit();
-    const deadline = Date.now() + (step.timeout ?? 15 * 60 * 1000);
+    const deadline = Date.now() + (step.timeout ?? PERSON_WAIT_MS);
     try {
       while (!this.approved) {
         if (this.controller.signal.aborted) throw new AutomationError("stopped", "Stopped");
