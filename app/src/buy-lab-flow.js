@@ -729,6 +729,7 @@ class BuyLabFlow {
     this.placed = null;
     this.cartCheck = null;
     this.freshCart = null;
+    this.cartByHand = false;
     const saved = resumeKey ? this.store?.load(supplier, resumeKey) : null;
     if (saved && saved.resumeKey === resumeKey && saved.progress > STAGE.NEW && saved.progress < STAGE.PLACED) {
       // The same purchase, interrupted earlier: go on from where it got to.
@@ -1241,7 +1242,7 @@ class BuyLabFlow {
         const cart = finished(await this.runTask("openCart"));
         this.cart = Array.isArray(cart.results?.cart) ? cart.results.cart : [];
       }
-      if (!this.confirmedCart && await this.setPackaging(this.cart)) {
+      if (!this.confirmedCart && !this.cartByHand && await this.setPackaging(this.cart)) {
         const cart = finished(await this.runTask("openCart"));
         this.cart = Array.isArray(cart.results?.cart) ? cart.results.cart : [];
       }
@@ -1257,6 +1258,29 @@ class BuyLabFlow {
       this.decide = null;
       if (decision === "stop") throw stoppedError();
       if (decision === "confirm") {
+        // A cart shown with something wrong may have been put right by hand
+        // before the yes (a quantity, a line removed or added): it is read
+        // once more, and one still not as the list says is shown again as it
+        // is now, not ordered as it was a minute ago (2026-11-27). A cart
+        // shown with nothing wrong goes on at once.
+        if (this.cartCheck?.issues > 0) {
+          this.emit({ status: "running", message: "reading-cart" });
+          let now = null;
+          try {
+            const cart = finished(await this.runTask("openCart"));
+            now = Array.isArray(cart.results?.cart) ? cart.results.cart : null;
+          } catch (error) {
+            if (error?.code === "stopped" || error?.code === "blocked") throw error;
+          }
+          if (now && !sameCart(now, this.cart)) {
+            this.cartByHand = true;
+            if (compareCart(this.lines, now, this.expected).issues > 0) {
+              this.freshCart = now;
+              continue;
+            }
+            this.cart = now;
+          }
+        }
         this.confirmedCart = this.cart;
         this.cartCheck = null;
         this.emit({ status: "running", message: "cart-confirmed" });

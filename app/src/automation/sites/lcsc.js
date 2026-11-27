@@ -599,7 +599,7 @@ module.exports = {
       // /login address now lands on the home page, so nobody was signed in
       // here and the run stopped later at the results' "Log in to view").
       { do: "click", target: "account.signInLink", when: "account.signInLink", whenTimeout: 3000, optional: true, timeout: 5000 },
-      { do: "handoff", message: "sign_in", when: "account.signInForm", whenTimeout: 10000, untilGone: "account.signInForm", timeout: 600000 },
+      { do: "handoff", message: "sign_in", when: "account.signInForm", whenTimeout: 10000, untilGone: "account.signInForm" },
       { do: "goto", url: "https://www.lcsc.com/bom" },
       { do: "click", target: "cookies.accept", optional: true, timeout: 2500 },
       { do: "upload", target: "bom.upload", filesParam: "file" },
@@ -609,7 +609,7 @@ module.exports = {
       { do: "waitForUrl", pattern: /personalCenter\/myProject\/detail/ },
       { do: "waitFor", target: "bom.matches", timeout: 30000 },
       // The overlay comes a moment after the matches: give it a few seconds.
-      { do: "handoff", message: "sign_in", when: "bom.loginWall", whenTimeout: 4000, untilGone: "bom.loginWall", timeout: 600000 },
+      { do: "handoff", message: "sign_in", when: "bom.loginWall", whenTimeout: 4000, untilGone: "bom.loginWall" },
       // Signed in now: Add to Cart must work (skipping it reported a cart that
       // was never filled), and its dialog must be answered: the entire list,
       // into a new cart. An existing cart would add this list's quantities to
