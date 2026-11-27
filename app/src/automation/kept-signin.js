@@ -143,6 +143,25 @@ function markLoginFields() {
   return { user: user ? user.value : null, pass: pass ? pass.value : null };
 }
 
+/* Tick the sign-in form's own "Remember me" (2026-11-27: "现在需要登录太频繁了";
+ * LCSC's is off by default, and its sign-in then lasts under a day). Only a
+ * box beside the password field whose words say so; true when it ticked one. */
+function tickRememberMe() {
+  const shown = (el) => el && !el.disabled && el.offsetParent !== null;
+  const pass = [...document.querySelectorAll("input[type='password']")].find(shown) || null;
+  if (!pass) return false;
+  const scope = pass.form || pass.closest("form") || document;
+  for (const box of scope.querySelectorAll("input[type='checkbox']")) {
+    if (box.checked || box.disabled) continue;
+    const label = box.closest("label") || box.parentElement?.parentElement || box.parentElement;
+    const words = `${label?.innerText || ""} ${box.name} ${box.id} ${box.getAttribute("aria-label") || ""}`;
+    if (!/remember me|keep me (signed|logged) in|stay (signed|logged) in|记住|保持登录|自动登录/i.test(words)) continue;
+    box.click();
+    return true;
+  }
+  return false;
+}
+
 function unmarkLoginFields() {
   for (const el of document.querySelectorAll("[data-o2-login]")) el.removeAttribute("data-o2-login");
 }
@@ -204,6 +223,7 @@ function watchLogins(page, profilePath, home) {
   let polled = null; // as it was last seen
   let username = ""; // from a first step that asks for the name alone
   let busy = false;
+  let remembered = false; // "Remember me" ticked for the form showing now
   /* Read at the person's click or Enter, before it reaches the page: the
    * form as it is sent, not as it was a moment ago. */
   const atSend = async () => {
@@ -222,6 +242,13 @@ function watchLogins(page, profilePath, home) {
     try {
       const found = await loginFrame(page(), home);
       if (found) await found.frame.evaluate(unmarkLoginFields).catch(() => {});
+      // Once per form: the person may untick it, and it stays as they left it.
+      if (found && !remembered) {
+        remembered = true;
+        await found.frame.evaluate(tickRememberMe).catch(() => {});
+      } else if (!found) {
+        remembered = false;
+      }
       // While the form is up it is read now and then too: a sign-in typed in
       // Chrome's own window (a security check hands the person Chrome itself)
       // never passes atSend. What atSend read wins over this.
@@ -249,12 +276,21 @@ function watchLogins(page, profilePath, home) {
  */
 async function signInAgain(page, profilePath, home) {
   const login = loadLogin(profilePath);
-  if (!login) return false;
+  if (!login) {
+    // Why nobody was signed in, for the app's log (never what the login is).
+    const kept = canSeal() ? unseal(path.join(profilePath, LOGIN_FILE)) : null;
+    console.warn(`[sign-in ${siteOf(home)}] no login to use: ${!canSeal() ? "no system encryption" : !kept?.password ? "none kept" : `the kept one failed on ${kept.failedAt}`}`);
+    return false;
+  }
   for (let round = 0; round < 2; round++) {
     const found = await loginFrame(page, home);
-    if (!found) return round > 0;
+    if (!found) {
+      if (round === 0) console.warn(`[sign-in ${siteOf(home)}] no sign-in form found at ${siteOf(page?.url?.() || "")}`);
+      return round > 0;
+    }
     const { frame, fields } = found;
     try {
+      await frame.evaluate(tickRememberMe).catch(() => {});
       if (fields.user !== null && login.username && fields.user !== login.username) {
         await frame.locator("[data-o2-login='user']").fill(login.username, { timeout: 5000 });
       }
@@ -280,6 +316,7 @@ async function signInAgain(page, profilePath, home) {
       if (fields.pass === null && now.fields.pass !== null) { next = true; break; } // on to the password step
     }
     if (!next) {
+      console.warn(`[sign-in ${siteOf(home)}] the form did not go away after the kept login was sent`);
       if (fields.pass !== null) markLoginFailed(profilePath);
       return false;
     }

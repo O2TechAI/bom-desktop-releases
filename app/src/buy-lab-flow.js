@@ -378,6 +378,11 @@ function compareCart(lines, rows, expected = {}) {
     const key = partKey(line.mpn);
     let index = cartRows.findIndex((row, at) => !used.has(at) && partKey(row.part) === key);
     if (index < 0 && key.length >= 6) index = cartRows.findIndex((row, at) => !used.has(at) && partKey(row.text).includes(key));
+    // Bought by its other number (the maker's, when the seller's own was not found).
+    const other = partKey(line.alt);
+    if (index < 0 && other.length >= 6) {
+      index = cartRows.findIndex((row, at) => !used.has(at) && (partKey(row.part) === other || partKey(row.text).includes(other)));
+    }
     const row = index >= 0 ? cartRows[index] : null;
     if (index >= 0) used.add(index);
     const unitPrice = row ? amount(row.unitPrice) : null;
@@ -689,7 +694,7 @@ class BuyLabFlow {
    * `resumeKey`: the purchase this is. When this supplier's saved progress has
    * the same key, the stages already done are not done again. `expected`:
    * part -> the unit price BOM showed, for the cart check. */
-  async start({ supplier, text, address = null, link = null, rehearsal = false, resumeKey = null, expected = null, packaging = null }) {
+  async start({ supplier, text, address = null, link = null, rehearsal = false, resumeKey = null, expected = null, packaging = null, alternates = null }) {
     if (this.running) throw new Error("A purchase is already running");
     const lines = parseLines(text);
     if (!lines.length) throw new Error("Paste at least one line: part number and quantity");
@@ -701,8 +706,10 @@ class BuyLabFlow {
     this.rehearsal = Boolean(rehearsal) && !link;
     this.expected = Object.fromEntries(Object.entries(expected || {}).map(([part, price]) => [partKey(part), Number(price)]));
     const packs = Object.fromEntries(Object.entries(packaging || {}).map(([part, pack]) => [partKey(part), pack]));
+    // The line's other number: the maker's, when it is bought by the seller's own.
+    const others = Object.fromEntries(Object.entries(alternates || {}).map(([part, other]) => [partKey(part), String(other)]));
     this.lines = lines.map((line, index) => ({ ...line, index, status: "pending", error: null, price: null,
-      packaging: packs[partKey(line.mpn)] || null }));
+      packaging: packs[partKey(line.mpn)] || null, alt: others[partKey(line.mpn)] || null }));
     this.cart = null;
     this.orderNumber = null;
     this.orders = [];
@@ -1054,6 +1061,10 @@ class BuyLabFlow {
         const key = partKey(line.mpn);
         let index = rows.findIndex((row, at) => !used.has(at) && partKey(row.part) === key);
         if (index < 0 && key.length >= 6) index = rows.findIndex((row, at) => !used.has(at) && partKey(row.text).includes(key));
+        const other = partKey(line.alt);
+        if (index < 0 && other.length >= 6) {
+          index = rows.findIndex((row, at) => !used.has(at) && (partKey(row.part) === other || partKey(row.text).includes(other)));
+        }
         if (index >= 0) { used.add(index); found.set(line, rows[index]); }
       }
       return { used, found };
@@ -1109,6 +1120,13 @@ class BuyLabFlow {
         this.emit();
         line.error = await attempt("addToCart", { part: line.mpn, quantity: line.quantity, pack: packWord(line) }, line);
         if (this.stopRequested) throw stoppedError();
+        // The seller's own number was not found (mistyped, or changed): the
+        // maker's number is tried before the line is given up (2026-11-27).
+        if (line.error && line.alt) {
+          console.warn(`[other number ${this.supplier}] ${line.mpn} failed (${String(line.error).slice(0, 80)}); trying ${line.alt}`);
+          line.error = await attempt("addToCart", { part: line.alt, quantity: line.quantity, pack: packWord(line) }, line);
+          if (this.stopRequested) throw stoppedError();
+        }
       }
     }
     rows = await read();
