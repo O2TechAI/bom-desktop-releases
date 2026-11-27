@@ -572,7 +572,10 @@ module.exports = {
         from: ["cart"],
         to: ["cart"],
         steps: [
-          { do: "click", target: "cart.select" },
+          // In the page, with no pointer on the way (2026-11-27: the catalogue
+          // menu opened under the pointer as it passed, and the click meant
+          // for the tick opened a category instead).
+          { do: "click", target: "cart.select", js: true },
           { do: "click", target: "cart.delete" },
           { do: "click", target: "cart.deleteConfirm", optional: true, timeout: 6000 },
           { do: "waitForHidden", target: "cart.row" },

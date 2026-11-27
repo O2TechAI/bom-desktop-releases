@@ -335,9 +335,31 @@ class BuyLabWindow {
     this.notified = this.notified || new Map();
     const waiting = state.status === "waiting";
     const kind = !waiting ? "" : state.confirm ? "confirm" : state.cartCheck ? "cart-check" : String(state.message || "person");
+    this.reminders = this.reminders || new Map();
+    if (!kind || this.notified.get(id) !== kind) {
+      clearTimeout(this.reminders.get(id));
+      this.reminders.delete(id);
+    }
     if (!kind) { this.notified.delete(id); return; }
-    if (this.notified.get(id) === kind) return;
+    if (this.notified.get(id) === kind && !state.remind) return;
     this.notified.set(id, kind);
+    // Said once, a wait was missed by someone away from the screen
+    // (2026-11-27): it is said again after ten minutes, then every half hour,
+    // for as long as that seller still waits for the same thing.
+    if (!this.reminders.has(id)) {
+      const again = (after) => {
+        const timer = setTimeout(() => {
+          this.reminders.delete(id);
+          const now = this.flows.get(id)?.state?.();
+          if (this.closed || !now || now.status !== "waiting") return;
+          this.notifyIfWaiting(id, { ...now, remind: true });
+          if (!this.reminders.has(id)) again(30 * 60 * 1000);
+        }, after);
+        timer.unref?.();
+        this.reminders.set(id, timer);
+      };
+      if (!state.remind) again(10 * 60 * 1000);
+    }
     if (!Notification.isSupported?.()) return;
     const site = this.sites.find((entry) => entry.id === id);
     const seller = site?.name || id;
@@ -350,7 +372,10 @@ class BuyLabWindow {
       lost: zh ? `app 停在一个不认识的 ${seller} 页面，请接手` : `The app is on a ${seller} page it doesn't know: take it from there`,
     }[kind] || (zh ? `${seller} 在等你操作` : `${seller} is waiting for you`);
     try {
-      const note = new Notification({ title: zh ? `O2 BOM · ${seller} 需要你` : `O2 BOM · ${seller} needs you`, body: text });
+      const title = state.remind
+        ? (zh ? `O2 BOM · ${seller} 还在等你` : `O2 BOM · ${seller} is still waiting for you`)
+        : (zh ? `O2 BOM · ${seller} 需要你` : `O2 BOM · ${seller} needs you`);
+      const note = new Notification({ title, body: text });
       note.on("click", () => {
         if (kind === "challenge") return; // the check is in Chrome's own window, already in front
         this.showFor(id);

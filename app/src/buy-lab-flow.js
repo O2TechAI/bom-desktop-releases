@@ -407,9 +407,16 @@ function compareCart(lines, rows, expected = {}) {
     else if (unitPrice === 0 && !/[1-9]/.test(String(row.unitPrice || ""))) issue = "unpriced";
     else if (line.packaging && rowPack(row) && rowPack(row) !== line.packaging) issue = "packaging";
     else if (unitPrice != null && expectedPrice != null && unitPrice > expectedPrice + 1e-9) issue = "price";
+    // Why, where the app knows (2026-11-27): the seller has no such part, it
+    // is not to be had now, or the seller made the quantity its own minimum
+    // or pack size. The issue's name stays what the rest of the flow reads.
+    let why = null;
+    if (issue === "missing" && /noMatch/.test(String(line.error || ""))) why = "notFound";
+    else if (issue === "missing" && /notSold/.test(String(line.error || ""))) why = "notSold";
+    else if (issue === "quantity" && row && amount(row.quantity) > Number(line.buyQuantity || line.quantity)) why = "more";
     return {
       part: line.mpn, quantity: String(line.quantity), cartQuantity: row ? String(amount(row.quantity) ?? "") : null,
-      unitPrice: row?.unitPrice || null, extended: row?.extended || null, expectedPrice, issue,
+      unitPrice: row?.unitPrice || null, extended: row?.extended || null, expectedPrice, issue, why,
     };
   });
   const extra = cartRows.filter((_, at) => !used.has(at)).map((row) => ({

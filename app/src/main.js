@@ -9,7 +9,7 @@
 
 const fs = require("node:fs/promises");
 const path = require("node:path");
-const { app, BrowserWindow, Menu, dialog, ipcMain, protocol, screen, session, shell } = require("electron");
+const { app, BrowserWindow, Menu, dialog, ipcMain, powerMonitor, protocol, screen, session, shell } = require("electron");
 
 const pkg = require("../package.json");
 const { LOCAL_ORIGIN, LOCAL_SCHEME, PARTITION, resolveOrigin } = require("./config");
@@ -667,5 +667,10 @@ if (!app.requestSingleInstanceLock()) {
       stateFile: path.join(app.getPath("userData"), "buy-lab", "service-stops.json"),
     });
     serviceLink.start();
+    // Back from sleep: say so to BOM at once, and take up what waited, rather
+    // than at the next round of a timer that slept too (2026-11-27).
+    try {
+      powerMonitor.on("resume", () => { void serviceLink?.tick(); });
+    } catch { /* not ready on this system: the timer's round does it */ }
   });
 }
