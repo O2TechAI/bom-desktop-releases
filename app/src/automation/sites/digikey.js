@@ -766,7 +766,7 @@ module.exports = {
     ],
     addToCart: [
       // A part no longer sold ends the walk too, and the add fails at once.
-      { do: "walk", to: ["product", "notSold", "productPage", "noMatch"] },
+      { do: "walk", to: ["product", "notSold", "productPage", "noMatch"], leave: ["notSold", "noMatch"] },
       { do: "act", name: "addToCart" },
     ],
     // The same, without the search page: everything happens in the cart.

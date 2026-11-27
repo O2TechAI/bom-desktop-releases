@@ -581,7 +581,7 @@ module.exports = {
       { do: "waitForUrl", pattern: /\/cart/ },
     ],
     // A part it can't sell ends the walk too, and the add fails at once.
-    addToCart: [{ do: "walk", to: ["product", "notSold", "noMatch"] }, { do: "act", name: "addToCart" }],
+    addToCart: [{ do: "walk", to: ["product", "notSold", "noMatch"], leave: ["notSold", "noMatch"] }, { do: "act", name: "addToCart" }],
     openCart: [
       { do: "walk", to: "cart" },
       { do: "extract", target: "cart.rows", fields: CART_FIELDS, as: "cart", optional: true, timeout: 5000 },

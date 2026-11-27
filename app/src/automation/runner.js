@@ -745,7 +745,12 @@ class Runner {
     for (;;) {
       await this.waitWhilePaused();
       if (state !== UNKNOWN) await this.arrive(state, view);
-      if (goals.includes(state)) return state;
+      // `leave`: goals that are only an answer once the walk has moved. The
+      // page still says the last part was not found or not sold when the next
+      // part's walk begins (2026-11-27: after one missing part, every part
+      // after it failed at once without being searched for).
+      const stale = moves === 0 && [].concat(step.leave || []).includes(state);
+      if (goals.includes(state) && !stale) return state;
       const info = machine.states[state];
       // A checkout page left from an earlier order is not the person's when
       // this task goes back to the cart or a part (2026-11-24: a new order
@@ -781,7 +786,7 @@ class Runner {
       }
       moves += 1;
       if (moves > MAX_MOVES) throw new AutomationError("no_path", "Too many pages on the way");
-      const transition = nextTransition(machine, state, goals);
+      const transition = nextTransition(machine, state, stale ? goals.filter((goal) => ![].concat(step.leave || []).includes(goal)) : goals);
       if (!transition) throw new AutomationError("no_path", `No way from ${state} to ${goals.join(" or ")}`);
       const before = this.driver.contents.getURL?.() || "";
       const next = await this.take(transition, view, state);

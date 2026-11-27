@@ -589,7 +589,10 @@ class BuyLabWindow {
     this.payPrompted.delete(supplier);
     this.notified?.delete(supplier);
     void this.lives.get(supplier)?.browser?.closeExtraTabs?.();
-    void this.startPurchase({ supplier, text, address, link, resumeKey, expected, packaging }).catch((error) => {
+    // The maker's number of a line bought by the seller's own, to fall back on.
+    const alternates = Object.fromEntries((job.lines || []).filter((line) => line.sku && line.mpn && line.sku !== line.mpn)
+      .map((line) => [line.sku, String(line.mpn)]));
+    void this.startPurchase({ supplier, text, address, link, resumeKey, expected, packaging, alternates }).catch((error) => {
       this.failStart(supplier, error.message);
       link?.ended?.({ status: "failed", message: error.message });
     });
@@ -597,7 +600,7 @@ class BuyLabWindow {
     return true;
   }
 
-  async startPurchase({ supplier, text, addressId = "", address: given = null, link = null, rehearsal = false, resumeKey = null, expected = null, packaging = null }) {
+  async startPurchase({ supplier, text, addressId = "", address: given = null, link = null, rehearsal = false, resumeKey = null, expected = null, packaging = null, alternates = null }) {
     // A chosen address that is gone stops here, rather than run without it.
     const address = given || (addressId ? this.addresses.find(addressId) : null);
     if (addressId && !given && !address) throw new Error("That address is no longer in the address book");
@@ -606,7 +609,7 @@ class BuyLabWindow {
     await this.ensureSite(supplier);
     if (!this.lives.has(supplier)) throw new Error("The supplier page did not start");
     if (!this.active) this.active = supplier;
-    await flow.start({ supplier, text, address, link, rehearsal, resumeKey, expected, packaging });
+    await flow.start({ supplier, text, address, link, rehearsal, resumeKey, expected, packaging, alternates });
     return true;
   }
 
