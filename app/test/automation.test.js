@@ -30,7 +30,7 @@ const { fill, normalizeTarget } = require("../src/automation/targets");
 const { overlayThemeCss, rootBlock } = require("../src/automation/theme");
 const { MAX_HOSTS, createTrafficWatch } = require("../src/automation/traffic");
 
-const PARAMS = { part: "GRM155R71C104KA88D", quantity: "100", order: "88012345", state: "OH", stateName: "Ohio", customerType: "13", firstName: "Ada", lastName: "Lovelace", phoneDigits: "2165550100", line1: "123 Main St", line2: "Suite 4", city: "Cleveland", zip: "44101" };
+const PARAMS = { part: "GRM155R71C104KA88D", quantity: "100", order: "88012345", state: "OH", stateName: "Ohio", customerType: "13", firstName: "Ada", lastName: "Lovelace", phoneDigits: "2165550100", line1: "123 Main St", line2: "Suite 4", city: "Cleveland", zip: "44101", pack: "Cut Tape", option: "0" };
 
 
 function fakeContents() {
@@ -425,11 +425,14 @@ test("a hand-off does not end just because the page is still loading", async () 
     machine: {
       states: {
         shipping: { title: T3("Shipping"), match: { url: /\/address$/ }, person: "checkout_details" },
-        cart: { title: T3("Cart"), match: { url: /\/cart$/ } },
+        // Not the cart: a walk back to the cart leaves a checkout page from an
+        // earlier order instead of waiting on it (2026-11-24); a walk on to the
+        // review still waits for the person here (2026-11-25).
+        review: { title: T3("Review"), match: { url: /\/review$/ } },
       },
       transitions: [],
     },
-    tasks: { go: [{ do: "walk", to: "cart" }] },
+    tasks: { go: [{ do: "walk", to: "review" }] },
   });
   let loading = true;
   const page = { url: "https://shop.test/address" };
@@ -445,7 +448,7 @@ test("a hand-off does not end just because the page is still loading", async () 
   // The address page finishes loading, then the person fills it and the shop
   // moves on; while the page is loading, the hand-off must not call itself done.
   setTimeout(() => { loading = false; }, 1200);
-  setTimeout(() => { page.url = "https://shop.test/cart"; }, 2400);
+  setTimeout(() => { page.url = "https://shop.test/review"; }, 2400);
   const result = await runner.run();
   assert.equal(result.status, "done", JSON.stringify(result.steps.filter((step) => step.error)));
   assert.equal(result.metrics.handoffs, 1);

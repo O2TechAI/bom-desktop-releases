@@ -3,7 +3,9 @@
 /* The desktop's link to the Buy lab service: it takes this person's jobs,
  * starts one Buy lab purchase per supplier, reports the cart and the order,
  * holds the person's yes while BOM's buyer must approve, and stops a run whose
- * job BOM cancelled. The service and the Buy lab are played here. */
+ * job BOM cancelled. A new job takes its supplier from the job that has it
+ * (2026-11-25): that one is kept as no longer valid, to be run again from its
+ * button. The service and the Buy lab are played here. */
 
 const assert = require("node:assert/strict");
 const test = require("node:test");
@@ -23,9 +25,9 @@ function harness(jobsByTick) {
   const posts = [];
   let tick = 0;
   const lab = {
-    started: [], stopped: [], shown: [],
-    startFromService(job, link) { this.started.push(job); this.link = link; return true; },
-    stop(id) { this.stopped.push(id); },
+    started: [], stopped: [], stopOptions: [], shown: [], links: {},
+    startFromService(job, link) { this.started.push(job); this.link = link; this.links[job.purchase_request_id] = link; return true; },
+    stop(id, options = {}) { this.stopped.push(id); this.stopOptions.push(options); },
     showFor(id, options = {}) { this.shown.push(id); this.shownQuiet = [...(this.shownQuiet || []), Boolean(options.quiet)]; },
   };
   const fetch = async (url, init) => {
@@ -37,7 +39,13 @@ function harness(jobsByTick) {
   };
   const opens = [];
   const link = new ServiceLink({ fetch, origin: "https://bom.test", openBuyLab: async (options) => { opens.push(options || {}); return lab; }, version: "9.9.9" });
-  return { link, lab, posts, opens };
+  // One round, without the round a change asks for two seconds later.
+  const round = async () => {
+    await link.tick();
+    clearTimeout(link.nudgeTimer);
+    link.nudgeTimer = null;
+  };
+  return { link, lab, posts, opens, round };
 }
 
 
@@ -116,11 +124,125 @@ test("a job BOM cancelled stops its run", async () => {
 });
 
 
-test("one supplier runs one job at a time", async () => {
-  const other = { ...JOB, purchase_request_id: "pr_2" };
-  const { link, lab } = harness([[JOB, other]]);
+const OTHER = { ...JOB, purchase_request_id: "pr_2" };
+const started = (lab) => lab.started.map((job) => job.purchase_request_id);
+
+test("one supplier runs one job at a time: of two that have not begun, the newest", async () => {
+  // BOM lists its jobs oldest first (2026-11-25: the older one used to begin
+  // and the new order waited behind its cart).
+  const { link, lab } = harness([[JOB, OTHER]]);
   await link.tick();
-  assert.deepEqual(lab.started.map((job) => job.purchase_request_id), ["pr_1"]);
+  assert.deepEqual(started(lab), ["pr_2"]);
+  // The older one never ran: nothing to stop. It is kept as no longer valid,
+  // and BOM is told so.
+  assert.deepEqual(lab.stopped, []);
+  assert.ok(link.ended.has("pr_1:digikey"));
+  assert.equal(link.stops.get("pr_1:digikey").message, "superseded");
+  assert.equal(link.stops.get("pr_1:digikey").by, "pr_2:digikey");
+  assert.deepEqual(link.activity(), [{ purchase_request_id: "pr_1", seller: "digikey", step: "stopped", driver: "none", message: "superseded" }]);
+  // Still one at a time on the next round.
+  await link.tick();
+  assert.deepEqual(started(lab), ["pr_2"]);
+});
+
+
+test("a new job takes its supplier from the job running there", async () => {
+  const { link, lab, posts, round } = harness([[JOB], [JOB, OTHER], [JOB, OTHER]]);
+  await round();
+  assert.deepEqual(started(lab), ["pr_1"]);
+  // The new order arrives: the running one stops at once, not after its line.
+  await round();
+  assert.deepEqual(lab.stopped, ["digikey"]);
+  assert.deepEqual(lab.stopOptions, [{ soft: false }]);
+  assert.deepEqual(started(lab), ["pr_1"], "the supplier's page is free the round after");
+  assert.ok(link.ended.has("pr_1:digikey"));
+  assert.equal(link.stops.get("pr_1:digikey").message, "superseded");
+  assert.equal(link.stops.get("pr_1:digikey").by, "pr_2:digikey");
+  // The stopped run winding down tells BOM nothing, and stays superseded.
+  const before = posts.length;
+  await lab.links.pr_1.ended({ status: "stopped", message: "stopped" });
+  assert.equal(posts.length, before);
+  assert.equal(link.stops.get("pr_1:digikey").message, "superseded");
+
+  await round();
+  assert.deepEqual(started(lab), ["pr_1", "pr_2"]);
+  assert.deepEqual([...link.running.keys()], ["pr_2:digikey"]);
+  const beat = posts.filter((post) => post.path === "heartbeat").at(-1);
+  assert.deepEqual(beat.body.activity, [{ purchase_request_id: "pr_1", seller: "digikey", step: "stopped", driver: "none", message: "superseded" }]);
+  assert.deepEqual(link.staleTasks().map((task) => [task.key, task.seller, task.lines]), [["pr_1:digikey", "digikey", 2]]);
+  // It is not started again by itself.
+  await round();
+  assert.deepEqual(started(lab), ["pr_1", "pr_2"]);
+});
+
+
+test("a run already placed at the supplier is not superseded: the new job waits", async () => {
+  const { link, lab, round } = harness([[JOB], [JOB, OTHER]]);
+  await round();
+  await lab.link.placed({ orderNumber: "88001234" });
+  await round();
+  await round();
+  assert.deepEqual(started(lab), ["pr_1"]);
+  assert.deepEqual(lab.stopped, []);
+  assert.deepEqual([...link.running.keys()], ["pr_1:digikey"]);
+  assert.equal(link.ended.size, 0);
+  assert.deepEqual(link.staleTasks(), []);
+  // BOM shows the new one as waiting for the order that has the supplier.
+  assert.deepEqual(link.activity(), [{ purchase_request_id: "pr_2", seller: "digikey", step: "queued", driver: "none", message: "pr_1" }]);
+  // Nor does the person's Continue on the new one take the supplier.
+  assert.deepEqual(await link.continueOrder("pr_2:digikey"), { ok: false, reason: "busy", holder: "pr_1" });
+  assert.deepEqual(lab.stopped, []);
+});
+
+
+test("Continue on a superseded job takes the supplier back", async () => {
+  const { link, lab, round } = harness([[JOB], [JOB, OTHER]]);
+  await round();
+  await round();
+  await round();
+  assert.deepEqual([...link.running.keys()], ["pr_2:digikey"]);
+
+  assert.deepEqual(await link.continueOrder("pr_1:digikey"), { ok: true, where: "resume" });
+  clearTimeout(link.nudgeTimer);
+  // The one that had the supplier is stopped and kept in its turn.
+  assert.deepEqual(lab.stopped, ["digikey", "digikey"]);
+  assert.deepEqual(lab.stopOptions.at(-1), { soft: false });
+  assert.deepEqual(started(lab), ["pr_1", "pr_2", "pr_1"]);
+  assert.deepEqual([...link.running.keys()], ["pr_1:digikey"]);
+  assert.equal(link.ended.has("pr_1:digikey"), false);
+  assert.equal(link.stops.has("pr_1:digikey"), false);
+  assert.equal(link.stops.get("pr_2:digikey").message, "superseded");
+  assert.equal(link.stops.get("pr_2:digikey").by, "pr_1:digikey");
+  assert.deepEqual(link.staleTasks().map((task) => task.key), ["pr_2:digikey"]);
+  // An order BOM doesn't have is nobody's to continue.
+  assert.deepEqual(await link.continueOrder("pr_9:digikey"), { ok: false, reason: "unknown" });
+});
+
+
+test("the jobs no longer valid are listed newest first, six at most", async (t) => {
+  const jobs = Array.from({ length: 8 }, (_, index) => ({ ...JOB, purchase_request_id: `pr_${index + 1}` }));
+  // Each new job comes while the one before it runs: one round to take the
+  // supplier, the next to begin.
+  const rounds = jobs.flatMap((_, index) => [jobs.slice(0, index + 1), jobs.slice(0, index + 1)]);
+  const { link, lab, round } = harness(rounds);
+  let now = Date.UTC(2026, 10, 25);
+  t.mock.method(Date, "now", () => now);
+  for (let index = 0; index < rounds.length; index += 1) {
+    now += 60_000;
+    await round();
+  }
+  assert.deepEqual(started(lab), jobs.map((job) => job.purchase_request_id));
+  assert.deepEqual([...link.running.keys()], ["pr_8:digikey"]);
+  assert.equal(link.stops.size, 7);
+  const stale = link.staleTasks();
+  assert.deepEqual(stale.map((task) => task.key), ["pr_7:digikey", "pr_6:digikey", "pr_5:digikey", "pr_4:digikey", "pr_3:digikey", "pr_2:digikey"]);
+  assert.ok(stale.every((task, index) => index === 0 || task.at < stale[index - 1].at));
+  assert.deepEqual(stale[0], { key: "pr_7:digikey", seller: "digikey", at: link.stops.get("pr_7:digikey").at, lines: 2 });
+  // A run the person stopped is not one of them.
+  await lab.link.ended({ status: "stopped", message: "stopped" });
+  clearTimeout(link.nudgeTimer);
+  assert.equal(link.stops.get("pr_8:digikey").message, "stopped");
+  assert.ok(!link.staleTasks().some((task) => task.key === "pr_8:digikey"));
 });
 
 

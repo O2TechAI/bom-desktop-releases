@@ -62,17 +62,25 @@ const ORDERS = [
   { number: "88012348", status: "Shipped", total: "$4.00" },
 ];
 
-/** The shop's cart holds what the last upload sent (its CSV, header first). */
+/** The shop's cart holds what the last upload sent (its CSV, header first).
+ * DigiKey's file has its own number beside the maker's (2026-11-25): the
+ * cart shows its own where the file gave one, and both in the row's text. */
 function uploadedCart() {
   const last = ScriptedRunner.files.at(-1);
   if (!last) return [];
   return last.content.trim().split("\n").slice(1).map((row) => {
-    const [part, quantity] = row.split(",");
-    return { part, quantity };
+    const cells = row.split(",");
+    const numbers = cells.slice(0, -1).filter(Boolean);
+    return { part: numbers[0], text: numbers.join(" "), quantity: cells.at(-1) };
   });
 }
 
+/* DigiKey's cart after an upload that left no line at "View Options": the
+ * task that opens one finds none (2026-11-25). */
+const NO_OPTION = { status: "failed", steps: [{ status: "failed", error: { code: "not_found", message: "It isn't on the page" } }] };
+
 function happyShop(task, params) {
+  if (task === "openOption") return NO_OPTION;
   if (task === "openCart") return { results: { cart: uploadedCart() } };
   if (task === "placeOrder") return { results: { orderNumber: "88012345" } };
   if (task === "orders") return { results: { orders: ORDERS } };
@@ -80,12 +88,13 @@ function happyShop(task, params) {
   return {};
 }
 
-function makeFlow({ reloads = [], autoConfirm = true } = {}) {
+function makeFlow({ reloads = [], autoConfirm = true, store = null } = {}) {
   const states = [];
   const live = { browser: { link: { id: "link" } }, reload: async () => { reloads.push(Date.now()); } };
   // The person says the cart is right whenever the cart check asks.
   const flow = new BuyLabFlow({
     sites: LAB_SITES,
+    store,
     getLive: () => live,
     onChange: (state) => {
       states.push(state);
@@ -104,6 +113,9 @@ test("the demo's DigiKey purchase runs every task in order, with the same values
   assert.deepEqual(ScriptedRunner.calls, [
     // DigiKey now takes the list as a file, through its cart's Upload a File.
     { task: "bulkAddBom", params: { file: ScriptedRunner.files[0].file, partColumn: "Manufacturer Part Number" } },
+    // A line the upload left at "View Options" is settled next (2026-11-24);
+    // here there is none.
+    { task: "openOption", params: {} },
     { task: "openCart", params: {} },
     { task: "placeOrder", params: {} },
     { task: "orders", params: {} },
@@ -126,7 +138,12 @@ test("the demo's DigiKey purchase runs every task in order, with the same values
     { mpn: "RC0402FR-0710KL", quantity: "10", status: "added", index: 0 },
     { mpn: "GRM155R71C104KA88D", quantity: "10", status: "added", index: 1 },
   ]);
-  assert.deepEqual(end.cart, [{ part: "RC0402FR-0710KL", quantity: "10" }, { part: "GRM155R71C104KA88D", quantity: "10" }]);
+  assert.deepEqual(end.cart, [
+    { part: "RC0402FR-0710KL", text: "RC0402FR-0710KL", quantity: "10" },
+    { part: "GRM155R71C104KA88D", text: "GRM155R71C104KA88D", quantity: "10" },
+  ]);
+  // The file: DigiKey's own number, where one is known, beside the maker's.
+  assert.equal(ScriptedRunner.files[0].content, "DigiKey Part Number,Manufacturer Part Number,Quantity\n,RC0402FR-0710KL,10\n,GRM155R71C104KA88D,10\n");
   assert.equal(end.orderNumber, "88012345");
   assert.deepEqual(end.orders, ORDERS);
   assert.deepEqual(end.tracking, [
@@ -147,9 +164,77 @@ test("DigiKey maps its own numbers' column when every line is one, from one CSV"
   await flow.start({ supplier: "digikey", text: "311-10.0KLRCT-ND 10\n490-3261-1-ND 10" });
   assert.equal(ScriptedRunner.calls[0].task, "bulkAddBom");
   assert.equal(ScriptedRunner.calls[0].params.partColumn, "DigiKey Part Number");
-  assert.equal(ScriptedRunner.files[0].content, "Part Number,Quantity\n311-10.0KLRCT-ND,10\n490-3261-1-ND,10\n");
+  // Its own number goes in its own column only (2026-11-25: the same number
+  // in both columns was refused).
+  assert.equal(ScriptedRunner.files[0].content, "DigiKey Part Number,Manufacturer Part Number,Quantity\n311-10.0KLRCT-ND,,10\n490-3261-1-ND,,10\n");
   assert.equal(fs.existsSync(ScriptedRunner.files[0].file), false);
   assert.equal(flow.state().status, "done");
+});
+
+
+test("DigiKey's file carries its own number from an earlier cart beside the maker's, and the cart's are kept", async () => {
+  resetScript(happyShop);
+  const remembered = [];
+  const store = {
+    load: () => null, save() {}, clear() {},
+    sellerParts: () => ({ "RC0402FR-0710KL": "311-10.0KLRCT-ND" }),
+    rememberSellerParts: (supplier, pairs) => remembered.push([supplier, pairs]),
+  };
+  const { flow } = makeFlow({ store });
+  await flow.start({ supplier: "digikey", text: DEMO_TEXT });
+  assert.equal(ScriptedRunner.files[0].content,
+    "DigiKey Part Number,Manufacturer Part Number,Quantity\n311-10.0KLRCT-ND,RC0402FR-0710KL,10\n,GRM155R71C104KA88D,10\n");
+  // A maker's number among them: that is the column the upload maps.
+  assert.equal(ScriptedRunner.calls[0].params.partColumn, "Manufacturer Part Number");
+  // The cart shows DigiKey's number for the first line: still that line, not
+  // a stranger to remove and add again.
+  assert.deepEqual(ScriptedRunner.calls.map((call) => call.task), ["bulkAddBom", "openOption", "openCart", "placeOrder", "orders", "track", "track"]);
+  assert.equal(flow.state().status, "done");
+  assert.deepEqual(remembered, [["digikey", [["RC0402FR-0710KL", "311-10.0KLRCT-ND"]]]]);
+});
+
+
+/* 2026-11-24: DigiKey took the file and left a part sold in several
+ * packagings at "View Options". */
+const OPTIONS_TEXT = [
+  "5,000 311-10.0KLRTR-ND RC0402FR-0710KL Tape & Reel",
+  "10 311-10.0KLRCT-ND RC0402FR-0710KL Cut Tape",
+  "10* 311-10.0KLRDKR-ND RC0402FR-0710KL Digi-Reel",
+].join("\n");
+
+function optionShop(text) {
+  return (task, params, calls) => {
+    // One row waits at "View Options"; once an option is picked there is none.
+    if (task === "openOption" && !calls.some((call) => call.task === "pickOption")) return { results: { options: text } };
+    return happyShop(task, params);
+  };
+}
+
+test("a line DigiKey left at View Options gets the order's packaging, or Cut Tape when it named none", async () => {
+  resetScript(optionShop(OPTIONS_TEXT));
+  const plain = makeFlow();
+  await plain.flow.start({ supplier: "digikey", text: DEMO_TEXT });
+  assert.deepEqual(ScriptedRunner.calls.map((call) => call.task).slice(0, 5), ["bulkAddBom", "openOption", "pickOption", "openOption", "openCart"]);
+  // The options in the page's order: Cut Tape at the line's quantity is the second.
+  assert.deepEqual(ScriptedRunner.calls[2].params, { option: "1" });
+  assert.ok(plain.states.some((state) => state.message === "choosing-packaging"));
+  assert.equal(plain.flow.state().status, "done");
+
+  resetScript(optionShop(OPTIONS_TEXT));
+  const reel = makeFlow();
+  await reel.flow.start({ supplier: "digikey", text: DEMO_TEXT, packaging: { "RC0402FR-0710KL": "digi_reel" } });
+  assert.deepEqual(ScriptedRunner.calls[2], { task: "pickOption", params: { option: "2" } });
+  assert.equal(reel.flow.state().status, "done");
+});
+
+
+test("View Options with nothing at the line's quantity is closed, not guessed", async () => {
+  resetScript(optionShop("5,000 311-10.0KLRTR-ND RC0402FR-0710KL Tape & Reel"));
+  const { flow } = makeFlow();
+  await flow.start({ supplier: "digikey", text: DEMO_TEXT });
+  const tasks = ScriptedRunner.calls.map((call) => call.task);
+  assert.deepEqual(tasks.slice(0, 4), ["bulkAddBom", "openOption", "closeOption", "openCart"]);
+  assert.ok(!tasks.includes("pickOption"), "a reel's minimum is never chosen for a small quantity");
 });
 
 
@@ -175,7 +260,12 @@ test("a failed bulk add goes on part by part, and ends only when nothing got int
   });
   const { flow } = makeFlow();
   await flow.start({ supplier: "digikey", text: DEMO_TEXT });
-  assert.deepEqual(ScriptedRunner.calls.map((call) => call.task), ["bulkAddBom", "openCart", "addToCart", "addToCart", "openCart"]);
+  assert.deepEqual(ScriptedRunner.calls.map((call) => call.task), ["bulkAddBom", "openOption", "openCart", "addToCart", "addToCart", "openCart"]);
+  // Each part goes in as Cut Tape; the cart's own list sets the order's packaging.
+  assert.deepEqual(ScriptedRunner.calls.filter((call) => call.task === "addToCart").map((call) => call.params), [
+    { part: "RC0402FR-0710KL", quantity: "10", pack: "Cut Tape" },
+    { part: "GRM155R71C104KA88D", quantity: "10", pack: "Cut Tape" },
+  ]);
   assert.ok(flow.state().lines.every((line) => line.status === "failed"));
   assert.equal(flow.state().status, "failed");
   assert.equal(flow.state().message, "nothing-added");
@@ -188,7 +278,7 @@ test("a stage that doesn't finish ends the purchase with its step's words", asyn
     : happyShop(task, params)));
   const { flow } = makeFlow();
   await flow.start({ supplier: "digikey", text: DEMO_TEXT });
-  assert.deepEqual(ScriptedRunner.calls.map((call) => call.task), ["bulkAddBom", "openCart", "placeOrder"]);
+  assert.deepEqual(ScriptedRunner.calls.map((call) => call.task), ["bulkAddBom", "openOption", "openCart", "placeOrder"]);
   assert.equal(flow.state().status, "failed");
   assert.equal(flow.state().message, "No way from cart to confirmation");
   assert.equal(flow.state().running, false);
@@ -238,7 +328,7 @@ test("a shop's refusal is reloaded once; a second refusal fails the purchase", a
   const started = Date.now();
   await flow.start({ supplier: "digikey", text: DEMO_TEXT });
   // openCart: refused, reloaded, worked. orders: refused twice.
-  assert.deepEqual(ScriptedRunner.calls.map((call) => call.task), ["bulkAddBom", "openCart", "openCart", "placeOrder", "orders", "orders"]);
+  assert.deepEqual(ScriptedRunner.calls.map((call) => call.task), ["bulkAddBom", "openOption", "openCart", "openCart", "placeOrder", "orders", "orders"]);
   assert.equal(reloads.length, 2);
   assert.ok(Date.now() - started >= 6000 - 50, "three seconds after each reload");
   assert.ok(states.some((state) => state.message === "reloading-blocked"));
@@ -258,7 +348,7 @@ test("a refusal thrown by the run is reloaded once too", async () => {
   const reloads = [];
   const { flow } = makeFlow({ reloads });
   await flow.start({ supplier: "digikey", text: DEMO_TEXT });
-  assert.deepEqual(ScriptedRunner.calls.map((call) => call.task).slice(0, 3), ["bulkAddBom", "bulkAddBom", "openCart"]);
+  assert.deepEqual(ScriptedRunner.calls.map((call) => call.task).slice(0, 4), ["bulkAddBom", "bulkAddBom", "openOption", "openCart"]);
   assert.equal(reloads.length, 1);
   assert.equal(flow.state().status, "done");
 });
@@ -315,6 +405,36 @@ test("stop during the bulk add ends the purchase as stopped", async () => {
 });
 
 
+test("a soft stop lets the upload in hand finish; once the cart is built it stops at once", async () => {
+  let flow;
+  resetScript((task, params) => {
+    if (task === "bulkAddBom") flow.stop({ soft: true });
+    return happyShop(task, params);
+  });
+  ({ flow } = makeFlow());
+  await flow.start({ supplier: "digikey", text: DEMO_TEXT });
+  // The upload was not cut short, and nothing ran after it.
+  assert.equal(ScriptedRunner.stopped, 0);
+  assert.deepEqual(ScriptedRunner.calls.map((call) => call.task), ["bulkAddBom"]);
+  assert.deepEqual(flow.state().lines.map((line) => [line.status, line.error]), [["added", null], ["added", null]]);
+  assert.equal(flow.state().status, "stopped");
+  assert.equal(flow.state().softStop, false);
+
+  // 2026-11-25: in checkout a soft stop never came, and a cancelled order
+  // went on to the payment page.
+  resetScript((task, params) => {
+    if (task === "placeOrder") flow.stop({ soft: true });
+    return happyShop(task, params);
+  });
+  ({ flow } = makeFlow());
+  await flow.start({ supplier: "digikey", text: DEMO_TEXT });
+  assert.equal(ScriptedRunner.stopped, 1);
+  assert.equal(ScriptedRunner.calls.at(-1).task, "placeOrder");
+  assert.equal(flow.state().status, "stopped");
+  assert.equal(flow.state().orderNumber, null);
+});
+
+
 test("stop after the bulk add ends the whole purchase (v0.0.13 went on to the order page)", async () => {
   let flow;
   resetScript((task, params) => {
@@ -323,7 +443,7 @@ test("stop after the bulk add ends the whole purchase (v0.0.13 went on to the or
   });
   ({ flow } = makeFlow());
   await flow.start({ supplier: "digikey", text: DEMO_TEXT });
-  assert.deepEqual(ScriptedRunner.calls.map((call) => call.task), ["bulkAddBom", "openCart"]);
+  assert.deepEqual(ScriptedRunner.calls.map((call) => call.task), ["bulkAddBom", "openOption", "openCart"]);
   assert.equal(flow.state().status, "stopped");
   assert.equal(flow.state().message, "stopped");
   assert.equal(flow.state().running, false);
@@ -339,7 +459,7 @@ test("stop while tracking ends the purchase instead of noting a failed order", a
   });
   ({ flow } = makeFlow());
   await flow.start({ supplier: "digikey", text: DEMO_TEXT });
-  assert.deepEqual(ScriptedRunner.calls.map((call) => call.task), ["bulkAddBom", "openCart", "placeOrder", "orders", "track"]);
+  assert.deepEqual(ScriptedRunner.calls.map((call) => call.task), ["bulkAddBom", "openOption", "openCart", "placeOrder", "orders", "track"]);
   assert.equal(flow.state().status, "stopped");
 });
 
@@ -355,7 +475,7 @@ test("a new purchase after a stop runs in full", async () => {
   await flow.start({ supplier: "digikey", text: DEMO_TEXT });
   ScriptedRunner.calls = [];
   await flow.start({ supplier: "digikey", text: DEMO_TEXT });
-  assert.equal(ScriptedRunner.calls.length, 6);
+  assert.deepEqual(ScriptedRunner.calls.map((call) => call.task), ["bulkAddBom", "openOption", "openCart", "placeOrder", "orders", "track", "track"]);
   assert.equal(flow.state().status, "done");
 });
 
@@ -386,9 +506,9 @@ test("a refusal sends the retry back through the shop's home page", async () => 
   const { flow } = makeFlow();
   await flow.start({ supplier: "digikey", text: DEMO_TEXT });
   const tasks = ScriptedRunner.calls.map((call) => call.task);
-  assert.deepEqual(tasks, ["bulkAddBom", "openCart", "placeOrder", "orders", "orders", "track", "track"]);
+  assert.deepEqual(tasks, ["bulkAddBom", "openOption", "openCart", "placeOrder", "orders", "orders", "track", "track"]);
   // Cold for the first task, cold again for the retry after the reload.
-  assert.deepEqual(warmAtRun, [false, true, true, true, false, true, true]);
+  assert.deepEqual(warmAtRun, [false, true, true, true, true, false, true, true]);
 });
 
 
@@ -482,10 +602,10 @@ test("a part the upload left out is added on its own, and a line from before is 
   });
   const { flow } = makeFlow();
   await flow.start({ supplier: "digikey", text: DEMO_TEXT });
-  assert.deepEqual(ScriptedRunner.calls.map((call) => call.task).slice(0, 5),
-    ["bulkAddBom", "openCart", "removeFromCart", "addToCart", "openCart"]);
-  assert.deepEqual(ScriptedRunner.calls[2].params, { part: "535-13731-1-ND" });
-  assert.deepEqual(ScriptedRunner.calls[3].params, { part: "GRM155R71C104KA88D", quantity: "10" });
+  assert.deepEqual(ScriptedRunner.calls.map((call) => call.task).slice(0, 6),
+    ["bulkAddBom", "openOption", "openCart", "removeFromCart", "addToCart", "openCart"]);
+  assert.deepEqual(ScriptedRunner.calls[3].params, { part: "535-13731-1-ND" });
+  assert.deepEqual(ScriptedRunner.calls[4].params, { part: "GRM155R71C104KA88D", quantity: "10", pack: "Cut Tape" });
   assert.equal(flow.state().status, "done");
   assert.deepEqual(flow.lines.map((line) => line.status), ["added", "added"]);
 });

@@ -887,7 +887,21 @@ class BuyLabFlow {
       } else {
         snapshot = await this.runTask("bulkAddList", { lines: bulkLines(this.lines) });
       }
-      if (this.supplier === "digikey" && site.tasks.openOption) await this.settlePackOptions();
+      if (this.supplier === "digikey" && site.tasks.openOption) {
+        try {
+          await this.settlePackOptions();
+        } catch (error) {
+          // Stopped before or among the options (2026-11-25: the lines stayed
+          // "adding" on a stopped purchase): they say what the upload did.
+          if (error?.code === "stopped") {
+            for (const line of this.lines) {
+              line.status = snapshot.status === "done" ? "added" : "stopped";
+              line.error = null;
+            }
+          }
+          throw error;
+        }
+      }
       const failed = snapshot.steps.find((step) => step.status === "failed");
       if (snapshot.status === "stopped") {
         // The person stopped it: not a failure of the lines.
