@@ -794,7 +794,9 @@ class BuyLabWindow {
             why = `${snapshot.message || "person"} at ${snapshot.state || "?"} (signed in ${snapshot.metrics?.signIns || 0}x) ${String(live.page.url()).slice(0, 90)}`;
             runner.stop();
           };
-          if (/challenge/i.test(`${snapshot.message || ""} ${snapshot.state || ""}`)) grace = setTimeout(give, 40_000);
+          // So is the app's own sign-in with the kept login (2026-11-27: the
+          // look at a placed order gave up before it had signed in).
+          if (/challenge|signing-in/i.test(`${snapshot.message || ""} ${snapshot.state || ""}`)) grace = setTimeout(give, 60_000);
           else give();
         },
       });
