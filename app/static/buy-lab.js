@@ -52,7 +52,7 @@ const COPY = {
     cartCheckTitle: "Check the cart", cartCheckText: "Compare it with your list before anything is bought.",
     cartOk: "Correct, go to checkout", cartRecheck: "Re-check", cartList: "Your list", cartCart: "In the cart",
     cartUnit: "Unit price", cartLine: "Line total", cartTotal: "Cart total", cartAllGood: "Every line matches your list.",
-    cartIssues: "{n} to look at", issues: { missing: "Not in the cart", quantity: "Other quantity", price: "Dearer than BOM", extra: "Not on your list", packaging: "Other packaging than the order", unpriced: "No price: can't be bought at this quantity" },
+    cartIssues: "{n} to look at", issues: { missing: "Not in the cart", quantity: "Other quantity", price: "Dearer than BOM", extra: "Not on your list", packaging: "Other packaging than the order", unpriced: "No price: can't be bought at this quantity", notFound: "This seller has no such part", notSold: "Can't be bought now: out of stock or no longer sold", more: "More than you asked: the seller's minimum or pack size" },
     resume: "Continue", resumeSaved: "Continue the interrupted purchase",
     rehearsal: "Rehearsal (no order)", rehearsalHint: "Runs to the order's yes, then stops: nothing is bought.",
     placedTitle: "Order placed", rehearsalTitle: "Rehearsal: not ordered", placedNumber: "Order number",
@@ -114,7 +114,7 @@ const COPY = {
     cartCheckTitle: "核对购物车", cartCheckText: "下单前，和你的清单对一下。",
     cartOk: "没问题，去结账", cartRecheck: "重新读取", cartList: "你的清单", cartCart: "购物车里",
     cartUnit: "单价", cartLine: "小计", cartTotal: "购物车合计", cartAllGood: "每一行都和清单对得上。",
-    cartIssues: "有 {n} 处要看", issues: { missing: "购物车里没有", quantity: "数量不同", price: "比 BOM 贵", extra: "清单里没有", packaging: "包装和订单不一样", unpriced: "没有价格：这个数量买不了" },
+    cartIssues: "有 {n} 处要看", issues: { missing: "购物车里没有", quantity: "数量不同", price: "比 BOM 贵", extra: "清单里没有", packaging: "包装和订单不一样", unpriced: "没有价格：这个数量买不了", notFound: "这家没有这个料号", notSold: "现在买不到：缺货或已停售", more: "比订单多：供应商的起订量或整包数" },
     resume: "继续", resumeSaved: "继续上次中断的采购",
     rehearsal: "演练（不下单）", rehearsalHint: "走到确认下单就停，不会买任何东西。",
     placedTitle: "已下单", rehearsalTitle: "演练：未下单", placedNumber: "订单号",
@@ -176,7 +176,7 @@ const COPY = {
     cartCheckTitle: "Revisa el carrito", cartCheckText: "Compáralo con tu lista antes de comprar nada.",
     cartOk: "Correcto, ir al pago", cartRecheck: "Volver a leer", cartList: "Tu lista", cartCart: "En el carrito",
     cartUnit: "Precio unitario", cartLine: "Total de la línea", cartTotal: "Total del carrito", cartAllGood: "Todas las líneas coinciden con tu lista.",
-    cartIssues: "{n} por revisar", issues: { missing: "No está en el carrito", quantity: "Otra cantidad", price: "Más caro que en BOM", extra: "No está en tu lista", packaging: "Otro empaque que el del pedido", unpriced: "Sin precio: no se puede comprar esta cantidad" },
+    cartIssues: "{n} por revisar", issues: { missing: "No está en el carrito", quantity: "Otra cantidad", price: "Más caro que en BOM", extra: "No está en tu lista", packaging: "Otro empaque que el del pedido", unpriced: "Sin precio: no se puede comprar esta cantidad", notFound: "Este vendedor no tiene esa pieza", notSold: "No se puede comprar ahora: sin stock o descatalogada", more: "Más de lo pedido: mínimo o paquete del vendedor" },
     resume: "Continuar", resumeSaved: "Continuar la compra interrumpida",
     rehearsal: "Ensayo (sin pedido)", rehearsalHint: "Llega a la confirmación del pedido y se detiene: no se compra nada.",
     placedTitle: "Pedido realizado", rehearsalTitle: "Ensayo: sin pedido", placedNumber: "Número de pedido",
@@ -373,7 +373,7 @@ function renderCartCheck(parts, check) {
   parts.cartCheckCard.hidden = !check;
   if (!check) return;
   parts.cartRows.replaceChildren(...check.lines.map((line) => {
-    const note = line.issue ? make("span", { className: "pill", textContent: copy.issues[line.issue] || line.issue }) : "";
+    const note = line.issue ? make("span", { className: "pill", textContent: copy.issues[line.why] || copy.issues[line.issue] || line.issue }) : "";
     if (note) note.dataset.state = "failed";
     const tr = make("tr", {},
       make("td", { textContent: line.part }),

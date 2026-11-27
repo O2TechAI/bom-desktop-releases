@@ -486,7 +486,9 @@ class ServiceLink {
         // Waiting on the person, not a part the seller lacks (2026-11-23: a
         // security check nobody finished in 15 minutes marked the line as not
         // to be had): such an end is a stop, continued from the Buy lab.
-        const forPerson = /in time|challenge|blocked|security|lost|stalled|sign.?in|stopped/i.test(String(message || ""));
+        // So is a supplier window that was closed (2026-11-27: closing the
+        // Chrome of a security check would have marked every line as not sold).
+        const forPerson = /in time|challenge|blocked|security|lost|stalled|sign.?in|stopped|was closed|closed/i.test(String(message || ""));
         if (status === "failed" && !run.cartSent && !forPerson) {
           const why = String(message || "The Buy lab could not build the cart").slice(0, 500);
           await this.post("cart", { purchase_request_id: run.job.purchase_request_id, seller: run.job.seller, failed: why });
